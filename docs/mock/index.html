@@ -1,0 +1,1478 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>コビトサポート 画面モック</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+Antique:wght@500;700&family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* 配色：落ち着いた紺と青灰（taiga 2026-10-23）。ロゴだけLPと同じ黄色。ここを差し替えれば全画面が変わる */
+:root {
+  --bg: #f4f6f8;
+  --brand: #f0b429; /* ロゴだけLPと同じ黄色 */
+  --attn: #f6e7c4;
+  --attn-pale: #fbf5e6;
+  --attn-text: #7a5600;
+  --card: #ffffff;
+  --text: #1f2e3a;
+  --sub: #5f6b73;
+  --accent: #2f5b85;
+  --accent-deep: #1f3f60;
+  --accent-soft: #dce6f0;
+  --accent-pale: #eef3f8;
+  --line: #d6dce2;
+  --sage: #2f8f7e;
+  --sage-soft: #d9eee9;
+  --warn: #c2410c;
+  --warn-soft: #fde4d6;
+  --gray-soft: #eaedf0;
+  --en: "Inter", "Zen Kaku Gothic Antique", sans-serif;
+  --viewer: #e3e7eb;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--viewer); color: var(--text);
+  font-family: "Zen Kaku Gothic Antique", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+  font-size: 15px; line-height: 1.75; font-weight: 500; -webkit-text-size-adjust: 100%;
+}
+h1, h2, h3, h4 { margin: 0; line-height: 1.45; font-weight: 700; }
+p { margin: 0; }
+a { color: inherit; }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* ===== 確認用ビューア ===== */
+.viewer { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+.v-nav { background: #fff; border-right: 1px solid var(--line); padding: 20px 14px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.v-nav .v-title { font-weight: 700; font-size: 15px; padding: 0 8px; }
+.v-nav .v-title b { font-family: var(--en); background: var(--brand); padding: 0 5px; border-radius: 3px; margin-left: 2px; }
+.v-nav .v-desc { font-size: 12px; color: var(--sub); padding: 4px 8px 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.v-nav h4 { font-size: 11px; letter-spacing: .1em; color: var(--sub); padding: 14px 8px 4px; }
+.v-nav a { display: flex; gap: 8px; text-decoration: none; padding: 6px 8px; border-radius: 6px; font-size: 13.5px; line-height: 1.5; }
+.v-nav a span { font-family: var(--en); font-size: 11px; color: var(--sub); min-width: 40px; padding-top: 2px; }
+.v-nav a:hover { background: var(--gray-soft); }
+.v-nav a.on { background: var(--accent-soft); }
+.v-nav .v-all { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.v-select { display: none; }
+.v-main { padding: 28px 28px 60px; min-width: 0; }
+.stage { display: none; }
+.stage.on { display: block; }
+body.all .stage { display: block; margin-bottom: 64px; }
+.stage-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.stage-head .id { font-family: var(--en); font-size: 13px; background: var(--text); color: #fff; padding: 1px 8px; border-radius: 4px; }
+.stage-head h2 { font-size: 20px; }
+.stage-body { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+.notes { background: #fff; border-radius: 10px; padding: 16px 18px; font-size: 13.5px; max-width: 340px; min-width: 280px; flex: 1 1 280px; border: 1px solid var(--line); }
+.notes h3 { font-size: 13px; color: var(--sub); letter-spacing: .06em; margin-bottom: 6px; }
+.notes ul { margin: 0 0 12px; padding-left: 1.2em; }
+.notes li { margin-bottom: 4px; }
+.notes .ask { background: var(--attn-pale); border-left: 3px solid #d9a52b; padding: 8px 10px; border-radius: 4px; }
+.tag { display: inline-block; font-family: var(--en); font-size: 11px; background: var(--gray-soft); padding: 0 6px; border-radius: 3px; margin-right: 3px; }
+
+/* ===== お客様側：スマホ ===== */
+.phone { width: 390px; flex: 0 0 390px; min-height: 780px; background: var(--bg); border-radius: 28px; border: 8px solid #26323c; overflow: hidden; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,.12); display: flex; flex-direction: column; }
+.c-head { background: #fff; height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+.logo { font-weight: 700; font-size: 17px; text-decoration: none; letter-spacing: .02em; white-space: nowrap; }
+.logo b { font-family: var(--en); background: var(--brand); color: var(--text); padding: 0 5px; border-radius: 4px; margin-left: 2px; }
+.c-head .who { font-size: 12px; color: var(--sub); }
+.c-body { padding: 20px 16px 24px; flex: 1 1 auto; }
+.c-body.has-tab { padding-bottom: 84px; }
+.c-title { font-size: 21px; margin-bottom: 6px; }
+.c-lead { color: var(--sub); font-size: 14px; margin-bottom: 18px; }
+.steps { display: flex; gap: 6px; margin-bottom: 18px; }
+.steps div { flex: 1; text-align: center; font-size: 11.5px; color: var(--sub); }
+.steps div::before { content: ""; display: block; height: 5px; border-radius: 3px; background: var(--line); margin-bottom: 5px; }
+.steps div.done::before, .steps div.now::before { background: var(--accent); }
+.steps div.now { color: var(--text); font-weight: 700; }
+.card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 14px; border: 1px solid var(--line); }
+.card h3 { font-size: 15.5px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card h3 a { font-size: 13px; font-weight: 500; color: var(--sage); text-decoration: none; white-space: nowrap; }
+.field { margin-bottom: 16px; }
+.field label, .field .lbl { display: block; font-weight: 700; font-size: 14px; margin-bottom: 5px; }
+.req, .opt { font-size: 11px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; font-weight: 700; vertical-align: 1px; }
+.req { background: var(--warn); color: #fff; }
+.opt { background: var(--gray-soft); color: var(--sub); }
+.input { width: 100%; background: #fff; border: 1.5px solid var(--line); border-radius: 8px; padding: 11px 12px; font-size: 16px; }
+.input.ph { color: #9aa3a8; }
+textarea.input { min-height: 84px; resize: none; }
+.hint { font-size: 12.5px; color: var(--sub); margin-top: 4px; line-height: 1.6; }
+.hint.warn { color: var(--warn); }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; margin-bottom: 10px; line-height: 1.6; }
+.box { flex: 0 0 22px; height: 22px; border: 2px solid var(--line); border-radius: 5px; background: #fff; display: grid; place-items: center; font-size: 14px; font-weight: 700; margin-top: 1px; }
+.box.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.radio-list { display: grid; gap: 8px; }
+.radio { display: flex; gap: 12px; align-items: flex-start; background: #fff; border: 1.5px solid var(--line); border-radius: 10px; padding: 12px; }
+.radio.on { border-color: var(--accent); background: var(--accent-pale); box-shadow: 0 0 0 1px var(--accent) inset; }
+.radio .dot { flex: 0 0 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); background: #fff; margin-top: 2px; }
+.radio.on .dot { border: 6px solid var(--accent-deep); }
+.radio .rt { font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+.radio .rt em { font-style: normal; font-family: var(--en); }
+.radio .rd { font-size: 12.5px; color: var(--sub); line-height: 1.55; }
+.radio > div { flex: 1; }
+.btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 15px 18px; border-radius: 8px; border: 0; background: var(--accent); color: #fff; font-weight: 700; font-size: 16px; text-decoration: none; cursor: pointer; }
+.btn.dark { background: var(--text); color: #fff; }
+.btn.line { background: #06c755; color: #fff; }
+.btn.ghost { background: #fff; color: var(--text); border: 1.5px solid var(--line); }
+.btn.sm { width: auto; padding: 8px 14px; font-size: 14px; display: inline-flex; }
+.btn + .btn { margin-top: 10px; }
+.or { text-align: center; font-size: 12px; color: var(--sub); margin: 14px 0; display: flex; align-items: center; gap: 10px; }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
+.dl dt { color: var(--sub); }
+.dl dd { margin: 0; text-align: right; font-weight: 700; }
+.notice { border-radius: 10px; padding: 12px 14px; font-size: 13.5px; margin-bottom: 14px; line-height: 1.6; }
+.notice.info { background: var(--sage-soft); }
+.notice.yellow { background: var(--attn-pale); border: 1px solid var(--attn); }
+.notice.warn { background: var(--warn-soft); }
+.notice b { display: block; margin-bottom: 2px; }
+.badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 9px; border-radius: 99px; white-space: nowrap; }
+.b-sage { background: var(--sage-soft); color: #1d6b5d; }
+.b-yellow { background: var(--attn); color: var(--attn-text); }
+.b-warn { background: var(--warn-soft); color: var(--warn); }
+.b-gray { background: var(--gray-soft); color: var(--sub); }
+.b-dark { background: var(--text); color: #fff; }
+.credit { display: flex; align-items: center; gap: 18px; }
+.ring { width: 104px; height: 104px; border-radius: 50%; background: conic-gradient(var(--accent) 0 33.3%, #9db7d0 0 66.6%, var(--gray-soft) 0); display: grid; place-items: center; flex: 0 0 auto; }
+.ring > div { width: 80px; height: 80px; border-radius: 50%; background: #fff; display: grid; place-items: center; text-align: center; line-height: 1.1; }
+.ring strong { font-family: var(--en); font-size: 32px; display: block; }
+.ring small { font-size: 11px; color: var(--sub); }
+.credit .dl { flex: 1; }
+.req-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); text-decoration: none; }
+.req-item:first-of-type { border-top: 0; padding-top: 2px; }
+.req-item .t { font-weight: 700; font-size: 14.5px; line-height: 1.5; }
+.req-item .m { font-size: 12.5px; color: var(--sub); }
+.tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 66px; background: #fff; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(4, 1fr); }
+.tabbar a { display: grid; place-items: center; align-content: center; gap: 2px; text-decoration: none; font-size: 11.5px; color: var(--sub); }
+.tabbar a i { font-style: normal; font-size: 19px; line-height: 1; }
+.tabbar a.on { color: var(--text); font-weight: 700; }
+.tabbar a.on i { background: var(--accent-soft); border-radius: 99px; padding: 2px 14px; }
+.big-num { font-family: var(--en); font-size: 30px; font-weight: 700; }
+.price { font-family: var(--en); font-weight: 700; }
+.inv-row { display: flex; justify-content: space-between; font-size: 14px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.inv-row:last-child { border-bottom: 0; }
+.inv-row.total { font-weight: 700; font-size: 16px; border-bottom: 0; border-top: 2px solid var(--text); margin-top: 4px; padding-top: 10px; }
+.center { text-align: center; }
+.done-mark { width: 64px; height: 64px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 30px; margin: 20px auto 14px; font-weight: 700; }
+.timeline { list-style: none; padding: 0; margin: 0; }
+.timeline li { position: relative; padding: 0 0 14px 24px; font-size: 14px; }
+.timeline li::before { content: ""; position: absolute; left: 4px; top: 7px; width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.timeline li::after { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 2px; background: var(--line); }
+.timeline li:last-child::after { display: none; }
+.timeline li.done::before { background: var(--sage); }
+.timeline li.now::before { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.timeline li .m { font-size: 12px; color: var(--sub); }
+.foot-links { font-size: 12px; color: var(--sub); text-align: center; margin-top: 20px; }
+.copy { font-family: var(--en); background: var(--gray-soft); border-radius: 6px; padding: 8px 10px; display: flex; justify-content: space-between; font-size: 15px; margin-top: 4px; }
+.copy span { font-family: inherit; font-size: 12px; color: var(--sage); font-weight: 700; }
+
+/* ===== 管理画面：PC ===== */
+.desk { width: 1180px; flex: 0 0 1180px; background: #f7f7f4; border-radius: 10px; border: 1px solid #c9ccc5; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.10); display: grid; grid-template-columns: 200px 1fr; min-height: 720px; }
+.a-side { background: var(--text); color: #fff; padding: 18px 12px; }
+.a-side .logo { color: #fff; font-size: 15px; display: block; padding: 0 8px 4px; }
+.a-side .logo b { color: var(--text); }
+.a-side .sub { font-size: 11px; opacity: .6; padding: 0 8px 14px; }
+.a-side a { display: flex; justify-content: space-between; text-decoration: none; padding: 8px 10px; border-radius: 6px; font-size: 13.5px; opacity: .85; }
+.a-side a.on { background: rgba(255,255,255,.12); opacity: 1; font-weight: 700; box-shadow: 3px 0 0 #8fb0d0 inset; }
+.a-side a .n { background: var(--attn); color: var(--attn-text); font-size: 11px; font-weight: 700; border-radius: 99px; padding: 0 7px; }
+.a-main { padding: 22px 26px; min-width: 0; }
+.a-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; }
+.a-top h1 { font-size: 20px; }
+.a-top .crumb { font-size: 12px; color: var(--sub); }
+.kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
+.kpi { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+.kpi small { font-size: 12px; color: var(--sub); display: block; }
+.kpi strong { font-family: var(--en); font-size: 24px; }
+.kpi.attn { border-color: #e2c27a; background: var(--attn-pale); }
+.filters { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.chip { font-size: 12.5px; padding: 3px 12px; border-radius: 99px; background: #fff; border: 1px solid var(--line); }
+.chip.on { background: var(--text); color: #fff; border-color: var(--text); }
+table.tbl { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 13.5px; }
+.tbl th { text-align: left; font-size: 12px; color: var(--sub); font-weight: 700; background: #fafaf7; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tbl td { padding: 10px 12px; border-bottom: 1px solid #eceee9; vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl tr.hl td { background: var(--attn-pale); }
+.tbl .num { text-align: right; font-family: var(--en); white-space: nowrap; }
+.tbl .muted { color: var(--sub); font-size: 12px; }
+.abtn { display: inline-block; font-size: 12.5px; font-weight: 700; padding: 5px 12px; border-radius: 6px; background: var(--accent); color: #fff; border: 0; white-space: nowrap; text-decoration: none; cursor: pointer; }
+.abtn.dark { background: var(--text); color: #fff; }
+.abtn.ghost { background: #fff; color: var(--text); border: 1px solid var(--line); }
+.abtn.danger { background: #fff; border: 1px solid var(--warn); color: var(--warn); }
+.cols { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; align-items: start; }
+.panel { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+.panel h3 { font-size: 14.5px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; font-size: 13.5px; }
+.kv dt { color: var(--sub); }
+.kv dd { margin: 0; }
+.actbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.a-input { border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; background: #fff; width: 100%; font-size: 13.5px; }
+.a-field { margin-bottom: 10px; }
+.a-field label { font-size: 12px; color: var(--sub); display: block; margin-bottom: 3px; }
+.a-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mini-log { font-size: 12.5px; }
+.mini-log div { display: flex; gap: 10px; padding: 5px 0; border-bottom: 1px dashed var(--line); }
+.mini-log div span:first-child { color: var(--sub); font-family: var(--en); min-width: 84px; }
+.otp { display: flex; gap: 8px; justify-content: center; margin: 14px 0; }
+.otp div { width: 44px; height: 52px; border: 1.5px solid var(--line); border-radius: 8px; background: #fff; display: grid; place-items: center; font-family: var(--en); font-size: 22px; }
+
+.clause { padding: 10px 0; border-top: 1px solid var(--line); }
+.clause:first-of-type { border-top: 0; padding-top: 0; }
+.clause b { font-size: 14px; }
+.clause p { font-size: 13px; line-height: 1.75; margin-top: 3px; }
+.est-sec { padding: 10px 0; border-top: 1px solid var(--line); }
+.est-sec:first-of-type { border-top: 0; padding-top: 0; }
+.est-sec h4 { font-size: 12.5px; color: var(--sub); letter-spacing: .04em; margin-bottom: 3px; }
+.est-sec p, .est-list { font-size: 13.5px; line-height: 1.7; }
+.est-list { margin: 0; padding-left: 1.3em; }
+.est-list li { margin-bottom: 3px; }
+
+/* ===== LINE公式（イメージ） ===== */
+.line-head { background: #273246; color: #fff; height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 14px; font-weight: 700; font-size: 15px; flex: 0 0 auto; }
+.line-head .back { font-size: 20px; opacity: .8; }
+.line-head .ic { margin-left: auto; opacity: .7; font-size: 14px; letter-spacing: 6px; }
+.line-talk { background: #8aa4c8; flex: 1 1 auto; padding: 12px 10px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.lt-date { align-self: center; background: rgba(0,0,0,.18); color: #fff; font-size: 11px; padding: 1px 10px; border-radius: 99px; }
+.lt-row { display: flex; gap: 8px; align-items: flex-end; }
+.lt-row.me { justify-content: flex-end; }
+.lt-av { width: 34px; height: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-family: var(--en); font-size: 10px; font-weight: 700; flex: 0 0 auto; align-self: flex-start; }
+.lt-av b { background: var(--brand); padding: 0 2px; border-radius: 2px; }
+.bub { background: #fff; border-radius: 16px; padding: 8px 12px; max-width: 250px; line-height: 1.6; }
+.me .bub { background: #9be27a; }
+.lt-time { font-size: 10px; color: #f2f5fa; white-space: nowrap; }
+.flex-msg { background: #fff; border-radius: 14px; overflow: hidden; width: 250px; }
+.flex-msg .fh { background: var(--accent); color: #fff; padding: 9px 14px; font-weight: 700; font-size: 13px; }
+.flex-msg .fb { padding: 12px 14px; }
+.flex-msg .fb .t { font-weight: 700; margin-bottom: 6px; }
+.flex-msg .fb .dl { font-size: 13px; }
+.flex-msg .fbtn { border-top: 1px solid var(--line); text-align: center; padding: 10px; color: var(--accent); font-weight: 700; font-size: 14px; display: block; text-decoration: none; }
+.rich { background: #fff; flex: 0 0 auto; }
+.rich-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); }
+.rich-grid a { background: var(--accent-pale); display: grid; place-items: center; align-content: center; gap: 2px; height: 82px; text-decoration: none; font-size: 12.5px; font-weight: 700; color: var(--text); text-align: center; line-height: 1.35; }
+.rich-grid a i { font-style: normal; font-size: 22px; color: var(--accent); }
+.rich-grid a.main { background: var(--accent); color: #fff; }
+.rich-grid a.main i { color: #fff; }
+.rich-bar { text-align: center; font-size: 12px; color: var(--sub); padding: 5px; border-top: 1px solid var(--line); }
+.liff-head { background: #fff; height: 50px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+.liff-head .x { font-size: 20px; color: var(--sub); }
+.liff-head .tt { flex: 1; line-height: 1.25; font-size: 13.5px; font-weight: 700; }
+.liff-head .tt small { display: block; font-size: 10.5px; color: var(--sub); font-weight: 500; }
+.flow-strip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; margin: 0 0 12px; }
+.flow-strip span { background: var(--gray-soft); padding: 2px 8px; border-radius: 4px; }
+.flow-strip span.on { background: var(--accent); color: #fff; }
+
+.desk-wrap + .notes { max-width: 1180px; }
+/* ロゴ（taiga提供 2026-10-25）。差し替えは下のscriptの LOGO / ICON */
+.logo-img { height: 30px; width: auto; display: block; }
+.a-side a.logo { background: #fff; border-radius: 6px; padding: 6px 8px; margin: 0 0 6px; display: inline-block; opacity: 1; }
+.a-side .logo-img { height: 30px; }
+.a-top-logo { display: none; }
+.lt-av { overflow: hidden; padding: 0; }
+.lt-av img { width: 100%; height: 100%; display: block; }
+
+@media (max-width: 900px) {
+  .viewer { grid-template-columns: 1fr; }
+  .v-nav { display: none; }
+  .v-select { display: block; position: sticky; top: 0; z-index: 5; background: #fff; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .v-select select { width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
+  .v-main { padding: 18px 16px 48px; }
+  .stage-body { flex-direction: column; }
+  .phone { width: 100%; max-width: 390px; flex: none; border-width: 6px; }
+  .notes { max-width: none; width: 100%; flex: none; }
+  .desk-wrap { width: 100%; overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+<div class="viewer">
+  <nav class="v-nav" id="vnav">
+    <div class="v-title"><span data-svc-first>Small</span> <b data-svc-second>Plus</b> 画面モック</div>
+    <div class="v-desc">基幹システムの画面案 v1（2026-10-23）。左の一覧から画面を選んでください。右側のメモに要件の番号と、確認してほしい点を書いています。</div>
+  </nav>
+  <div class="v-select"><select id="vsel" aria-label="画面を選ぶ"></select></div>
+  <main class="v-main" id="vmain">
+
+<!-- ================= お客様側 ================= -->
+
+<section class="stage" id="c01" data-group="申込み（お客様）" data-title="申込フォーム 手順1：お店・ご担当者">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">お申込み</span></header>
+      <div class="c-body">
+        <div class="steps"><div class="now">お店</div><div class="">プラン</div><div class="">お支払い</div><div class="">ご要望</div><div class="">確認</div></div>
+        <h1 class="c-title">お店とご担当者</h1>
+        <p class="c-lead">お申込みは5つの手順です。5分ほどで入力できます。</p>
+        <div class="field"><label>店舗名・会社名<span class="req">必須</span></label><div class="input">喫茶ひだまり</div></div>
+        <div class="field"><label>ご担当者のお名前<span class="req">必須</span></label><div class="input">山田 花子</div></div>
+        <div class="field"><label>メールアドレス<span class="req">必須</span></label><div class="input">hidamari@example.jp</div><p class="hint">控えと請求書をお送りします。マイページのログインにも使います。</p></div>
+        <div class="field"><label>電話番号<span class="opt">任意</span></label><div class="input ph">例）03-1234-5678</div></div>
+        <div class="field"><label>マイページのパスワード<span class="req">必須</span></label><div class="input">••••••••••</div><p class="hint">8文字以上。英字と数字をまぜてください。</p></div>
+        <a class="btn" href="#c01-2">次へ　プランを選ぶ</a>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">F-01 / F-02 / F-04 / F-05 / F-12</span>お店・担当者・連絡先・パスワード（5項目）</li>
+        <li>入力フォームを5つの手順に分け、<b>1画面の入力は5項目以内</b>にしました。画面の上の進み具合の表示で、あと何画面かが分かります</li>
+        <li>手順の区切り：お店／プラン／お支払い／ご要望（任意）／確認</li>
+        <li>前の手順へ戻っても、入力した内容は残ります</li>
+      </ul>
+      <p class="ask">確認したい点：①この区切りでよいか。②「ご要望」の手順は任意項目だけなので、紹介リンクで来た人以外は飛ばせる形にもできます。</p>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c01-2" data-group="申込み（お客様）" data-title="申込フォーム 手順2：プラン">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">お申込み</span></header>
+      <div class="c-body">
+        <div class="steps"><div class="done">お店</div><div class="now">プラン</div><div class="">お支払い</div><div class="">ご要望</div><div class="">確認</div></div>
+        <h1 class="c-title">プランを選ぶ</h1>
+        <p class="c-lead">毎月のクレジットの数で選びます。あとから変えることもできます。</p>
+        <div class="radio-list">
+          <div class="radio"><div class="dot"></div><div><div class="rt">ライト<em>5,000円</em></div><div class="rd">毎月1クレジット　月1回の相談や小さな更新に</div></div></div>
+          <div class="radio on"><div class="dot"></div><div><div class="rt">スタンダード<em>10,000円</em></div><div class="rd">毎月3クレジット　更新と相談を定期的に</div></div></div>
+          <div class="radio"><div class="dot"></div><div><div class="rt">プレミアム<em>15,000円</em></div><div class="rd">毎月5クレジット　新しい仕組みづくりも</div></div></div>
+          <div class="radio"><div class="dot"></div><div><div class="rt">個別見積り<em style="font-size:12px">ご相談のうえ</em></div><div class="rd">お店に合わせて、月額とクレジットの数をお見積りします。審査のあと、見積りをお送りします</div></div></div>
+        </div>
+        <p class="hint" style="margin:10px 0 20px">金額はすべて月額・税込です。1クレジット＝30分程度の相談、または小さな作業1件。複雑な作業は複数のクレジットを使います。初期費用はかかりません。</p>
+        <a class="btn" href="#c01-3">次へ　お支払い方法を選ぶ</a>
+        <a class="btn ghost" href="#c01">戻る</a>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">F-07</span>プラン（税込）。単発は選択肢に入れない。<b>個別見積りを追加</b>（設計スレッド経由のtaiga指示 2026-10-25）：お店ごとに月額とクレジット数を決める毎月の契約</li>
+        <li><span class="tag">K-01</span>クレジットの意味と、初期費用がかからないこと（規約第10条）</li>
+        <li>プランの変更は申出の翌利用期間から（規約第20条5項）。最終確認画面で説明します</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c01-3" data-group="申込み（お客様）" data-title="申込フォーム 手順3：お支払い方法">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">お申込み</span></header>
+      <div class="c-body">
+        <div class="steps"><div class="done">お店</div><div class="done">プラン</div><div class="now">お支払い</div><div class="">ご要望</div><div class="">確認</div></div>
+        <h1 class="c-title">お支払い方法</h1>
+        <p class="c-lead">料金は前払いです。申込みのあと、請求書でご案内します。</p>
+        <div class="radio-list">
+          <div class="radio on"><div class="dot"></div><div><div class="rt">クレジットカード</div><div class="rd">毎月自動でお支払い。カード情報は決済会社が管理し、当社には残りません</div></div></div>
+          <div class="radio"><div class="dot"></div><div><div class="rt">コンビニ払い</div><div class="rd">毎月、支払票でお支払い。<b style="color:var(--warn)">支払票の発行手数料〇〇円は、お客様のご負担</b>です</div></div></div>
+          <div class="radio"><div class="dot"></div><div><div class="rt">銀行振込</div><div class="rd">毎月、請求書に記載の口座へお振込み</div></div></div>
+        </div>
+        <div class="field" style="margin-top:18px"><label>請求書の宛名・住所<span class="req">必須</span></label>
+          <div class="check" style="margin-bottom:8px"><div class="box on">✓</div><span>店舗と同じ名前・住所にする</span></div>
+          <div class="input">喫茶ひだまり　東京都杉並区〇〇 1-2-3</div>
+        </div>
+        <div class="field"><label>インボイス登録番号<span class="opt">任意</span></label><div class="input ph">T から始まる13桁</div></div>
+        <a class="btn" href="#c01-4">次へ　ご要望など</a>
+        <a class="btn ghost" href="#c01-2">戻る</a>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">F-08</span>支払方法。コンビニの発行手数料は選択肢の横に表示（お客様負担）</li>
+        <li><span class="tag">F-03</span>請求先は「店舗と同じ」で省ける</li>
+        <li><span class="tag">F-09</span>インボイス番号（任意）</li>
+        <li><span class="tag">P-02</span>カード番号はフォームで受け取らない。カード登録は請求書のリンク先（決済会社の画面）</li>
+      </ul>
+      <p class="ask">訂正：前の版では銀行振込に「振込手数料はお客様負担」と書いていましたが、規約案第11条8項は振込手数料を当社の負担としているため、書かないようにしました。</p>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c01-4" data-group="申込み（お客様）" data-title="申込フォーム 手順4：ご要望（任意）">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">お申込み</span></header>
+      <div class="c-body">
+        <div class="steps"><div class="done">お店</div><div class="done">プラン</div><div class="done">お支払い</div><div class="now">ご要望</div><div class="">確認</div></div>
+        <h1 class="c-title">ご要望など</h1>
+        <p class="c-lead">この手順の入力はすべて任意です。何も入れずに進めます。</p>
+        <div class="field"><label>紹介者<span class="opt">任意</span></label><div class="input">紹介コード：SP-0012（佐藤さん）</div><p class="hint">紹介リンクから来た場合は自動で入ります。</p></div>
+        <div class="field"><label>ご相談したいこと・ご要望<span class="opt">任意</span></label><div class="input ph" style="min-height:96px">例）予約の受付をネットでもできるようにしたい</div><p class="hint warn">お客さまの個人情報や、病気などの情報は書かないでください。</p></div>
+        <a class="btn" href="#c02">次へ　内容を確認する</a>
+        <a class="btn ghost" href="#c01-3">戻る</a>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">F-10</span>紹介者。紹介リンクから来たら自動入力</li>
+        <li><span class="tag">F-11 / P-03</span>自由記入欄に個人情報の注意</li>
+        <li>紹介者が入ると、最終確認の同意に「紹介者への情報提供」が加わります（C-04）</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c02" data-group="申込み（お客様）" data-title="申込フォーム 最終確認">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">お申込み</span></header>
+      <div class="c-body">
+        <div class="steps"><div class="done">お店</div><div class="done">プラン</div><div class="done">お支払い</div><div class="done">ご要望</div><div class="now">確認</div></div>
+        <h1 class="c-title">お申込み内容の確認</h1>
+        <p class="c-lead">次の内容をご確認のうえ、同意いただける場合は、同意事項にチェックして「同意して申し込む」を押してください。この時点では、契約は成立しません。</p>
+        <div class="card">
+          <h3>お申込み内容 <a href="#c01">修正する</a></h3>
+          <dl class="dl">
+            <dt>店舗名</dt><dd>喫茶ひだまり</dd>
+            <dt>ご担当者</dt><dd>山田 花子</dd>
+            <dt>メール</dt><dd>hidamari@example.jp</dd>
+            <dt>請求書の宛名</dt><dd>喫茶ひだまり</dd>
+            <dt>プラン</dt><dd>スタンダード</dd>
+            <dt>お支払い方法</dt><dd>クレジットカード</dd>
+            <dt>紹介者</dt><dd>SP-0012</dd>
+          </dl>
+        </div>
+        <div class="card" style="border-color:var(--accent);">
+          <h3>契約の内容</h3>
+          <div class="clause"><b>1　料金</b><p>スタンダードプラン：月額10,000円（税込）。毎月3クレジットを付与します。1クレジットは、30分程度の相談、または小規模な作業1件に相当します。初期費用は要しません。</p></div><div class="clause"><b>2　契約の成立</b><p>本申込みは、利用契約の申込みです。当社は、申込みの内容を審査し、承諾する場合に限り、審査完了の通知とあわせて初月分の請求書を送付します。請求書の送付をもって利用契約が成立するものではなく、申込者が請求書記載の初月分の料金を支払い、当社がその入金を確認した時点で、利用契約が成立するものとします。</p></div><div class="clause"><b>3　支払期限と失効</b><p>初月分の料金は、請求書の発行の日から7日以内に支払うものとします。期限までに支払いがない場合、本申込みは、期限の経過をもって失効します。</p></div><div class="clause"><b>4　支払方法</b><p>料金は前払いとし、契約日を起点とする1か月ごとの各利用期間の開始日に、当該利用期間の分を支払うものとします。クレジットカードを選択した場合、登録したカードに毎月自動的に請求されます（継続課金）。カード情報は決済サービスの提供者が管理し、当社は保有しません。コンビニ払いを選択した場合、支払票の発行手数料〇〇円は申込者の負担とし、請求書に別の項目として記載します。銀行振込を選択した場合、当社が指定する当社名義の口座へ振り込むものとします。</p></div><div class="clause"><b>5　クレジット</b><p>クレジットは、各利用期間の開始日に当該利用期間の分を付与し、当該利用期間の末日までに使用されなかったものは、同日の経過をもって失効します。翌期間への繰越し、払戻し、譲渡はできません。追加クレジットは、契約期間中に限り1クレジット4,000円（税込）で購入でき、購入した日の属する利用期間の末日までに使用するものとします。</p></div><div class="clause"><b>6　契約期間と解約</b><p>最低利用期間は設けません。契約は、1か月ごとに自動的に更新されます。解約は、所定の連絡方法により当社に通知することで行い、通知が当社に到達した日の属する利用期間の末日をもって効力を生じます。日割り計算は行わず、未使用のクレジットは契約の終了をもって失効します。</p></div><div class="clause"><b>7　返金</b><p>受領した料金は、当社の責めに帰すべき事由による場合を除き、返還しません。</p></div>
+        </div>
+        <div class="card">
+          <h3>同意事項</h3>
+          <div class="check"><div class="box on">✓</div><span>申込者は、本サービスを事業のために利用します。<span class="req">必須</span></span></div>
+          <div class="check"><div class="box on">✓</div><span>申込者は、<u>利用規約</u>および<u>プライバシーポリシー</u>（2026年〇月〇日版）の内容を確認し、これに同意します。<span class="req">必須</span></span></div>
+          <div class="check"><div class="box on">✓</div><span>申込者は、上記「契約の内容」を確認し、これに同意します。<span class="req">必須</span></span></div>
+          <div class="check"><div class="box on">✓</div><span>申込者は、当社が紹介者に対し、契約の有無、契約の開始月および終了月、ならびに料金の支払いの有無を通知することに同意します。<span class="req">必須</span></span></div>
+          <div class="check" style="margin-bottom:0"><div class="box"></div><span>当社からのサービスのご案内およびお知らせのメールを受け取ります。<span class="opt">任意</span></span></div>
+        </div>
+        <div class="card" style="background:var(--gray-soft);border-style:dashed">
+          <h3 style="font-size:13px;color:var(--sub)">参考：「個別見積り」を選んだ場合の「契約の内容」</h3>
+          <div class="clause" style="padding-top:0"><b>1　料金</b><p>個別見積り：月額・毎月のクレジットの数は、当社の審査のあとに、見積りでお知らせします。見積りの内容に同意して申し込んだときに、料金が確定します。見積りの有効期間は、送付の日から14日（仮）とします。</p></div>
+          <p class="hint">項目2以降は同じです。お支払いの請求書は、見積りの了承のあとに送ります。</p>
+        </div>
+        <a class="btn" href="#c03">同意して申し込む</a>
+        <a class="btn ghost" href="#c01-4">戻る</a>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">K-01〜K-08</span>表示する契約の内容。文言は規約案v2の条文（第4・7・10・11・20条）に合わせた契約書の文体にしました</li>
+        <li><span class="tag">C-01〜C-04</span>同意は4つ＋任意1つ。ボタンは3つの必須同意がそろうまで押せない形を想定</li>
+        <li><span class="tag">R-01〜R-05</span>「同意して申し込む」を押した日時、同意した規約の版、この画面の料金と文言を記録</li>
+        <li>紹介者がいない申込みでは、4つ目の同意は出ません。コンビニを選んだ場合は項目4の手数料の金額が入ります</li>
+      </ul>
+      <p class="ask">確認したい点：①契約の内容は、弁護士の確認前の案です。規約第4条の「審査」の書き方に合わせて直します。②最終確認の画面そのものの長さは、このくらいでよいか。</p>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c03" data-group="申込み（お客様）" data-title="申込みの受付完了">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">お申込み</span></header>
+      <div class="c-body">
+        <div class="steps"><div class="done">お店</div><div class="done">プラン</div><div class="done">お支払い</div><div class="done">ご要望</div><div class="done">確認</div></div>
+        <div class="done-mark">✓</div>
+        <h1 class="c-title center">お申込みを受け付けました</h1>
+        <p class="c-lead center">受付の控えを hidamari@example.jp にお送りしました。</p>
+        <div class="notice yellow"><b>契約は、まだ成立していません</b>当社で、お申込み内容の審査を行います。審査が完了しましたら、審査完了のご連絡と請求書をメールでお送りします。</div>
+        <div class="card">
+          <h3>このあとの流れ</h3>
+          <ul class="timeline">
+            <li class="done">お申込み<div class="m">いま完了しました</div></li>
+            <li class="now">当社でお申込み内容を審査します<div class="m">通常1〜2営業日</div></li>
+            <li>審査完了のご連絡と、請求書をお送りします<div class="m">メール（LINEとつないでいればLINEにも）</div></li>
+            <li>請求書のお支払い<div class="m">発行から7日以内。カードはメールのリンクから登録</div></li>
+            <li>契約の成立<div class="m">お支払いを確認した時点で成立し、クレジットが使えます</div></li>
+          </ul>
+        </div>
+        <a class="btn ghost" href="#c04">マイページで状況を見る</a>
+        <div class="card" style="margin-top:14px">
+          <h3>LINEとつなぎませんか<span class="opt" style="margin:0">おすすめ</span></h3>
+          <p style="font-size:14px">請求書や見積のお知らせがLINEに届き、LINEからマイページを開けます。ご相談もLINEで受け付けています。</p>
+          <a class="btn line" style="margin-top:12px">LINEで友だち追加してつなぐ</a>
+        </div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">S-01</span>受付であって契約成立ではないこと。<b>審査 → 審査完了の連絡と請求書 → 入金確認で成立</b>の順に書き直しました（taiga 2026-10-25）</li>
+        <li><span class="tag">S-02 / NT-01</span>控えと、同意した版の規約・ポリシーをメールで送る</li>
+        <li><span class="tag">S-03</span>当社には新規申込みの通知</li>
+      </ul>
+      <p class="ask">「通常1〜2営業日」は仮です。審査にかける目安日数が決まれば入れ替えます。「審査完了のご連絡と請求書」は、同じメールで送る前提で書いています。</p>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c04" data-group="申込み（お客様）" data-title="入金待ちのマイページ">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">喫茶ひだまり 様</span></header>
+      <div class="c-body">
+        <div class="steps"><div class="done">お申込み</div><div class="done">請求書</div><div class="now">お支払い</div><div>契約開始</div></div>
+        <h1 class="c-title">初月分のお支払い</h1>
+        <p class="c-lead">審査が完了しました。下の請求書のお支払いを当社が確認した時点で、契約が成立します。</p>
+        <div class="card">
+          <h3>請求書 No. SP-2026-0042 <a>PDF</a></h3>
+          <div class="inv-row"><span>スタンダードプラン（11/2〜12/1）</span><span class="price">10,000円</span></div>
+          <div class="inv-row total"><span>ご請求額（税込）</span><span class="price">10,000円</span></div>
+          <p class="hint" style="text-align:right">うち消費税（10%）909円</p>
+          <div class="notice warn" style="margin:10px 0 0"><b>お支払い期限：10月30日（木）</b>期限を過ぎるとお申込みは無効になります。</div>
+        </div>
+        <div class="card">
+          <h3>クレジットカードで支払う</h3>
+          <p style="font-size:14px">決済会社（KOMOJU）の画面でカードを入力します。ここで登録したカードで、翌月から毎月自動でお支払いになります。</p>
+          <a class="btn dark" style="margin-top:12px" href="#c05">カード払いの画面へ（KOMOJU）</a>
+          <p class="hint">カード番号は決済会社が管理し、当社には残りません。</p>
+        </div>
+        <p class="hint center">別の支払い方法に変えたいときは、LINEでご連絡ください。</p>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">1章 / PAY-01</span>申込みから契約成立までの間のマイページ。初月の請求書と支払い方法だけを見せます（設計スレッドの前提）。請求書メール（NT-02）のリンクからもここに来ます</li>
+        <li><span class="tag">INV-02 / INV-03</span>税込額と消費税の内訳、PDF</li>
+        <li><span class="tag">PAY-02</span>カードはKOMOJUの画面へ。同時に定期課金の登録</li>
+        <li>支払い方法ごとに下のカードが変わります。コンビニ：支払い番号と手数料の行、銀行振込：振込先と期限（C10と同じ表示）</li>
+      </ul>
+      <p class="ask">期間の表記（11/2〜12/1）は、入金確認日を契約日にする前提の例です。</p>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c05" data-group="申込み（お客様）" data-title="契約開始のお知らせ">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">喫茶ひだまり 様</span></header>
+      <div class="c-body">
+        <div class="done-mark">✓</div>
+        <h1 class="c-title center">ご契約が始まりました</h1>
+        <p class="c-lead center">お支払いを確認しました。今月の3クレジットが使えます。</p>
+        <div class="card">
+          <h3>ご依頼の流れ</h3>
+          <ul class="timeline">
+            <li class="done">LINEで「〇〇したい」と送る</li>
+            <li class="done">見積（使うクレジットと目安日）がLINEに届く</li>
+            <li class="done">マイページで「了承する」を押す</li>
+            <li class="done">作業して、完了をLINEでお知らせ</li>
+          </ul>
+          <p class="hint">クレジットは契約日から1か月ごと（次は12月2日）に付与。繰り越しはありません。</p>
+        </div>
+        <div class="card">
+          <h3>LINEとつなぐ<span class="opt" style="margin:0">おすすめ</span></h3>
+          <p style="font-size:14px">つなぐと、LINEからワンタップでマイページを開けます。見積やお支払いのお知らせもLINEに届きます。</p>
+          <a class="btn line" style="margin-top:12px">LINEとつなぐ</a>
+          <p class="hint center">あとからマイページでもつなげます。</p>
+        </div>
+        <a class="btn" href="#c07">マイページを見る</a>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">NT-02b</span>契約成立の通知（メールとLINE）からこの画面へ</li>
+        <li>パスワードは申込みのときに設定済みなので、ここでは依頼の流れの説明とLINE連携の案内だけ</li>
+        <li><span class="tag">F-13 / MY-02</span>LINE連携は任意だが、通知のためにおすすめとして目立たせました</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+
+<!-- ================= LINE公式から ================= -->
+
+<section class="stage" id="l01" data-group="LINE公式から（お客様）" data-title="LINEのトーク画面とメニュー">
+  <div class="stage-body">
+    <div class="phone">
+      <div class="line-head"><span class="back">‹</span><span data-svc-first>Small</span> <span data-svc-second>Plus</span><span class="ic">☏ ☰</span></div>
+      <div class="line-talk">
+        <span class="lt-date">11/10（月）</span>
+        <div class="lt-row me"><span class="lt-time">既読<br>10:12</span><div class="bub">新しいメニューの写真を送ります。ホームページとGoogleマップを差し替えたいです</div></div>
+        <div class="lt-row"><div class="lt-av">S<b>P</b></div><div class="bub">ありがとうございます。内容を確認して、見積をお送りしますね。</div><span class="lt-time">10:20</span></div>
+        <div class="lt-row"><div class="lt-av">S<b>P</b></div>
+          <div class="flex-msg">
+            <div class="fh">見積が届きました</div>
+            <div class="fb">
+              <div class="t">メニュー表の差し替え</div>
+              <p style="font-size:13px;margin-bottom:8px">ホームページとGoogleマップのメニューを、新しい内容に差し替えます（作業3項目）。</p>
+              <dl class="dl"><dt>使うクレジット</dt><dd>1</dd><dt>完了の目安</dt><dd>11/20ごろ</dd><dt>今の残り</dt><dd>1</dd></dl>
+            </div>
+            <a class="fbtn" href="#l02">マイページで確認する</a>
+          </div><span class="lt-time">15:03</span></div>
+      </div>
+      <div class="rich">
+        <div class="rich-grid">
+          <a class="main" href="#l03"><i>⌂</i>マイページ</a>
+          <a><i>✎</i>相談・依頼<br>する</a>
+          <a href="#l03"><i>◔</i>残りの<br>クレジット</a>
+          <a href="#c10"><i>¥</i>請求書</a>
+          <a><i>?</i>よくある<br>質問</a>
+          <a><i>✉</i>お問い合わせ</a>
+        </div>
+        <div class="rich-bar">メニュー ▾</div>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面のねらい</h3>
+      <ul>
+        <li>お客様がいちばん開くのはLINEなので、<b>マイページの入口をLINEのメニュー（リッチメニュー）に置きます</b>。ブックマークやパスワードを覚えなくても開けます</li>
+        <li><span class="tag">NT-06</span>見積はボタンつきのメッセージで届き、押すとその見積の画面が開きます（L02）</li>
+        <li>メニュー6つ：マイページ／相談・依頼する（トークに定型文を入れる）／残りのクレジット／請求書／よくある質問／お問い合わせ</li>
+        <li>メニューとメッセージの配色はシステムに合わせた紺。ロゴの黄色だけLPと同じです</li>
+      </ul>
+      <p class="ask">メニューの6つの中身は案です。「相談・依頼する」を一番大きくする形もあります。</p>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="l02" data-group="LINE公式から（お客様）" data-title="LINEの中で見積を開く">
+  <div class="stage-body">
+    <div class="phone">
+      <div class="liff-head"><span class="x">×</span><div class="tt"><span data-svc-first>Small</span> <span data-svc-second>Plus</span> マイページ<small>mypage.example.jp</small></div><span style="color:var(--sub)">⋯</span></div>
+      <div class="c-body">
+        <div class="flow-strip"><span>LINEの通知</span>›<span class="on">見積の画面</span>›<span>了承</span>›<span>LINEに戻る</span></div>
+        <div class="notice info" style="padding:8px 12px">LINEでログインしています（喫茶ひだまり 様）</div>
+        <h1 class="c-title">見積のご確認</h1>
+        <div class="card">
+          <h3>メニュー表の差し替え<span class="badge b-yellow">了承待ち</span></h3>
+          <div class="est-sec"><h4>作業内容</h4>
+            <ol class="est-list">
+              <li>ホームページの「メニュー」ページを、お預かりした新メニュー表（写真2枚）の内容に差し替えます（全14品の品名・価格・説明文）。</li>
+              <li>Googleマップのメニュー項目と写真を、同じ内容に更新します。</li>
+              <li>差し替え後にスマホとパソコンで表示を確認し、完了をLINEでご報告します。</li>
+            </ol></div>
+          <div class="est-sec"><h4>完了の状態</h4><p>ホームページとGoogleマップの両方に、新しいメニューと価格が表示されている状態です。</p></div>
+          <div class="est-sec"><h4>含まれないもの</h4><p>新しい写真の撮影、メニュー表のデザイン作成、Instagramなど他の媒体の更新。必要な場合は、別の依頼としてお見積りします。</p></div>
+          <div class="est-sec"><h4>ご用意いただくもの</h4><p>品名と価格の最終確認（11/14までにLINEでご返信ください）。</p></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
+            <div style="background:var(--accent-pale);border-radius:10px;padding:12px;text-align:center"><small style="color:var(--sub)">使うクレジット</small><div class="big-num">1</div></div>
+            <div style="background:var(--gray-soft);border-radius:10px;padding:12px;text-align:center"><small style="color:var(--sub)">完了の目安</small><div class="big-num" style="font-size:24px;line-height:1.6">11/20</div></div>
+          </div>
+          <p class="hint" style="margin-top:10px">了承すると1クレジットを予約し、残りは 1 → 0 になります。</p>
+          <p class="hint">上の作業内容を超える場合は、着手の前にご相談します。</p>
+        </div>
+        <a class="btn">了承する</a>
+        <p class="hint center" style="margin-top:12px">了承するとLINEに「了承しました」と届き、この画面は閉じてトークに戻ります。</p>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面のねらい</h3>
+      <ul>
+        <li><span class="tag">MY-02</span>LINEの中のブラウザでマイページを開きます（LINEの仕組み「LIFF」）。LINEとつないだ人は<b>ログイン画面を出さずに</b>そのまま開きます</li>
+        <li><span class="tag">MY-06</span>中身はC09と同じ画面。上のバーだけLINEのもの</li>
+        <li>了承のあとはLINEのトークに自動で確認のメッセージを送り、画面を閉じます</li>
+        <li>LINEとつないでいない人は、ここでログイン画面（C06）が出ます</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="l03" data-group="LINE公式から（お客様）" data-title="メニューからマイページを開く">
+  <div class="stage-body">
+    <div class="phone">
+      <div class="liff-head"><span class="x">×</span><div class="tt"><span data-svc-first>Small</span> <span data-svc-second>Plus</span> マイページ<small>mypage.example.jp</small></div><span style="color:var(--sub)">⋯</span></div>
+      <div class="c-body has-tab">
+        <div class="flow-strip"><span>LINEのメニュー</span>›<span class="on">マイページ</span></div>
+        <div class="notice yellow" style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span><b>見積が届いています</b>メニュー表の差し替え（1クレジット）</span><a class="btn sm" href="#l02">見る</a></div>
+        <div class="card">
+          <h3>今月のクレジット<span class="badge b-sage">利用中</span></h3>
+          <div class="credit">
+            <div class="ring"><div><strong>1</strong><small>残り / 3</small></div></div>
+            <dl class="dl"><dt>付与</dt><dd>3</dd><dt>予約済み</dt><dd>1</dd><dt>使用済み</dt><dd>1</dd><dt>使える期限</dt><dd>12月1日</dd></dl>
+          </div>
+        </div>
+        <div class="card">
+          <h3>ご依頼の状況 <a href="#c08">すべて</a></h3>
+          <a class="req-item"><div><div class="t">Googleマップの営業時間の更新</div><div class="m">目安：11/14</div></div><span class="badge b-sage">作業中</span></a>
+        </div>
+      </div>
+      <nav class="tabbar"><a class="on" href="#c07"><i>⌂</i>ホーム</a><a href="#c08"><i>☰</i>依頼</a><a href="#c10"><i>¥</i>請求</a><a href="#c11"><i>◎</i>契約</a></nav>
+    </div>
+    <aside class="notes">
+      <h3>この画面のねらい</h3>
+      <ul>
+        <li>リッチメニューの「マイページ」「残りのクレジット」からは、ホーム（C07）がLINEの中で開きます</li>
+        <li>中身はブラウザで開くマイページと同じ。LINEの中では「LINEで相談する」ボタンを省き、画面を閉じればトークに戻れるようにしました</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c06" data-group="マイページ（お客様）" data-title="ログイン">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">マイページ</span></header>
+      <div class="c-body">
+        <h1 class="c-title" style="margin-top:24px">ログイン</h1>
+        <p class="c-lead">ご契約の内容、残りのクレジット、ご依頼の状況、請求書を見られます。</p>
+        <a class="btn line">LINEでログイン</a>
+        <div class="or">またはメールアドレスで</div>
+        <div class="field"><label>メールアドレス</label><div class="input">hidamari@example.jp</div></div>
+        <div class="field"><label>パスワード</label><div class="input">••••••••••</div></div>
+        <a class="btn" href="#c07">ログイン</a>
+        <p class="hint center" style="margin-top:14px"><u>パスワードを忘れたとき</u></p>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">MY-01</span>メール＋パスワード（基本）</li>
+        <li><span class="tag">MY-02</span>LINE連携した人はLINEでログイン</li>
+      </ul>
+      <p class="ask">LINEボタンを上に置きました。LINEで連絡をとる方が多い前提です。メールを先にしたい場合は入れ替えます。</p>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c07" data-group="マイページ（お客様）" data-title="マイページ（ホーム）">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">喫茶ひだまり 様</span></header>
+      <div class="c-body has-tab">
+        <div class="notice yellow" style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span><b>見積が届いています</b>メニュー表の差し替え（1クレジット）</span><a class="btn sm" href="#c09">見る</a></div>
+        <div class="card">
+          <h3>今月のクレジット<span class="badge b-sage">利用中</span></h3>
+          <div class="credit">
+            <div class="ring"><div><strong>1</strong><small>残り / 3</small></div></div>
+            <dl class="dl">
+              <dt>付与</dt><dd>3</dd>
+              <dt>予約済み</dt><dd>1</dd>
+              <dt>使用済み</dt><dd>1</dd>
+              <dt>使える期限</dt><dd>12月1日</dd>
+            </dl>
+          </div>
+          <p class="hint">残りは翌月に繰り越されません。足りないときは1クレジット4,000円で追加できます。</p>
+        </div>
+        <div class="card">
+          <h3>ご依頼の状況 <a href="#c08">すべて</a></h3>
+          <a class="req-item" href="#c09"><div><div class="t">メニュー表の差し替え</div><div class="m">見積：1クレジット・11/20ごろ</div></div><span class="badge b-yellow">了承待ち</span></a>
+          <a class="req-item"><div><div class="t">Googleマップの営業時間の更新</div><div class="m">目安：11/14</div></div><span class="badge b-sage">作業中</span></a>
+        </div>
+        <div class="card">
+          <h3>次のお支払い <a href="#c10">請求書</a></h3>
+          <dl class="dl"><dt>12月2日</dt><dd>10,000円（カード自動）</dd></dl>
+        </div>
+        <a class="btn line">LINEで相談・依頼する</a>
+      </div>
+      <nav class="tabbar"><a class="on" href="#c07"><i>⌂</i>ホーム</a><a href="#c08"><i>☰</i>依頼</a><a href="#c10"><i>¥</i>請求</a><a href="#c11"><i>◎</i>契約</a></nav>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">MY-04</span>付与・予約済み・使用済み・残り・期限（設計スレッドの前提）。残りの数をいちばん大きく。輪の濃い色＝使用済み、薄い色＝予約済み（了承して作業中の分）</li>
+        <li><span class="tag">MY-06</span>了承待ちの見積があれば、いちばん上に出します</li>
+        <li><span class="tag">MY-05</span>進行中の依頼だけ。完了分は「依頼」タブに</li>
+        <li><span class="tag">MY-03 / MY-07</span>次の請求日と金額</li>
+        <li>依頼そのものはLINEで受ける運用なので、マイページには依頼フォームを置かず、LINEへのボタンにしました</li>
+      </ul>
+      <p class="ask">未払いや課金失敗があるときは、見積の帯と同じ位置に赤い帯を出します（C10参照）。</p>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c08" data-group="マイページ（お客様）" data-title="ご依頼の状況">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">喫茶ひだまり 様</span></header>
+      <div class="c-body has-tab">
+        <h1 class="c-title">ご依頼の状況</h1>
+        <div class="card">
+          <h3>進行中</h3>
+          <a class="req-item" href="#c09"><div><div class="t">メニュー表の差し替え</div><div class="m">受付 11/10　見積：1クレジット・11/20ごろ</div></div><span class="badge b-yellow">了承待ち</span></a>
+          <a class="req-item"><div><div class="t">Googleマップの営業時間の更新</div><div class="m">受付 11/8　了承 11/8　目安：11/14</div></div><span class="badge b-sage">作業中</span></a>
+          <a class="req-item"><div><div class="t">年末年始の休業のお知らせ</div><div class="m">受付 11/11　見積を作っています</div></div><span class="badge b-gray">受付済み</span></a>
+        </div>
+        <div class="card">
+          <h3>完了</h3>
+          <a class="req-item"><div><div class="t">キャッシュレス決済の相談（30分）</div><div class="m">11/4 完了</div></div><span class="badge b-dark">1C使用</span></a>
+          <a class="req-item"><div><div class="t">Instagramのプロフィール整え</div><div class="m">10/24 完了（前の期間）</div></div><span class="badge b-dark">1C使用</span></a>
+        </div>
+        <p class="hint">ご依頼や追加のご相談はLINEで受け付けています。</p>
+      </div>
+      <nav class="tabbar"><a href="#c07"><i>⌂</i>ホーム</a><a class="on" href="#c08"><i>☰</i>依頼</a><a href="#c10"><i>¥</i>請求</a><a href="#c11"><i>◎</i>契約</a></nav>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">MY-05</span>状態は4つ：受付済み／了承待ち／作業中／完了。目安日と使ったクレジット</li>
+        <li>色分け：了承待ち＝黄（お客様の操作が必要）、作業中＝緑、受付済み＝灰、完了＝紺</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c09" data-group="マイページ（お客様）" data-title="見積の了承">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">喫茶ひだまり 様</span></header>
+      <div class="c-body has-tab">
+        <p class="hint" style="margin:0 0 6px"><a href="#c08">‹ ご依頼の状況</a></p>
+        <h1 class="c-title">見積のご確認</h1>
+        <p class="c-lead">内容でよければ「了承する」を押してください。押すまで作業は始まらず、クレジットも使いません。</p>
+        <div class="card">
+          <h3>メニュー表の差し替え<span class="badge b-yellow">了承待ち</span></h3>
+          <div class="est-sec"><h4>作業内容</h4>
+            <ol class="est-list">
+              <li>ホームページの「メニュー」ページを、お預かりした新メニュー表（写真2枚）の内容に差し替えます（全14品の品名・価格・説明文）。</li>
+              <li>Googleマップのメニュー項目と写真を、同じ内容に更新します。</li>
+              <li>差し替え後にスマホとパソコンで表示を確認し、完了をLINEでご報告します。</li>
+            </ol></div>
+          <div class="est-sec"><h4>完了の状態</h4><p>ホームページとGoogleマップの両方に、新しいメニューと価格が表示されている状態です。</p></div>
+          <div class="est-sec"><h4>含まれないもの</h4><p>新しい写真の撮影、メニュー表のデザイン作成、Instagramなど他の媒体の更新。必要な場合は、別の依頼としてお見積りします。</p></div>
+          <div class="est-sec"><h4>ご用意いただくもの</h4><p>品名と価格の最終確認（11/14までにLINEでご返信ください）。</p></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px">
+            <div style="background:var(--accent-pale);border-radius:10px;padding:12px;text-align:center"><small style="color:var(--sub)">使うクレジット</small><div class="big-num">1</div></div>
+            <div style="background:var(--gray-soft);border-radius:10px;padding:12px;text-align:center"><small style="color:var(--sub)">完了の目安</small><div class="big-num" style="font-size:24px;line-height:1.6">11/20</div></div>
+          </div>
+          <p class="hint" style="margin-top:10px">了承すると1クレジットを予約し、残りは 1 → 0 になります。作業が終わったら「使用済み」に変わります。</p>
+          <p class="hint">上の作業内容を超える場合は、着手の前にご相談します。</p>
+        </div>
+        <a class="btn">了承する</a>
+        <a class="btn ghost">LINEで相談する</a>
+        <p class="hint center" style="margin-top:12px">見積の送付：11/10　有効期限：今の期間の終わり（12/1）まで</p>
+        <div class="card" style="margin-top:14px;background:var(--gray-soft);border-style:dashed">
+          <h3 style="font-size:13px;color:var(--sub)">参考：残りが足りないときの表示</h3>
+          <div class="notice warn" style="margin-bottom:10px"><b>クレジットが1つ足りません</b>追加（1クレジット4,000円）か、次の期間に回すかをLINEでご相談ください。</div>
+          <div class="btn" style="background:#c5ccd3;color:#fff;cursor:default">了承する（押せません）</div>
+          <a class="btn line">LINEで相談する</a>
+        </div>
+      </div>
+      <nav class="tabbar"><a href="#c07"><i>⌂</i>ホーム</a><a class="on" href="#c08"><i>☰</i>依頼</a><a href="#c10"><i>¥</i>請求</a><a href="#c11"><i>◎</i>契約</a></nav>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">MY-06</span>必要なクレジット数と目安日を見て「了承する」。了承の日時を記録</li>
+        <li><b>作業内容を具体的に書く</b>（taiga 2026-10-25）：作業内容（箇条書き）／完了の状態／含まれないもの／ご用意いただくもの を、見積の必須項目にしました。「何をどこまでやるか」の食い違いを防ぎます</li>
+        <li><span class="tag">規約8条</span>了承前は消費しないことを画面にも書きました</li>
+        <li><span class="tag">NT-06</span>見積が届いたらLINEで知らせ、この画面を直接開く</li>
+        <li>「断る」ボタンは置かず、LINEで相談する導線にしました。やりとりはLINE中心の運用に合わせています</li>
+        <li>了承でクレジットを「予約」、完了で「使用済み」。残りが足りないと了承ボタンは押せず、LINEでの相談に案内（設計スレッドの前提）</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c10" data-group="マイページ（お客様）" data-title="請求書とお支払い">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">喫茶ひだまり 様</span></header>
+      <div class="c-body has-tab">
+        <h1 class="c-title">請求書とお支払い</h1>
+        <div class="notice warn"><b>カードでのお支払いができませんでした</b>カードの期限切れなどが考えられます。下のボタンからカードを確認してください。</div>
+        <div class="card">
+          <h3>12月分（12/2〜1/1）<span class="badge b-warn">未払い</span></h3>
+          <div class="inv-row"><span>スタンダードプラン</span><span class="price">10,000円</span></div>
+          <div class="inv-row total"><span>合計（税込）</span><span class="price">10,000円</span></div>
+          <a class="btn dark" style="margin-top:12px">カードを確認して支払う</a>
+          <p class="hint center"><u>請求書PDF</u>　No. SP-2026-0087</p>
+        </div>
+        <div class="card">
+          <h3>これまでの請求書</h3>
+          <a class="req-item"><div><div class="t">11月分　10,000円</div><div class="m">No. SP-2026-0042　11/2 カード</div></div><span class="badge b-sage">支払い済み</span></a>
+          <a class="req-item"><div><div class="t">追加クレジット 1C　4,000円</div><div class="m">No. SP-2026-0061　11/18 カード</div></div><span class="badge b-sage">支払い済み</span></a>
+        </div>
+        <div class="card" style="background:var(--accent-pale)">
+          <h3>参考：銀行振込のお客様の表示</h3>
+          <p style="font-size:13px">振込先：〇〇銀行 〇〇支店 普通 1234567<br>名義：ゴウドウガイシャ シングラータ<br>期限：12月9日</p>
+          <h3 style="margin-top:12px">参考：コンビニ払いのお客様の表示</h3>
+          <div class="inv-row"><span>コンビニ払い手数料</span><span class="price">〇〇円</span></div>
+          <div class="copy">支払い番号 1234-5678-9012<span>コピー</span></div>
+        </div>
+      </div>
+      <nav class="tabbar"><a href="#c07"><i>⌂</i>ホーム</a><a href="#c08"><i>☰</i>依頼</a><a class="on" href="#c10"><i>¥</i>請求</a><a href="#c11"><i>◎</i>契約</a></nav>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">MY-07</span>月ごとの請求書PDF、支払い済み／未払い、支払いの案内</li>
+        <li><span class="tag">PAY-06 / NT-05</span>カード失敗時は赤い帯。翌日と3日後にLINE・メールでも通知</li>
+        <li><span class="tag">PAY-03 / INV-05</span>コンビニ手数料は別の行、支払い番号はコピーできる</li>
+        <li><span class="tag">PAY-04</span>銀行振込は振込先と期限</li>
+      </ul>
+      <p class="ask">「カードを確認して支払う」の先は、KOMOJUで再試行かカード変更か、APIの確認待ちです（PAY-06）。</p>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c11" data-group="マイページ（お客様）" data-title="ご契約内容">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">喫茶ひだまり 様</span></header>
+      <div class="c-body has-tab">
+        <h1 class="c-title">ご契約内容</h1>
+        <div class="card">
+          <h3>スタンダードプラン<span class="badge b-sage">利用中</span></h3>
+          <dl class="dl">
+            <dt>月額（税込）</dt><dd>10,000円</dd>
+            <dt>毎月のクレジット</dt><dd>3</dd>
+            <dt>契約日</dt><dd>2026年11月2日</dd>
+            <dt>次の請求日</dt><dd>12月2日</dd>
+            <dt>お支払い方法</dt><dd>カード（自動）</dd>
+          </dl>
+        </div>
+        <div class="card">
+          <h3>ログインの設定</h3>
+          <dl class="dl">
+            <dt>メールアドレス</dt><dd>hidamari@example.jp</dd>
+            <dt>LINE</dt><dd><span class="badge b-sage">つながっています</span></dd>
+          </dl>
+          <a class="btn ghost" style="margin-top:12px">パスワードを変える</a>
+        </div>
+        <div class="card">
+          <h3>プランの変更・追加・解約</h3>
+          <p style="font-size:14px">いまはLINEで受け付けています。「プランを変えたい」「クレジットを追加したい」「解約したい」と送ってください。</p>
+          <a class="btn line" style="margin-top:12px">LINEで連絡する</a>
+          <p class="hint">解約は、その時点の1か月の終わり（いまなら12月1日）で終了します。日割りはしません。</p>
+        </div>
+        <p class="foot-links"><u>利用規約（2026年〇月〇日版）</u>　<u>プライバシーポリシー</u>　<u>特商法表記</u></p>
+      </div>
+      <nav class="tabbar"><a href="#c07"><i>⌂</i>ホーム</a><a href="#c08"><i>☰</i>依頼</a><a href="#c10"><i>¥</i>請求</a><a class="on" href="#c11"><i>◎</i>契約</a></nav>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">MY-03</span>プラン、契約日、次の請求日、状態</li>
+        <li><span class="tag">MY-08</span>追加・変更・解約は最初はLINEの案内。追加クレジットの購入ボタンはPoC中に足す想定</li>
+        <li><span class="tag">R-02</span>同意した版の規約を表示</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="c12" data-group="マイページ（お客様）" data-title="プランの見積り（個別見積り）">
+  <div class="stage-body">
+    <div class="phone">
+      <header class="c-head"><a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><span class="who">喫茶ひだまり 様</span></header>
+      <div class="c-body">
+        <div class="steps"><div class="done">お申込み</div><div class="done">審査</div><div class="now">見積り</div><div>請求書</div><div>契約</div></div>
+        <h1 class="c-title">プランのお見積り</h1>
+        <p class="c-lead">審査が完了しました。次の内容でよければ「この内容で申し込む」を押してください。押すと、初月分の請求書をお送りします。</p>
+        <div class="card" style="border-color:var(--accent)">
+          <h3>個別見積り<span class="badge b-yellow">了承待ち</span></h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="background:var(--accent-pale);border-radius:10px;padding:12px;text-align:center"><small style="color:var(--sub)">月額（税込）</small><div class="big-num" style="font-size:26px">28,000<span style="font-size:14px">円</span></div></div>
+            <div style="background:var(--gray-soft);border-radius:10px;padding:12px;text-align:center"><small style="color:var(--sub)">毎月のクレジット</small><div class="big-num">8</div></div>
+          </div>
+          <div class="est-sec" style="margin-top:12px"><h4>内容</h4>
+            <ol class="est-list">
+              <li>ホームページの更新（月2回まで）と、予約の受付ページの運用</li>
+              <li>キャッシュレス決済と会員カードの設定・運用の相談</li>
+              <li>毎月1回、LINEまたは通話での定例の相談（30分）</li>
+            </ol></div>
+          <div class="est-sec"><h4>含まれないもの</h4><p>ホームページの新規制作、撮影、広告の運用。必要な場合は、別にお見積りします。</p></div>
+          <div class="est-sec"><h4>お支払いと契約期間</h4><p>お支払いは前払いです。契約日から1か月ごとに更新され、未使用のクレジットは翌月に繰り越されません。解約はLINEなどでいつでも通知できます。</p></div>
+          <p class="hint">見積りの有効期限：11/28まで（送付から14日）。<br>お見積りの送付：11/14</p>
+        </div>
+        <a class="btn">この内容で申し込む</a>
+        <a class="btn ghost">LINEで相談する</a>
+        <p class="hint center" style="margin-top:12px">期限を過ぎると、お申込みは無効になります。内容を直したい場合は、LINEでご相談ください。新しい見積りをお送りします。</p>
+      </div>
+    </div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li>個別見積りのプラン（設計スレッド 3.5章）：審査のあと、当社が<b>月額（税込）・毎月のクレジット数・内容・有効期限</b>を書いた見積りを送る。お客様が「この内容で申し込む」を押すと、初月の請求書が自動で出る</li>
+        <li>見積りの出し直しは新しい版。有効期限（案：14日）を過ぎたら申込みは失効</li>
+        <li>内容と「含まれないもの」を書く点は、依頼の見積（C09）と同じ考え方です</li>
+        <li>ログインなしで、メールのリンクかLINEから開く想定（入金待ちのマイページと同じ）</li>
+      </ul>
+      <p class="ask">金額・内容は例です。「お支払いと契約期間」の文は、固定プランの契約内容（C02）と同じ文言を使う想定です。</p>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 管理画面 ================= -->
+
+<section class="stage" id="a01" data-group="管理画面（taiga）" data-title="ログイン（2段階認証）">
+  <div class="stage-body">
+    <div class="desk-wrap"><div class="desk" style="grid-template-columns:1fr;place-items:center;background:var(--bg)">
+      <div style="width:380px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:28px;">
+        <a class="logo" style="font-size:18px"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a> <span class="badge b-dark" style="margin-left:6px">管理</span>
+        <h2 style="font-size:18px;margin:18px 0 4px">確認コードを入力</h2>
+        <p style="font-size:13px;color:var(--sub)">認証アプリに表示されている6桁の数字を入れてください。</p>
+        <div class="otp"><div>4</div><div>8</div><div>1</div><div>0</div><div>2</div><div></div></div>
+        <a class="btn dark" href="#a02">ログイン</a>
+      </div>
+    </div></div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">ADM-07 / P-05</span>メール＋パスワードの次に2段階認証。taigaだけが使う前提</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="a02" data-group="管理画面（taiga）" data-title="今日やること（トップ）">
+  <div class="stage-body">
+    <div class="desk-wrap"><div class="desk">
+      <nav class="a-side">
+        <a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><div class="sub">管理画面</div>
+        <a class="on" href="#a02">今日やること</a><a href="#a03">顧客<span class="n">2</span></a><a href="#a05">依頼<span class="n">1</span></a><a href="#a06">入金確認<span class="n">1</span></a><a href="#a07">請求書</a><a href="#a08">紹介・報酬</a><a>削除予定</a><a>設定</a>
+      </nav>
+      <div class="a-main">
+        <div class="a-top"><div><div class="crumb">11月14日（金）</div><h1>今日やること</h1></div><span class="muted" style="font-size:12px;color:var(--sub)">自動処理：今朝 3:00 に請求書2件を発行、カード課金2件（成功1・失敗1）</span></div>
+        <div class="cols" style="grid-template-columns:1fr 1fr">
+          <div>
+            <div class="panel">
+              <h3>審査待ちの申込み<span class="badge b-yellow">1</span></h3>
+              <table class="tbl" style="border:0"><tbody>
+                <tr><td><b>美容室ルーチェ</b><div class="muted">11/12 受付・ライト・コンビニ・紹介 SP-0012</div></td><td style="text-align:right"><a class="abtn" href="#a04">審査する</a></td></tr>
+              </tbody></table>
+            </div>
+            <div class="panel">
+              <h3>プランの見積りを作る申込み<span class="badge b-yellow">1</span></h3>
+              <table class="tbl" style="border:0"><tbody>
+                <tr><td><b>カフェ あおば</b><div class="muted">個別見積り・11/13 審査完了</div></td><td style="text-align:right"><a class="abtn ghost" href="#a04-2">見積りを作る</a></td></tr>
+              </tbody></table>
+            </div>
+            <div class="panel">
+              <h3>銀行振込の消し込み<span class="badge b-yellow">2</span></h3>
+              <table class="tbl" style="border:0"><tbody>
+                <tr><td><b>そろばん教室 みらい</b><div class="muted">初月分 10,000円・期限 11/17（あと3日）</div></td><td style="text-align:right"><a class="abtn ghost" href="#a06">入金あり</a></td></tr>
+                <tr><td><b>八百屋 まるやま</b><div class="muted">11/15〜 5,000円・期限 11/22</div></td><td style="text-align:right"><a class="abtn ghost" href="#a06">入金あり</a></td></tr>
+              </tbody></table>
+            </div>
+            <div class="panel">
+              <h3>失敗したカード課金<span class="badge b-warn">1</span></h3>
+              <table class="tbl" style="border:0"><tbody>
+                <tr><td><b>ネイルサロン hana</b><div class="muted">11/12 失敗・通知 11/13 済み・次の通知 11/15</div></td><td style="text-align:right"><a class="abtn ghost">LINEを開く</a></td></tr>
+              </tbody></table>
+            </div>
+          </div>
+          <div>
+            <div class="panel">
+              <h3>了承された依頼（着手する）<span class="badge b-sage">1</span></h3>
+              <table class="tbl" style="border:0"><tbody>
+                <tr><td><b>喫茶ひだまり</b><div class="muted">Googleマップの営業時間・1C・目安 11/14</div></td><td style="text-align:right"><a class="abtn ghost" href="#a05">開く</a></td></tr>
+              </tbody></table>
+            </div>
+            <div class="panel">
+              <h3>見積を作る依頼<span class="badge b-gray">1</span></h3>
+              <table class="tbl" style="border:0"><tbody>
+                <tr><td><b>喫茶ひだまり</b><div class="muted">年末年始の休業のお知らせ・11/11 受付</div></td><td style="text-align:right"><a class="abtn ghost" href="#a05">見積を作る</a></td></tr>
+              </tbody></table>
+            </div>
+            <div class="panel">
+              <h3>今月の数字</h3>
+              <div class="kpis" style="grid-template-columns:repeat(3,1fr);margin:0">
+                <div class="kpi"><small>利用中</small><strong>12</strong></div>
+                <div class="kpi"><small>今月の成約</small><strong>2</strong></div>
+                <div class="kpi"><small>今月の解約</small><strong>1</strong></div>
+                <div class="kpi"><small>クレジット消費率</small><strong>64%</strong></div>
+                <div class="kpi"><small>追加C購入</small><strong>3</strong></div>
+                <div class="kpi"><small>入金済み</small><strong>118k</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li>設計スレッドの前提：管理画面のトップは「今日やること」。審査待ちの申込み、振込の消し込み、失敗した課金、了承済みの依頼</li>
+        <li>見積を作る依頼（受付済み）も並べました</li>
+        <li><span class="tag">0章 #9</span>KPI：成約数・解約・クレジット消費・追加C購入</li>
+        <li>何もないまとまりは「なし」と1行だけ出して、縮めます</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="a03" data-group="管理画面（taiga）" data-title="顧客一覧">
+  <div class="stage-body">
+    <div class="desk-wrap"><div class="desk">
+      <nav class="a-side">
+        <a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><div class="sub">管理画面</div>
+        <a href="#a02">今日やること</a><a class="on" href="#a03">顧客<span class="n">2</span></a><a href="#a05">依頼<span class="n">1</span></a><a href="#a06">入金確認<span class="n">1</span></a><a href="#a07">請求書</a><a href="#a08">紹介・報酬</a><a>削除予定</a><a>設定</a>
+      </nav>
+      <div class="a-main">
+        <div class="a-top"><h1>顧客</h1><input class="a-input" style="width:240px" placeholder="店名・メールで検索"></div>
+        <div class="kpis">
+          <div class="kpi attn"><small>申込み（審査待ち）</small><strong>1</strong></div>
+          <div class="kpi"><small>入金待ち</small><strong>1</strong></div>
+          <div class="kpi"><small>利用中</small><strong>12</strong></div>
+          <div class="kpi"><small>解約予定</small><strong>1</strong></div>
+          <div class="kpi"><small>今月の売上（入金済）</small><strong>118,000</strong></div>
+        </div>
+        <div class="filters"><span class="chip on">すべて</span><span class="chip">見込み</span><span class="chip">申込み受付</span><span class="chip">見積り作成中</span><span class="chip">見積り了承待ち</span><span class="chip">入金待ち</span><span class="chip">利用中</span><span class="chip">解約予定</span><span class="chip">終了</span><span class="chip">失効</span></div>
+        <table class="tbl">
+          <thead><tr><th>店名</th><th>状態</th><th>プラン</th><th>支払方法</th><th>契約日</th><th class="num">残りC</th><th>紹介</th><th></th></tr></thead>
+          <tbody>
+            <tr class="hl"><td><b>美容室ルーチェ</b><div class="muted">申込み 11/12 10:42</div></td><td><span class="badge b-yellow">申込み受付</span></td><td>ライト</td><td>コンビニ</td><td>—</td><td class="num">—</td><td>SP-0012</td><td><a class="abtn" href="#a04">審査する</a></td></tr>
+            <tr><td><b>カフェ あおば</b><div class="muted">個別見積り・11/13 審査完了</div></td><td><span class="badge b-yellow">見積り作成中</span></td><td>個別見積り</td><td>カード</td><td>—</td><td class="num">—</td><td>SP-0007</td><td><a class="abtn" href="#a04-2">見積りを作る</a></td></tr>
+            <tr><td><b>そろばん教室 みらい</b><div class="muted">請求書 11/10 発行・期限 11/17</div></td><td><span class="badge b-gray">入金待ち</span></td><td>スタンダード</td><td>銀行振込</td><td>—</td><td class="num">—</td><td>—</td><td><a class="abtn ghost">開く</a></td></tr>
+            <tr><td><b>喫茶ひだまり</b></td><td><span class="badge b-sage">利用中</span></td><td>スタンダード</td><td>カード</td><td>11/2</td><td class="num">2 / 3</td><td>SP-0012</td><td><a class="abtn ghost">開く</a></td></tr>
+            <tr><td><b>八百屋 まるやま</b></td><td><span class="badge b-sage">利用中</span></td><td>ライト</td><td>銀行振込</td><td>10/15</td><td class="num">0 / 1</td><td>—</td><td><a class="abtn ghost">開く</a></td></tr>
+            <tr><td><b>ネイルサロン hana</b><div class="muted">カード失敗 11/12・再通知 11/15</div></td><td><span class="badge b-warn">支払い失敗</span></td><td>プレミアム</td><td>カード</td><td>9/12</td><td class="num">5 / 5</td><td>SP-0007</td><td><a class="abtn ghost">開く</a></td></tr>
+            <tr><td><b>整体院 こはる</b><div class="muted">終了日 11/20</div></td><td><span class="badge b-dark">解約予定</span></td><td>ライト</td><td>カード</td><td>8/20</td><td class="num">1 / 1</td><td>—</td><td><a class="abtn ghost">開く</a></td></tr>
+            <tr><td><b>パン工房 こむぎ</b><div class="muted">期限 11/5 を過ぎた</div></td><td><span class="badge b-gray">失効</span></td><td>ライト</td><td>コンビニ</td><td>—</td><td class="num">—</td><td>—</td><td><a class="abtn ghost">開く</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div></div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">ADM-01</span>状態：見込み／申込み受付／入金待ち／失効／利用中／解約予定／終了</li>
+        <li>操作が必要な行（審査待ちの申込み）を黄色にし、左メニューに件数</li>
+        <li><span class="tag">KPI</span>上の数字は状態ごとの件数。成約数・解約率などは別画面で集計する想定</li>
+        <li>「支払い失敗」は状態ではなく、利用中の上に重ねる注意表示です</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="a04" data-group="管理画面（taiga）" data-title="顧客の詳細（申込みの確認）">
+  <div class="stage-body">
+    <div class="desk-wrap"><div class="desk">
+      <nav class="a-side">
+        <a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><div class="sub">管理画面</div>
+        <a href="#a02">今日やること</a><a class="on" href="#a03">顧客<span class="n">2</span></a><a href="#a05">依頼<span class="n">1</span></a><a href="#a06">入金確認<span class="n">1</span></a><a href="#a07">請求書</a><a href="#a08">紹介・報酬</a><a>削除予定</a><a>設定</a>
+      </nav>
+      <div class="a-main">
+        <div class="a-top"><div><div class="crumb">顧客 ›</div><h1>美容室ルーチェ <span class="badge b-yellow" style="vertical-align:3px">申込み受付</span></h1></div></div>
+        <div class="cols">
+          <div>
+            <div class="panel">
+              <h3>申込み内容<span class="muted" style="font-size:12px;color:var(--sub);font-weight:500">11/12 10:42 受付</span></h3>
+              <dl class="kv">
+                <dt>ご担当者</dt><dd>鈴木 一郎</dd>
+                <dt>メール</dt><dd>luce@example.jp</dd>
+                <dt>電話</dt><dd>090-0000-0000</dd>
+                <dt>請求先</dt><dd>美容室ルーチェ　東京都杉並区〇〇 4-5-6（店舗と同じ）</dd>
+                <dt>プラン</dt><dd>ライト 5,000円（税込）</dd>
+                <dt>支払方法</dt><dd>コンビニ払い（手数料 〇〇円・お客様負担）</dd>
+                <dt>インボイス番号</dt><dd>—</dd>
+                <dt>紹介者</dt><dd>SP-0012 佐藤さん（情報提供に同意済み）</dd>
+                <dt>ご要望</dt><dd>予約をネットで受けたい。今は電話のみ。</dd>
+              </dl>
+            </div>
+            <div class="panel">
+              <h3>同意の記録</h3>
+              <dl class="kv">
+                <dt>規約・ポリシー</dt><dd>2026年〇月〇日版</dd>
+                <dt>事業のための利用</dt><dd>✓</dd>
+                <dt>規約・ポリシー</dt><dd>✓</dd>
+                <dt>紹介者への提供</dt><dd>✓</dd>
+                <dt>案内メール</dt><dd>—（受け取らない）</dd>
+                <dt>表示した料金</dt><dd>5,000円 / 月（税込）＋コンビニ手数料 〇〇円</dd>
+              </dl>
+            </div>
+          </div>
+          <div>
+            <div class="panel" style="border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset">
+              <h3>この申込みの審査</h3>
+              <p style="font-size:13px;color:var(--sub)">審査の結果、承諾する場合は「審査完了・請求書を送る」を押します。審査完了のご連絡と、初月分の請求書（期限は発行から7日）がメールで届きます。</p>
+              <div class="actbar"><a class="abtn">審査完了・請求書を送る</a><a class="abtn danger">承諾しない</a></div>
+              <p style="font-size:12px;color:var(--sub);margin-top:10px">このお客様が「個別見積り」を選んでいた場合は、「請求書を送る」の代わりに <b>「審査完了・見積りを作る」</b> が出ます（A04-2へ）。</p>
+              <p style="font-size:12px;color:var(--sub);margin-top:8px">承諾しない場合は、請求書を出さず、メールでご連絡します（規約第4条5項。理由の開示は義務ではありません）。</p>
+            </div>
+            <div class="panel">
+              <h3>決済・定期課金</h3>
+              <dl class="kv"><dt>KOMOJU</dt><dd>まだありません</dd><dt>次の請求日</dt><dd>—</dd></dl>
+              <div class="actbar"><a class="abtn ghost">金額を変える</a><a class="abtn ghost">課金を止める</a></div>
+            </div>
+            <div class="panel">
+              <h3>履歴</h3>
+              <div class="mini-log">
+                <div><span>11/12 10:42</span><span>フォームから申込み</span></div>
+                <div><span>11/12 10:42</span><span>受付メール送信（控え・規約PDF）</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">ADM-01</span>申込みの審査：「審査完了・請求書を送る」か「承諾しない」（taiga 2026-10-25：当社で審査を行う、という言い方にそろえた）</li>
+        <li><span class="tag">R-01〜R-05</span>同意の記録と表示した料金</li>
+        <li><span class="tag">ADM-05 / PAY-08</span>定期課金の金額変更・停止。利用中の顧客ではここにKOMOJUのIDと次回課金日が出ます</li>
+        <li>利用中の顧客では、右上に「解約予定にする」ボタン（END-01）、左にクレジットの動きと依頼の一覧が並びます</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="a04-2" data-group="管理画面（taiga）" data-title="プランの見積りを作る（個別見積り）">
+  <div class="stage-body">
+    <div class="desk-wrap"><div class="desk">
+      <nav class="a-side">
+        <a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><div class="sub">管理画面</div>
+        <a href="#a02">今日やること</a><a class="on" href="#a03">顧客<span class="n">3</span></a><a href="#a05">依頼<span class="n">1</span></a><a href="#a06">入金確認<span class="n">1</span></a><a href="#a07">請求書</a><a href="#a08">紹介・報酬</a><a>削除予定</a><a>設定</a>
+      </nav>
+      <div class="a-main">
+        <div class="a-top"><div><div class="crumb">顧客 › カフェ あおば ›</div><h1>プランの見積り <span class="badge b-yellow" style="vertical-align:3px">見積り作成中</span></h1></div></div>
+        <div class="cols">
+          <div class="panel">
+            <h3>見積りの内容（お客様に見えます）</h3>
+            <div class="a-row">
+              <div class="a-field"><label>月額（税込）<span class="req" style="font-size:10px">必須</span></label><input class="a-input" value="28,000"></div>
+              <div class="a-field"><label>毎月のクレジット<span class="req" style="font-size:10px">必須</span></label><input class="a-input" value="8"></div>
+            </div>
+            <div class="a-field"><label>内容（1行に1項目）<span class="req" style="font-size:10px">必須</span></label><textarea class="a-input" style="height:96px">ホームページの更新（月2回まで）と、予約の受付ページの運用
+キャッシュレス決済と会員カードの設定・運用の相談
+毎月1回、LINEまたは通話での定例の相談（30分）</textarea></div>
+            <div class="a-field"><label>含まれないもの</label><input class="a-input" value="ホームページの新規制作、撮影、広告の運用"></div>
+            <div class="a-row">
+              <div class="a-field"><label>有効期限<span class="req" style="font-size:10px">必須</span></label><input class="a-input" value="2026-11-28（送信から14日）"></div>
+              <div class="a-field"><label>メモ（社内のみ）</label><input class="a-input" placeholder="根拠・原価など"></div>
+            </div>
+            <div class="actbar"><a class="abtn">見積りを送る（マイページとLINE）</a><a class="abtn ghost">下書き保存</a></div>
+          </div>
+          <div>
+            <div class="panel">
+              <h3>申込み内容（要約）</h3>
+              <dl class="kv"><dt>プラン</dt><dd>個別見積り</dd><dt>支払方法</dt><dd>カード</dd><dt>紹介者</dt><dd>SP-0007</dd><dt>ご要望</dt><dd>予約の受付と会員カードをまとめて見たい</dd></dl>
+            </div>
+            <div class="panel">
+              <h3>見積りの履歴</h3>
+              <div class="mini-log">
+                <div><span>11/12</span><span>申込み受付（個別見積り）</span></div>
+                <div><span>11/13</span><span>審査完了・見積りを作る</span></div>
+              </div>
+              <p style="font-size:12px;color:var(--sub);margin-top:8px">お客様が了承すると、初月の請求書が自動で出ます。直す場合は、新しい版として送り直します（古い版は無効）。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li>設計スレッド 3.5章：プランの見積り（月額の税込額、毎月のクレジット数、内容、有効期限）を作ってマイページとLINEで送る</li>
+        <li>契約の状態に「見積り作成中」「見積り了承待ち」が増えました（A03の一覧にも出ます）</li>
+        <li>出し直しは新しい版。有効期限（案：14日）を過ぎたら申込みは失効</li>
+        <li>パートナー報酬の基準は、この月額（税込）</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="a05" data-group="管理画面（taiga）" data-title="依頼の記録と見積">
+  <div class="stage-body">
+    <div class="desk-wrap"><div class="desk">
+      <nav class="a-side">
+        <a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><div class="sub">管理画面</div>
+        <a href="#a02">今日やること</a><a href="#a03">顧客<span class="n">2</span></a><a class="on" href="#a05">依頼<span class="n">1</span></a><a href="#a06">入金確認<span class="n">1</span></a><a href="#a07">請求書</a><a href="#a08">紹介・報酬</a><a>削除予定</a><a>設定</a>
+      </nav>
+      <div class="a-main">
+        <div class="a-top"><h1>依頼</h1><a class="abtn">＋ 依頼を記録する</a></div>
+        <div class="cols">
+          <div>
+            <div class="filters"><span class="chip on">進行中</span><span class="chip">受付済み</span><span class="chip">了承待ち</span><span class="chip">作業中</span><span class="chip">完了</span></div>
+            <table class="tbl">
+              <thead><tr><th>受付</th><th>店名・内容</th><th>状態</th><th class="num">C</th><th>目安</th></tr></thead>
+              <tbody>
+                <tr class="hl"><td>11/11</td><td><b>喫茶ひだまり</b><div class="muted">年末年始の休業のお知らせ</div></td><td><span class="badge b-gray">受付済み</span></td><td class="num">—</td><td>—</td></tr>
+                <tr><td>11/10</td><td><b>喫茶ひだまり</b><div class="muted">メニュー表の差し替え</div></td><td><span class="badge b-yellow">了承待ち</span></td><td class="num">1</td><td>11/20</td></tr>
+                <tr><td>11/8</td><td><b>喫茶ひだまり</b><div class="muted">Googleマップの営業時間</div></td><td><span class="badge b-sage">作業中</span></td><td class="num">1</td><td>11/14</td></tr>
+                <tr><td>11/9</td><td><b>八百屋 まるやま</b> <span class="badge b-warn">緊急</span><div class="muted">レジのQR決済が動かない</div></td><td><span class="badge b-sage">作業中</span></td><td class="num">1</td><td>11/9</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="panel">
+            <h3>見積を作る<span class="badge b-gray">受付済み</span></h3>
+            <p style="font-size:13px;margin-bottom:10px"><b>喫茶ひだまり</b>　残り 2 / 3（期限 12/1）</p>
+            <div class="a-field"><label>件名（お客様に見えます）<span class="req" style="font-size:10px">必須</span></label><input class="a-input" value="年末年始の休業のお知らせ"></div>
+            <div class="a-field"><label>作業内容（1行に1項目）<span class="req" style="font-size:10px">必須</span></label><textarea class="a-input" style="height:96px">ホームページのトップに、12/29〜1/3の休業のお知らせを掲載します。
+Googleマップの営業時間に、同じ期間の休業を設定します。
+Instagramのプロフィールに、休業のお知らせを1回投稿します。</textarea></div>
+            <div class="a-field"><label>完了の状態<span class="req" style="font-size:10px">必須</span></label><input class="a-input" value="3か所すべてに休業の期間が表示されている状態"></div>
+            <div class="a-field"><label>含まれないもの</label><input class="a-input" value="投稿用の画像の作成、休業後の掲載の取り下げ"></div>
+            <div class="a-field"><label>お客様にご用意いただくもの</label><input class="a-input" value="休業期間の最終確認（11/20まで）"></div>
+            <div class="a-row">
+              <div class="a-field"><label>必要なクレジット</label><input class="a-input" value="1"></div>
+              <div class="a-field"><label>完了の目安</label><input class="a-input" value="2026-11-25"></div>
+            </div>
+            <div class="a-field"><label>メモ（社内のみ）</label><input class="a-input" placeholder="作業時間の見込みなど"></div>
+            <div class="actbar"><a class="abtn">見積を送る（LINEで通知）</a><a class="abtn ghost">下書き保存</a></div>
+            <p style="font-size:12px;color:var(--sub);margin-top:10px">了承されたら「作業中」に、完了で「完了にする」を押すとクレジットの消費が記録されます。</p>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">ADM-02</span>受付→見積（必要C・目安日）→了承（お客様がマイページで）→作業中→完了</li>
+        <li><span class="tag">NT-06</span>見積を送るとLINEで通知</li>
+        <li>見積の項目：件名／作業内容（必須）／完了の状態（必須）／含まれないもの／ご用意いただくもの／必要C／目安日。お客様の見積画面（C09）にそのまま出ます</li>
+        <li><span class="tag">7章</span>緊急フラグ、実際の時間は完了時に入力</li>
+        <li>残りクレジットを見ながら見積を作れるよう、右に表示</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="a06" data-group="管理画面（taiga）" data-title="銀行振込の入金確認">
+  <div class="stage-body">
+    <div class="desk-wrap"><div class="desk">
+      <nav class="a-side">
+        <a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><div class="sub">管理画面</div>
+        <a href="#a02">今日やること</a><a href="#a03">顧客<span class="n">2</span></a><a href="#a05">依頼<span class="n">1</span></a><a class="on" href="#a06">入金確認<span class="n">1</span></a><a href="#a07">請求書</a><a href="#a08">紹介・報酬</a><a>削除予定</a><a>設定</a>
+      </nav>
+      <div class="a-main">
+        <div class="a-top"><h1>銀行振込の入金確認</h1></div>
+        <p style="font-size:13px;color:var(--sub);margin-bottom:12px">通帳を見て、入金があった請求に「入金あり」を付けてください。付けると、その期間のクレジットが使えるようになり、お客様にLINEとメールで知らせます。カードとコンビニはここに出ません（自動で消し込み）。</p>
+        <table class="tbl">
+          <thead><tr><th>請求書</th><th>店名</th><th>内容</th><th class="num">金額</th><th>期限</th><th>振込名義（目安）</th><th></th></tr></thead>
+          <tbody>
+            <tr class="hl"><td>SP-2026-0080</td><td><b>そろばん教室 みらい</b><div class="muted">初月分・入金で契約成立</div></td><td>スタンダード 11/17〜</td><td class="num">10,000</td><td>11/17<div class="muted">あと3日</div></td><td>ミライキョウシツ</td><td><a class="abtn">入金あり</a></td></tr>
+            <tr><td>SP-2026-0079</td><td><b>八百屋 まるやま</b></td><td>ライト 11/15〜</td><td class="num">5,000</td><td>11/22</td><td>マルヤマ</td><td><a class="abtn ghost">入金あり</a></td></tr>
+          </tbody>
+        </table>
+        <div class="panel" style="margin-top:16px">
+          <h3>最近の入金確認</h3>
+          <div class="mini-log">
+            <div><span>11/14 09:10</span><span>SP-2026-0071 八百屋 まるやま 5,000円（手動）→ 1C付与</span></div>
+            <div><span>11/12 03:02</span><span>SP-2026-0069 ネイルサロン hana 15,000円（カード・自動）→ 失敗、通知送信</span></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">ADM-03 / PAY-04</span>請求ごとに「入金あり」→クレジットを利用可能に</li>
+        <li><span class="tag">NT-04 / NT-02b</span>入金確認の通知。初月分なら契約成立の通知</li>
+        <li><span class="tag">7章</span>確認方法（Webhook／手動）を記録</li>
+      </ul>
+      <p class="ask">金額が足りない・多い入金の扱いは要件にないため、モックでは扱っていません。</p>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="a07" data-group="管理画面（taiga）" data-title="請求書一覧">
+  <div class="stage-body">
+    <div class="desk-wrap"><div class="desk">
+      <nav class="a-side">
+        <a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><div class="sub">管理画面</div>
+        <a href="#a02">今日やること</a><a href="#a03">顧客<span class="n">2</span></a><a href="#a05">依頼<span class="n">1</span></a><a href="#a06">入金確認<span class="n">1</span></a><a class="on" href="#a07">請求書</a><a href="#a08">紹介・報酬</a><a>削除予定</a><a>設定</a>
+      </nav>
+      <div class="a-main">
+        <div class="a-top"><h1>請求書</h1><div style="display:flex;gap:8px"><span class="chip on">2026年11月</span><a class="abtn ghost">CSVで出力</a></div></div>
+        <div class="filters"><span class="chip on">すべて</span><span class="chip">未払い</span><span class="chip">支払い済み</span><span class="chip">失敗</span><span class="chip">取り消し</span></div>
+        <table class="tbl">
+          <thead><tr><th>番号</th><th>発行日</th><th>店名</th><th>内訳</th><th class="num">税込</th><th>方法</th><th>状態</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>SP-2026-0087</td><td>11/12</td><td>ネイルサロン hana</td><td>月額</td><td class="num">15,000</td><td>カード</td><td><span class="badge b-warn">失敗</span><div class="muted">再通知 11/15</div></td><td><a class="abtn ghost">PDF</a></td></tr>
+            <tr><td>SP-2026-0082</td><td>11/12</td><td>美容室ルーチェ</td><td>月額＋コンビニ手数料</td><td class="num">5,〇〇〇</td><td>コンビニ</td><td><span class="badge b-yellow">未払い</span></td><td><a class="abtn ghost">PDF</a></td></tr>
+            <tr><td>SP-2026-0080</td><td>11/10</td><td>そろばん教室 みらい</td><td>月額（初月）</td><td class="num">10,000</td><td>振込</td><td><span class="badge b-yellow">未払い</span></td><td><a class="abtn ghost">PDF</a></td></tr>
+            <tr><td>SP-2026-0061</td><td>11/18</td><td>喫茶ひだまり</td><td>追加1C</td><td class="num">4,000</td><td>カード</td><td><span class="badge b-sage">支払い済み</span></td><td><a class="abtn ghost">PDF</a></td></tr>
+            <tr><td>SP-2026-0058</td><td>11/02</td><td>喫茶ひだまり</td><td>月額（初月）</td><td class="num">10,000</td><td>カード</td><td><span class="badge b-sage">支払い済み</span></td><td><a class="abtn ghost">PDF</a> <a class="abtn danger">取り消して出し直す</a></td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:12px;color:var(--sub);margin-top:10px">請求書は契約日起点で毎月自動発行。発行後は書き換えず、取り消して新しい番号で出し直します。</p>
+      </div>
+    </div></div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">ADM-04 / INV-04</span>一覧、取り消しと出し直し。番号は連番</li>
+        <li><span class="tag">INV-01</span>自動発行。人の確認は挟まない</li>
+        <li><span class="tag">INV-05</span>内訳にコンビニ手数料の行</li>
+        <li>CSV出力は会計・税理士への受け渡し用（要件外の提案）</li>
+      </ul>
+    </aside>
+  </div>
+</section>
+
+<section class="stage" id="a08" data-group="管理画面（taiga）" data-title="紹介・報酬">
+  <div class="stage-body">
+    <div class="desk-wrap"><div class="desk">
+      <nav class="a-side">
+        <a class="logo"><span data-svc-first>Small</span> <b data-svc-second>Plus</b></a><div class="sub">管理画面</div>
+        <a href="#a02">今日やること</a><a href="#a03">顧客<span class="n">2</span></a><a href="#a05">依頼<span class="n">1</span></a><a href="#a06">入金確認<span class="n">1</span></a><a href="#a07">請求書</a><a class="on" href="#a08">紹介・報酬</a><a>削除予定</a><a>設定</a>
+      </nav>
+      <div class="a-main">
+        <div class="a-top"><h1>紹介・報酬</h1><span class="chip on">2026年11月</span></div>
+        <div class="kpis" style="grid-template-columns:repeat(4,1fr)">
+          <div class="kpi"><small>紹介からの申込み</small><strong>3</strong></div>
+          <div class="kpi"><small>成約（入金済み）</small><strong>2</strong></div>
+          <div class="kpi"><small>報酬の合計</small><strong>6,000</strong></div>
+          <div class="kpi"><small>パートナー数</small><strong>4</strong></div>
+        </div>
+        <table class="tbl">
+          <thead><tr><th>パートナー</th><th>店名</th><th>種類</th><th class="num">基準額（税込）</th><th class="num">報酬</th><th>経過</th><th>支払い</th></tr></thead>
+          <tbody>
+            <tr><td><b>SP-0012</b> 佐藤さん</td><td>喫茶ひだまり</td><td>成約 20%</td><td class="num">10,000</td><td class="num">2,000</td><td>1 / 12か月</td><td><span class="badge b-gray">未払い</span></td></tr>
+            <tr><td><b>SP-0007</b> 田中さん</td><td>ネイルサロン hana</td><td>成約 20%</td><td class="num">—</td><td class="num">0</td><td>3 / 12か月</td><td class="muted">今月は入金なし</td></tr>
+            <tr><td><b>SP-0007</b> 田中さん</td><td>カフェ あおば</td><td>成約 20%</td><td class="num">15,000</td><td class="num">3,000</td><td>5 / 12か月</td><td><span class="badge b-gray">未払い</span></td></tr>
+            <tr><td><b>SP-0003</b> 伊藤さん</td><td>整体院 こはる</td><td>アポ 10%</td><td class="num">5,000</td><td class="num">500</td><td>—</td><td><span class="badge b-gray">未払い</span></td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:12px;color:var(--sub);margin-top:10px">基準額＝その月に入金のあった月額基本料（税込）。追加クレジットは対象外。解約で停止、最大12か月。</p>
+      </div>
+    </div></div>
+    <aside class="notes">
+      <h3>この画面の要件</h3>
+      <ul>
+        <li><span class="tag">ADM-06</span>月ごと・パートナーごとの計算結果</li>
+        <li><span class="tag">7章</span>アポ10%／成約20%、入金ベース、最大12か月（暫定）</li>
+      </ul>
+      <p class="ask">パートナーへの支払いの記録（支払日）をこの画面で付けるか、会計側でやるかは設計で決めます。</p>
+    </aside>
+  </div>
+</section>
+
+  </main>
+</div>
+<script>
+// サービス名は1か所で差し替え（要件 G-01）
+const SERVICE_NAME = ["kobITo", "Support"];
+document.querySelectorAll("[data-svc-first]").forEach(e => e.textContent = SERVICE_NAME[0]);
+document.querySelectorAll("[data-svc-second]").forEach(e => e.textContent = SERVICE_NAME[1]);
+
+const LOGO = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjIzNSAxOTAgMTMyMCA1MTAiIHJvbGU9ImltZyI+PHRpdGxlPmtvYklUbyBTdXBwb3J0IOKAlCBsb2dvPC90aXRsZT48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxNzUgMTM1KSBzY2FsZSguNDcyKSI+PHBhdGggZmlsbD0iI0YwQjQyOSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNNDc1LjAwLDE5My4wMCBRNDgyLjAwLDE5MS4wMCA0OTEuMDAsMTkyLjUwIFE1MDAuMDAsMTk0LjAwIDUwOS41MCwyMDAuMDAgUTUxOS4wMCwyMDYuMDAgNjI1LjUwLDI5OC4wMCBRNzMyLjAwLDM5MC4wMCA3NjMuMDAsMzk1LjUwIFE3OTQuMDAsNDAxLjAwIDgyNC4wMCw0MDguMDAgUTg1NC4wMCw0MTUuMDAgODczLjUwLDQyMS41MCBRODkzLjAwLDQyOC4wMCA4OTYuNTAsNDMxLjAwIEw5MDAuMDAsNDM0LjAwIEw4OTkuNTAsNDM4LjUwIFE4OTkuMDAsNDQzLjAwIDg5NS4wMCw0NDcuMDAgUTg5MS4wMCw0NTEuMDAgODc1LjUwLDQ2MS41MCBRODYwLjAwLDQ3Mi4wMCA4MzkuMDAsNDg0LjAwIEw4MTguMDAsNDk2LjAwIEw4MTcuNTAsNDg3LjAwIEw4MTcuMDAsNDc4LjAwIEw4MTEuNTAsNDczLjAwIFE4MDYuMDAsNDY4LjAwIDc5Ny41MCw0NjcuMDAgUTc4OS4wMCw0NjYuMDAgNzcxLjAwLDQ2OS41MCBRNzUzLjAwLDQ3My4wMCA3MzUuMDAsNDc4LjUwIFE3MTcuMDAsNDg0LjAwIDY4Ni4wMCw0OTYuMDAgUTY1NS4wMCw1MDguMDAgNTgwLjAwLDU0My41MCBRNTA1LjAwLDU3OS4wMCA0OTUuMDAsNTg0LjAwIFE0ODUuMDAsNTg5LjAwIDQ1OC41MCw1OTkuNTAgUTQzMi4wMCw2MTAuMDAgMzk3LjAwLDYyMS4wMCBRMzYyLjAwLDYzMi4wMCAzNDUuMDAsNjM2LjAwIFEzMjguMDAsNjQwLjAwIDMwNy4wMCw2NDMuMDAgUTI4Ni4wMCw2NDYuMDAgMjc5LjAwLDY0Ni4wMCBRMjcyLjAwLDY0Ni4wMCAyNjguNTAsNjQ1LjAwIFEyNjUuMDAsNjQ0LjAwIDI2My41MCw2NDIuNTAgTDI2Mi4wMCw2NDEuMDAgTDI2Mi4wMCw2MzcuNTAgUTI2Mi4wMCw2MzQuMDAgMjYzLjUwLDYzMS41MCBRMjY1LjAwLDYyOS4wMCAyNzUuMDAsNjE5LjAwIEwyODUuMDAsNjA5LjAwIEwyODYuMDAsNjA5LjAwIEwyODcuMDAsNjA5LjAwIEwyOTEuMDAsNjA0LjUwIEwyOTUuMDAsNjAwLjAwIEwyOTYuMDAsNjAwLjAwIFEyOTcuMDAsNjAwLjAwIDMxMC41MCw1ODcuNTAgUTMyNC4wMCw1NzUuMDAgMzI1LjAwLDU3NS4wMCBMMzI2LjAwLDU3NS4wMCBMMzI4LjAwLDU3Mi41MCBMMzMwLjAwLDU3MC4wMCBMMzMxLjAwLDU3MC4wMCBMMzMyLjAwLDU3MC4wMCBMMzM0LjAwLDU2Ny41MCBRMzM2LjAwLDU2NS4wMCAzNDIuMDAsNTYxLjAwIFEzNDguMDAsNTU3LjAwIDM1MC4wMCw1NTQuNTAgUTM1Mi4wMCw1NTIuMDAgMzU1LjUwLDU1MC4wMCBRMzU5LjAwLDU0OC4wMCAzNjEuMDAsNTQ1LjUwIEwzNjMuMDAsNTQzLjAwIEwzNjQuMDAsNTQzLjAwIFEzNjUuMDAsNTQzLjAwIDM3OS4wMCw1MzEuMDAgUTM5My4wMCw1MTkuMDAgNDE0LjAwLDQyMC4wMCBMNDM1LjAwLDMyMS4wMCBMMzg1LjUwLDMzNC41MCBRMzM2LjAwLDM0OC4wMCAzMzEuMDAsMzQ3LjAwIFEzMjYuMDAsMzQ2LjAwIDMyNC41MCwzNDQuMDAgUTMyMy4wMCwzNDIuMDAgMzIzLjAwLDMzOC41MCBRMzIzLjAwLDMzNS4wMCAzMjguNTAsMzI3LjAwIFEzMzQuMDAsMzE5LjAwIDM0My4wMCwzMDkuMDAgUTM1Mi4wMCwyOTkuMDAgMzUyLjAwLDI5OC4wMCBMMzUyLjAwLDI5Ny4wMCBMMzU2LjAwLDI5My41MCBMMzYwLjAwLDI5MC4wMCBMMzYwLjAwLDI4OS4wMCBMMzYwLjAwLDI4OC4wMCBMMzgyLjUwLDI2NS41MCBMNDA1LjAwLDI0My4wMCBMNDA2LjAwLDI0My4wMCBMNDA3LjAwLDI0My4wMCBMNDEwLjUwLDIzOS4wMCBMNDE0LjAwLDIzNS4wMCBMNDE1LjAwLDIzNS4wMCBMNDE2LjAwLDIzNS4wMCBMNDE4LjUwLDIzMi4wMCBMNDIxLjAwLDIyOS4wMCBMNDIyLjAwLDIyOS4wMCBMNDIzLjAwLDIyOS4wMCBMNDI1LjAwLDIyNi41MCBMNDI3LjAwLDIyNC4wMCBMNDI4LjAwLDIyNC4wMCBRNDI5LjAwLDIyNC4wMCA0MzkuMDAsMjE1LjUwIFE0NDkuMDAsMjA3LjAwIDQ1OC41MCwyMDEuMDAgUTQ2OC4wMCwxOTUuMDAgNDc1LjAwLDE5My4wMCBaIE04MzUuNTAsNzU5LjUwIFE5MzkuMDAsNzU4LjAwIDk2MS41MCw3NTguMDAgUTk4NC4wMCw3NTguMDAgOTg3LjUwLDc2MC41MCBMOTkxLjAwLDc2My4wMCBMOTkxLjUwLDc2OC4wMCBROTkyLjAwLDc3My4wMCA5NzQuMDAsODEwLjUwIFE5NTYuMDAsODQ4LjAwIDk1NC4wMCw4NTQuMDAgTDk1Mi4wMCw4NjAuMDAgTDk1MS4wMCw4NjAuNTAgUTk1MC4wMCw4NjEuMDAgOTQ3LjUwLDg2OC4wMCBROTQ1LjAwLDg3NS4wMCA5NDEuMDAsODgyLjAwIFE5MzcuMDAsODg5LjAwIDkzNC4wMCw4OTcuMDAgUTkzMS4wMCw5MDUuMDAgOTI3LjAwLDkxMi4wMCBROTIzLjAwLDkxOS4wMCA5MjMuMDAsOTIwLjUwIFE5MjMuMDAsOTIyLjAwIDkxOS41MCw5MjguMDAgUTkxNi4wMCw5MzQuMDAgOTA2LjAwLDk1Ny41MCBRODk2LjAwLDk4MS4wMCA4OTUuMDAsOTgxLjUwIEw4OTQuMDAsOTgyLjAwIEw4OTIuNTAsOTg2LjUwIFE4OTEuMDAsOTkxLjAwIDg4OS4wMCw5OTMuMDAgUTg4Ny4wMCw5OTUuMDAgODgyLjAwLDk5Ny4wMCBRODc3LjAwLDk5OS4wMCA3NjkuMDAsMTAwMC4wMCBRNjYxLjAwLDEwMDEuMDAgNjM5LjUwLDEwMDEuNTAgUTYxOC4wMCwxMDAyLjAwIDYxNC4wMCwxMDAwLjAwIEw2MTAuMDAsOTk4LjAwIEw2MDkuNTAsOTkzLjUwIFE2MDkuMDAsOTg5LjAwIDYzMi4wMCw5NDEuMDAgUTY1NS4wMCw4OTMuMDAgNjU4LjAwLDg4NS4wMCBRNjYxLjAwLDg3Ny4wMCA2NjUuMDAsODcwLjAwIFE2NjkuMDAsODYzLjAwIDY2OS4wMCw4NjEuNTAgUTY2OS4wMCw4NjAuMDAgNjc5LjAwLDg0MC4wMCBRNjg5LjAwLDgyMC4wMCA2OTkuMDAsNzk3LjAwIFE3MDkuMDAsNzc0LjAwIDcxMi41MCw3NjkuNTAgUTcxNi4wMCw3NjUuMDAgNzE5LjUwLDc2My41MCBRNzIzLjAwLDc2Mi4wMCA3MjcuNTAsNzYxLjUwIFE3MzIuMDAsNzYxLjAwIDgzNS41MCw3NTkuNTAgWiIvPjxwYXRoIGZpbGw9IiMxRjJFM0EiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTc1OS41MCw0OTguNTAgUTc4NS4wMCw0OTIuMDAgNzg2LjUwLDQ5Mi41MCBMNzg4LjAwLDQ5My4wMCBMNzg4LjUwLDQ5NS4wMCBRNzg5LjAwLDQ5Ny4wMCA3ODMuNTAsNTEyLjAwIFE3NzguMDAsNTI3LjAwIDc2OS41MCw1NDIuNTAgUTc2MS4wMCw1NTguMDAgNzUzLjUwLDU2Ny4wMCBRNzQ2LjAwLDU3Ni4wMCA3NDYuMDAsNTc3LjAwIEw3NDYuMDAsNTc4LjAwIEw3NDIuMDAsNTgxLjUwIEw3MzguMDAsNTg1LjAwIEw3MzguMDAsNTg2LjAwIEw3MzguMDAsNTg3LjAwIEw3MjUuNTAsNTk4LjUwIFE3MTMuMDAsNjEwLjAwIDcwMC4wMCw2MTguNTAgUTY4Ny4wMCw2MjcuMDAgNjc1LjAwLDYzMi41MCBRNjYzLjAwLDYzOC4wMCA2NDguNTAsNjQyLjAwIEw2MzQuMDAsNjQ2LjAwIEw2NTIuNTAsNjU0LjAwIFE2NzEuMDAsNjYyLjAwIDY4NS41MCw2NzIuMDAgUTcwMC4wMCw2ODIuMDAgNzEyLjAwLDY5NC41MCBRNzI0LjAwLDcwNy4wMCA3MzAuMDAsNzE2LjAwIFE3MzYuMDAsNzI1LjAwIDczOC41MCw3MzAuNTAgTDc0MS4wMCw3MzYuMDAgTDczMi4wMCw3MzYuMDAgUTcyMy4wMCw3MzYuMDAgNzE0LjUwLDczOC4wMCBRNzA2LjAwLDc0MC4wMCA3MDEuMDAsNzQzLjAwIFE2OTYuMDAsNzQ2LjAwIDY5Mi4wMCw3NTAuMDAgUTY4OC4wMCw3NTQuMDAgNjU0LjAwLDgyNy41MCBMNjIwLjAwLDkwMS4wMCBMNTYwLjUwLDg5OC41MCBRNTAxLjAwLDg5Ni4wMCA0OTYuMDAsODk0LjUwIFE0OTEuMDAsODkzLjAwIDQ4OC4wMCw4ODkuMDAgUTQ4NS4wMCw4ODUuMDAgNDgyLjUwLDgzNy4wMCBMNDgwLjAwLDc4OS4wMCBMNDc2LjAwLDgwMy4wMCBRNDcyLjAwLDgxNy4wMCA0NjQuNTAsODUxLjUwIFE0NTcuMDAsODg2LjAwIDQ1Ny4wMCw4OTIuMDAgUTQ1Ny4wMCw4OTguMDAgNDU5LjAwLDkwMi41MCBRNDYxLjAwLDkwNy4wMCA0NjUuMDAsOTEwLjUwIFE0NjkuMDAsOTE0LjAwIDQ3NS4wMCw5MTYuNTAgUTQ4MS4wMCw5MTkuMDAgNDkzLjUwLDkyMC41MCBRNTA2LjAwLDkyMi4wMCA1NTYuNTAsOTI0LjAwIEw2MDcuMDAsOTI2LjAwIEw2MDcuMDAsOTI3LjUwIFE2MDcuMDAsOTI5LjAwIDYwMC4wMCw5NDIuNTAgUTU5My4wMCw5NTYuMDAgNTg1LjUwLDk3My41MCBRNTc4LjAwLDk5MS4wMCA1NzguMDAsOTk0LjUwIFE1NzguMDAsOTk4LjAwIDU4MC41MCwxMDA0LjUwIFE1ODMuMDAsMTAxMS4wMCA1ODcuNTAsMTAxNS41MCBRNTkyLjAwLDEwMjAuMDAgNTk2LjAwLDEwMjIuMDAgUTYwMC4wMCwxMDI0LjAwIDYwNi41MCwxMDI1LjUwIFE2MTMuMDAsMTAyNy4wMCA2OTQuMDAsMTAyNi4wMCBMNzc1LjAwLDEwMjUuMDAgTDc3Ny41MCwxMDM1LjUwIFE3ODAuMDAsMTA0Ni4wMCA3ODMuNTAsMTA1OC41MCBRNzg3LjAwLDEwNzEuMDAgNzg3LjUwLDEwNzYuMDAgUTc4OC4wMCwxMDgxLjAwIDc4Ny4wMCwxMDgzLjUwIFE3ODYuMDAsMTA4Ni4wMCA3ODIuMDAsMTA4OS4wMCBRNzc4LjAwLDEwOTIuMDAgNTg2LjAwLDEwOTIuMDAgUTM5NC4wMCwxMDkyLjAwIDM4OS41MCwxMDg4LjUwIEwzODUuMDAsMTA4NS4wMCBMMzg0LjUwLDEwODAuMDAgUTM4NC4wMCwxMDc1LjAwIDM5NC4wMCwxMDQ0LjAwIEw0MDQuMDAsMTAxMy4wMCBMMzk0LjUwLDEwMTIuNTAgUTM4NS4wMCwxMDEyLjAwIDM3Mi41MCwxMDA5LjUwIFEzNjAuMDAsMTAwNy4wMCAzNDguMDAsMTAwMS4wMCBRMzM2LjAwLDk5NS4wMCAzMzAuNTAsOTg5LjUwIFEzMjUuMDAsOTg0LjAwIDMyMC4wMCw5NzUuNTAgUTMxNS4wMCw5NjcuMDAgMzEyLjUwLDk1Ni4wMCBRMzEwLjAwLDk0NS4wMCAzMTAuMDAsOTM2LjUwIFEzMTAuMDAsOTI4LjAwIDMxMy4wMCw5MDkuMDAgUTMxNi4wMCw4OTAuMDAgMzIzLjUwLDg2NC4wMCBRMzMxLjAwLDgzOC4wMCAzNDEuNTAsODEyLjUwIFEzNTIuMDAsNzg3LjAwIDM2NC4wMCw3NjUuMDAgUTM3Ni4wMCw3NDMuMDAgMzg5LjUwLDcyNC41MCBRNDAzLjAwLDcwNi4wMCA0MTYuNTAsNjkzLjAwIFE0MzAuMDAsNjgwLjAwIDQ0NS4wMCw2NzAuMDAgUTQ2MC4wMCw2NjAuMDAgNDcyLjAwLDY1NC41MCBRNDg0LjAwLDY0OS4wMCA0OTAuNTAsNjQ3LjUwIEw0OTcuMDAsNjQ2LjAwIEw0ODQuNTAsNjQwLjAwIFE0NzIuMDAsNjM0LjAwIDQ2OC4wMCw2MzAuNTAgTDQ2NC4wMCw2MjcuMDAgTDQ2NC4wMCw2MjYuMDAgTDQ2NC4wMCw2MjUuMDAgTDQ4NC41MCw2MTYuNTAgUTUwNS4wMCw2MDguMDAgNTYwLjAwLDU4MS4wMCBRNjE1LjAwLDU1NC4wMCA2MTYuNTAsNTU0LjAwIFE2MTguMDAsNTU0LjAwIDY0Ni41MCw1NDAuNTAgUTY3NS4wMCw1MjcuMDAgNzA0LjUwLDUxNi4wMCBRNzM0LjAwLDUwNS4wMCA3NTkuNTAsNDk4LjUwIFoiLz48L2c+PHBhdGggZmlsbD0iI0YwQjQyOSIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNMTE0OC41MCwyNzMuNTAgUTExNzEuMDAsMjczLjAwIDExNzQuMDAsMjczLjUwIEwxMTc3LjAwLDI3NC4wMCBMMTE3Ny4wMCwzNzYuMDAgTDExNzcuMDAsNDc4LjAwIEwxMTU1LjAwLDQ3OC41MCBRMTEzMy4wMCw0NzkuMDAgMTEyOS41MCw0NzkuMDAgTDExMjYuMDAsNDc5LjAwIEwxMTI2LjAwLDM3Ni41MCBMMTEyNi4wMCwyNzQuMDAgTDExNDguNTAsMjczLjUwIFogTTEyNDEuMDAsMjczLjUwIFExMjg4LjAwLDI3My4wMCAxMzE3LjAwLDI3My41MCBMMTM0Ni4wMCwyNzQuMDAgTDEzNDYuMDAsMjk4LjUwIEwxMzQ2LjAwLDMyMy4wMCBMMTMyMC41MCwzMjMuNTAgTDEyOTUuMDAsMzI0LjAwIEwxMjk1LjUwLDQwMS4wMCBMMTI5Ni4wMCw0NzguMDAgTDEyNzQuNTAsNDc4LjUwIFExMjUzLjAwLDQ3OS4wMCAxMjQ4LjUwLDQ3OS4wMCBMMTI0NC4wMCw0NzkuMDAgTDEyNDQuMDAsNDAxLjUwIEwxMjQ0LjAwLDMyNC4wMCBMMTIxOS4wMCwzMjMuNTAgTDExOTQuMDAsMzIzLjAwIEwxMTk0LjAwLDI5OC41MCBMMTE5NC4wMCwyNzQuMDAgTDEyNDEuMDAsMjczLjUwIFoiLz48cGF0aCBmaWxsPSIjMUYyRTNBIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIGQ9Ik02NTEuNTAsMzc2LjUwIEw2NTIuMDAsMjc3LjAwIEw2NzUuMDAsMjc3LjAwIEw2OTguMDAsMjc3LjAwIEw2OTguMDAsMzI1LjUwIEw2OTguMDAsMzc0LjAwIEw2OTkuMDAsMzc0LjAwIEw3MDAuMDAsMzc0LjAwIEw3MDQuNTAsMzY5LjUwIEw3MDkuMDAsMzY1LjAwIEw3MDkuMDAsMzY0LjAwIEw3MDkuMDAsMzYzLjAwIEw3MTUuNTAsMzU3LjAwIEw3MjIuMDAsMzUxLjAwIEw3MjIuMDAsMzUwLjAwIFE3MjIuMDAsMzQ5LjAwIDczMS41MCwzMzkuMDAgTDc0MS4wMCwzMjkuMDAgTDc3MC41MCwzMjkuMDAgTDgwMC4wMCwzMjkuMDAgTDc4Ni41MCwzNDMuMDAgTDc3My4wMCwzNTcuMDAgTDc3My4wMCwzNTguMDAgTDc3My4wMCwzNTkuMDAgTDc2NC4wMCwzNjcuNTAgTDc1NS4wMCwzNzYuMDAgTDc1NS4wMCwzNzcuMDAgTDc1NS4wMCwzNzguMDAgTDc0Ny41MCwzODUuMDAgTDc0MC4wMCwzOTIuMDAgTDc0MC4wMCwzOTMuNTAgTDc0MC4wMCwzOTUuMDAgTDc0My41MCwzOTguNTAgUTc0Ny4wMCw0MDIuMDAgNzYzLjUwLDQyNC41MCBRNzgwLjAwLDQ0Ny4wMCA3ODkuMDAsNDU4LjAwIFE3OTguMDAsNDY5LjAwIDc5OS41MCw0NzIuNTAgTDgwMS4wMCw0NzYuMDAgTDc3My4wMCw0NzYuMDAgTDc0NS4wMCw0NzYuMDAgTDczMS4wMCw0NTcuMDAgUTcxNy4wMCw0MzguMDAgNzEzLjUwLDQzNC41MCBRNzEwLjAwLDQzMS4wMCA3MDkuMDAsNDI4LjUwIFE3MDguMDAsNDI2LjAwIDcwNi4wMCw0MjQuMDAgTDcwNC4wMCw0MjIuMDAgTDcwMi41MCw0MjIuMDAgTDcwMS4wMCw0MjIuMDAgTDY5OS41MCw0MjMuNTAgTDY5OC4wMCw0MjUuMDAgTDY5OC4wMCw0NTAuNTAgTDY5OC4wMCw0NzYuMDAgTDY3NC41MCw0NzYuMDAgTDY1MS4wMCw0NzYuMDAgTDY1MS41MCwzNzYuNTAgWiBNOTU2LjUwLDM3Ni4wMCBMOTU3LjAwLDI3Ny4wMCBMOTgwLjAwLDI3Ny4wMCBMMTAwMy4wMCwyNzcuMDAgTDEwMDMuMDAsMzA3LjUwIEwxMDAzLjAwLDMzOC4wMCBMMTAwOC4wMCwzMzQuNTAgUTEwMTMuMDAsMzMxLjAwIDEwMTkuNTAsMzI4LjUwIFExMDI2LjAwLDMyNi4wMCAxMDM5LjAwLDMyNi4wMCBRMTA1Mi4wMCwzMjYuMDAgMTA2My41MCwzMzAuNTAgUTEwNzUuMDAsMzM1LjAwIDEwODUuMDAsMzQ0LjAwIFExMDk1LjAwLDM1My4wMCAxMTAwLjAwLDM2Mi4wMCBRMTEwNS4wMCwzNzEuMDAgMTEwNi41MCwzNzUuNTAgUTExMDguMDAsMzgwLjAwIDExMDkuNTAsMzkzLjAwIFExMTExLjAwLDQwNi4wMCAxMTA4LjAwLDQyMC4wMCBRMTEwNS4wMCw0MzQuMDAgMTEwMi4wMCw0NDAuMDAgUTEwOTkuMDAsNDQ2LjAwIDEwOTQuNTAsNDUxLjUwIFExMDkwLjAwLDQ1Ny4wMCAxMDgxLjUwLDQ2NC4wMCBRMTA3My4wMCw0NzEuMDAgMTA2MS4wMCw0NzUuMDAgUTEwNDkuMDAsNDc5LjAwIDEwMzcuMDAsNDc4LjUwIFExMDI1LjAwLDQ3OC4wMCAxMDE5LjAwLDQ3NS41MCBRMTAxMy4wMCw0NzMuMDAgMTAwOC41MCw0NjkuMDAgTDEwMDQuMDAsNDY1LjAwIEwxMDAzLjUwLDQ3MC41MCBMMTAwMy4wMCw0NzYuMDAgTDk3OS41MCw0NzUuNTAgTDk1Ni4wMCw0NzUuMDAgTDk1Ni41MCwzNzYuMDAgWiBNODQ0LjAwLDMyNy41MCBRODU4LjAwLDMyMy4wMCA4NjguMDAsMzIzLjAwIFE4NzguMDAsMzIzLjAwIDg4My41MCwzMjQuMDAgUTg4OS4wMCwzMjUuMDAgODkzLjUwLDMyNi41MCBRODk4LjAwLDMyOC4wMCA5MDcuMDAsMzMzLjAwIFE5MTYuMDAsMzM4LjAwIDkyMC41MCwzNDIuMDAgTDkyNS4wMCwzNDYuMDAgTDkyNS4wMCwzNDcuMDAgUTkyNS4wMCwzNDguMDAgOTMwLjAwLDM1My41MCBROTM1LjAwLDM1OS4wMCA5MzguNTAsMzY2LjAwIFE5NDIuMDAsMzczLjAwIDk0NC4wMCwzODAuNTAgUTk0Ni4wMCwzODguMDAgOTQ2LjAwLDQwMi4wMCBROTQ2LjAwLDQxNi4wMCA5NDMuNTAsNDI0LjUwIFE5NDEuMDAsNDMzLjAwIDkzNy41MCw0MzkuNTAgUTkzNC4wMCw0NDYuMDAgOTMwLjUwLDQ0OS41MCBMOTI3LjAwLDQ1My4wMCBMOTI3LjAwLDQ1NC4wMCBMOTI3LjAwLDQ1NS4wMCBMOTIwLjAwLDQ2MS4wMCBROTEzLjAwLDQ2Ny4wMCA5MDYuMDAsNDcwLjUwIFE4OTkuMDAsNDc0LjAwIDg4OS4wMCw0NzYuNTAgUTg3OS4wMCw0NzkuMDAgODY4LjUwLDQ3OS4wMCBRODU4LjAwLDQ3OS4wMCA4NTIuNTAsNDc4LjAwIFE4NDcuMDAsNDc3LjAwIDg0MC4wMCw0NzQuNTAgUTgzMy4wMCw0NzIuMDAgODI2LjUwLDQ2OC4wMCBRODIwLjAwLDQ2NC4wMCA4MTUuMDAsNDU5LjUwIFE4MTAuMDAsNDU1LjAwIDgwNS4wMCw0NDguMDAgUTgwMC4wMCw0NDEuMDAgNzk1LjUwLDQyOC4wMCBRNzkxLjAwLDQxNS4wMCA3OTAuNTAsNDA2LjUwIFE3OTAuMDAsMzk4LjAwIDc5MS4wMCwzOTAuNTAgUTc5Mi4wMCwzODMuMDAgNzk0LjUwLDM3NS41MCBRNzk3LjAwLDM2OC4wMCA4MDEuMDAsMzYxLjAwIFE4MDUuMDAsMzU0LjAwIDgxMS4wMCwzNDcuNTAgUTgxNy4wMCwzNDEuMDAgODIzLjUwLDMzNi41MCBRODMwLjAwLDMzMi4wMCA4NDQuMDAsMzI3LjUwIFogTTEzOTMuNTAsMzI2LjUwIFExNDAxLjAwLDMyNS4wMCAxNDExLjUwLDMyNS4wMCBRMTQyMi4wMCwzMjUuMDAgMTQyNy41MCwzMjYuMDAgUTE0MzMuMDAsMzI3LjAwIDE0MzkuMDAsMzI5LjAwIFExNDQ1LjAwLDMzMS4wMCAxNDUzLjAwLDMzNS41MCBRMTQ2MS4wMCwzNDAuMDAgMTQ2Ni41MCwzNDUuMDAgUTE0NzIuMDAsMzUwLjAwIDE0NzYuMDAsMzU1LjUwIFExNDgwLjAwLDM2MS4wMCAxNDgzLjAwLDM2Ny4wMCBRMTQ4Ni4wMCwzNzMuMDAgMTQ4OC41MCwzODIuNTAgUTE0OTEuMDAsMzkyLjAwIDE0OTAuNTAsNDA1LjUwIFExNDkwLjAwLDQxOS4wMCAxNDg4LjAwLDQyNS41MCBRMTQ4Ni4wMCw0MzIuMDAgMTQ4MC41MCw0NDEuNTAgUTE0NzUuMDAsNDUxLjAwIDE0NjUuMDAsNDYwLjAwIFExNDU1LjAwLDQ2OS4wMCAxNDUwLjAwLDQ3MS41MCBRMTQ0NS4wMCw0NzQuMDAgMTQzMy41MCw0NzcuMDAgUTE0MjIuMDAsNDgwLjAwIDE0MTIuMDAsNDgwLjAwIFExNDAyLjAwLDQ4MC4wMCAxMzk0LjUwLDQ3OC41MCBRMTM4Ny4wMCw0NzcuMDAgMTM3NS4wMCw0NzEuMDAgUTEzNjMuMDAsNDY1LjAwIDEzNTMuNTAsNDU1LjAwIFExMzQ0LjAwLDQ0NS4wMCAxMzQwLjUwLDQzOC4wMCBRMTMzNy4wMCw0MzEuMDAgMTMzNS4wMCw0MjQuMDAgUTEzMzMuMDAsNDE3LjAwIDEzMzIuNTAsNDA3LjAwIFExMzMyLjAwLDM5Ny4wMCAxMzMzLjAwLDM5MC41MCBRMTMzNC4wMCwzODQuMDAgMTMzNi41MCwzNzYuNTAgUTEzMzkuMDAsMzY5LjAwIDEzNDIuNTAsMzYzLjAwIFExMzQ2LjAwLDM1Ny4wMCAxMzUzLjUwLDM0OS4wMCBRMTM2MS4wMCwzNDEuMDAgMTM2NS41MCwzMzguMDAgUTEzNzAuMDAsMzM1LjAwIDEzNzguMDAsMzMxLjUwIFExMzg2LjAwLDMyOC4wMCAxMzkzLjUwLDMyNi41MCBaIE04NzEuMDAsMzY5LjUwIFE4NjUuMDAsMzY5LjAwIDg2MC4wMCwzNzAuNTAgUTg1NS4wMCwzNzIuMDAgODQ5LjUwLDM3Ny4wMCBRODQ0LjAwLDM4Mi4wMCA4NDEuNTAsMzg3LjAwIFE4MzkuMDAsMzkyLjAwIDgzOC41MCwzOTkuMDAgUTgzOC4wMCw0MDYuMDAgODQwLjAwLDQxMi4wMCBRODQyLjAwLDQxOC4wMCA4NDcuMDAsNDIzLjUwIFE4NTIuMDAsNDI5LjAwIDg1Ni41MCw0MzEuMDAgUTg2MS4wMCw0MzMuMDAgODY2LjUwLDQzMy4wMCBRODcyLjAwLDQzMy4wMCA4NzUuNTAsNDMyLjUwIFE4NzkuMDAsNDMyLjAwIDg4NS4wMCw0MjguMDAgUTg5MS4wMCw0MjQuMDAgODk0LjUwLDQxNy41MCBRODk4LjAwLDQxMS4wMCA4OTguNTAsNDA0LjUwIFE4OTkuMDAsMzk4LjAwIDg5Ni41MCwzOTAuNTAgUTg5NC4wMCwzODMuMDAgODkwLjUwLDM3OS4wMCBRODg3LjAwLDM3NS4wMCA4ODIuMDAsMzcyLjUwIFE4NzcuMDAsMzcwLjAwIDg3MS4wMCwzNjkuNTAgWiBNMTAzMi41MCwzNzAuMDAgUTEwMjYuMDAsMzcwLjAwIDEwMjAuNTAsMzcyLjUwIFExMDE1LjAwLDM3NS4wMCAxMDExLjAwLDM3OS41MCBRMTAwNy4wMCwzODQuMDAgMTAwNS4wMCwzODkuNTAgUTEwMDMuMDAsMzk1LjAwIDEwMDMuMDAsNDAyLjAwIFExMDAzLjAwLDQwOS4wMCAxMDA1LjAwLDQxNC41MCBRMTAwNy4wMCw0MjAuMDAgMTAxMC41MCw0MjQuMDAgUTEwMTQuMDAsNDI4LjAwIDEwMjAuNTAsNDMxLjAwIFExMDI3LjAwLDQzNC4wMCAxMDMzLjAwLDQzMy41MCBRMTAzOS4wMCw0MzMuMDAgMTA0My41MCw0MzEuNTAgUTEwNDguMDAsNDMwLjAwIDEwNTMuMDAsNDI1LjAwIFExMDU4LjAwLDQyMC4wMCAxMDYwLjUwLDQxMi41MCBRMTA2My4wMCw0MDUuMDAgMTA2Mi41MCwzOTkuMDAgUTEwNjIuMDAsMzkzLjAwIDEwNTkuNTAsMzg3LjUwIFExMDU3LjAwLDM4Mi4wMCAxMDUyLjAwLDM3Ny41MCBRMTA0Ny4wMCwzNzMuMDAgMTA0My4wMCwzNzEuNTAgUTEwMzkuMDAsMzcwLjAwIDEwMzIuNTAsMzcwLjAwIFogTTE0MTIuMDAsMzcwLjAwIFExNDA2LjAwLDM3MC4wMCAxNDAwLjAwLDM3Mi41MCBRMTM5NC4wMCwzNzUuMDAgMTM4OS41MCwzODAuMDAgUTEzODUuMDAsMzg1LjAwIDEzODMuMDAsMzkxLjAwIFExMzgxLjAwLDM5Ny4wMCAxMzgxLjAwLDQwMi41MCBRMTM4MS4wMCw0MDguMDAgMTM4My4wMCw0MTMuNTAgUTEzODUuMDAsNDE5LjAwIDEzODkuNTAsNDI0LjAwIFExMzk0LjAwLDQyOS4wMCAxNDAwLjAwLDQzMS41MCBRMTQwNi4wMCw0MzQuMDAgMTQxMS41MCw0MzQuMDAgUTE0MTcuMDAsNDM0LjAwIDE0MjMuMDAsNDMxLjUwIFExNDI5LjAwLDQyOS4wMCAxNDMzLjUwLDQyNC4wMCBRMTQzOC4wMCw0MTkuMDAgMTQ0MC4wMCw0MTMuNTAgUTE0NDIuMDAsNDA4LjAwIDE0NDIuMDAsNDAyLjAwIFExNDQyLjAwLDM5Ni4wMCAxNDQwLjAwLDM5MC41MCBRMTQzOC4wMCwzODUuMDAgMTQzMy41MCwzODAuMDAgUTE0MjkuMDAsMzc1LjAwIDE0MjMuNTAsMzcyLjUwIFExNDE4LjAwLDM3MC4wMCAxNDEyLjAwLDM3MC4wMCBaIE02ODAuMDAsNTA0LjAwIFE2ODkuMDAsNTAxLjAwIDcwMy4wMCw1MDEuNTAgUTcxNy4wMCw1MDIuMDAgNzIzLjUwLDUwNC4wMCBRNzMwLjAwLDUwNi4wMCA3MzUuNTAsNTA5LjAwIEw3NDEuMDAsNTEyLjAwIEw3MzUuNTAsNTIzLjUwIEw3MzAuMDAsNTM1LjAwIEw3MjcuMDAsNTMzLjAwIFE3MjQuMDAsNTMxLjAwIDcxNi41MCw1MjguNTAgUTcwOS4wMCw1MjYuMDAgNzAwLjUwLDUyNi4wMCBRNjkyLjAwLDUyNi4wMCA2ODkuMDAsNTI3LjUwIFE2ODYuMDAsNTI5LjAwIDY4NC41MCw1MzEuMDAgUTY4My4wMCw1MzMuMDAgNjgzLjAwLDUzNi41MCBMNjgzLjAwLDU0MC4wMCBMNjg1LjUwLDU0Mi41MCBRNjg4LjAwLDU0NS4wMCA3MDYuMDAsNTUwLjAwIFE3MjQuMDAsNTU1LjAwIDcyOS4wMCw1NTguMDAgUTczNC4wMCw1NjEuMDAgNzM3LjUwLDU2NS4wMCBRNzQxLjAwLDU2OS4wMCA3NDIuNTAsNTczLjUwIFE3NDQuMDAsNTc4LjAwIDc0NC4wMCw1ODUuNTAgUTc0NC4wMCw1OTMuMDAgNzQxLjUwLDU5OS41MCBRNzM5LjAwLDYwNi4wMCA3MzQuNTAsNjEwLjUwIFE3MzAuMDAsNjE1LjAwIDcyNi41MCw2MTcuMDAgUTcyMy4wMCw2MTkuMDAgNzE2LjUwLDYyMS4wMCBRNzEwLjAwLDYyMy4wMCA3MDQuNTAsNjIzLjUwIFE2OTkuMDAsNjI0LjAwIDY5MC41MCw2MjMuNTAgUTY4Mi4wMCw2MjMuMDAgNjc2LjAwLDYyMS41MCBRNjcwLjAwLDYyMC4wMCA2NjAuMDAsNjE0LjUwIEw2NTAuMDAsNjA5LjAwIEw2NTUuNTAsNTk4LjAwIEw2NjEuMDAsNTg3LjAwIEw2NjIuNTAsNTg3LjAwIFE2NjQuMDAsNTg3LjAwIDY2Ny4wMCw1ODkuNTAgUTY3MC4wMCw1OTIuMDAgNjc4LjAwLDU5NS4wMCBRNjg2LjAwLDU5OC4wMCA2OTUuNTAsNTk4LjAwIFE3MDUuMDAsNTk4LjAwIDcwOC41MCw1OTYuNTAgUTcxMi4wMCw1OTUuMDAgNzEzLjUwLDU5Mi41MCBRNzE1LjAwLDU5MC4wMCA3MTUuMDAsNTg3LjUwIFE3MTUuMDAsNTg1LjAwIDcxMy4wMCw1ODIuNTAgUTcxMS4wMCw1ODAuMDAgNjk0LjAwLDU3NS4wMCBRNjc3LjAwLDU3MC4wMCA2NzIuMDAsNTY3LjUwIFE2NjcuMDAsNTY1LjAwIDY2Mi4wMCw1NjAuMDAgUTY1Ny4wMCw1NTUuMDAgNjU1LjUwLDU1MS4wMCBRNjU0LjAwLDU0Ny4wMCA2NTQuMDAsNTM4LjAwIFE2NTQuMDAsNTI5LjAwIDY1Ny41MCw1MjIuMDAgUTY2MS4wMCw1MTUuMDAgNjY2LjAwLDUxMS4wMCBRNjcxLjAwLDUwNy4wMCA2ODAuMDAsNTA0LjAwIFogTTEyNTAuMDAsNTI0LjAwIEwxMjUwLjAwLDUxMy4wMCBMMTI2My41MCw1MTMuMDAgTDEyNzcuMDAsNTEzLjAwIEwxMjc3LjAwLDUyMy41MCBMMTI3Ny4wMCw1MzQuMDAgTDEyODYuNTAsNTM0LjUwIEwxMjk2LjAwLDUzNS4wMCBMMTI5Ni4wMCw1NDYuNTAgTDEyOTYuMDAsNTU4LjAwIEwxMjg2LjUwLDU1OC4wMCBMMTI3Ny4wMCw1NTguMDAgTDEyNzcuMDAsNTc0LjUwIFExMjc3LjAwLDU5MS4wMCAxMjc4LjAwLDU5My41MCBRMTI3OS4wMCw1OTYuMDAgMTI4MS4wMCw1OTcuNTAgUTEyODMuMDAsNTk5LjAwIDEyODcuNTAsNTk5LjAwIFExMjkyLjAwLDU5OS4wMCAxMjk0LjAwLDU5OC4wMCBMMTI5Ni4wMCw1OTcuMDAgTDEyOTguNTAsNjA2LjUwIFExMzAxLjAwLDYxNi4wMCAxMzAwLjUwLDYxNy4wMCBRMTMwMC4wMCw2MTguMDAgMTI5NC41MCw2MjAuMDAgUTEyODkuMDAsNjIyLjAwIDEyODEuMDAsNjIyLjAwIFExMjczLjAwLDYyMi4wMCAxMjY3LjAwLDYxOS41MCBRMTI2MS4wMCw2MTcuMDAgMTI1Ni41MCw2MTEuMDAgUTEyNTIuMDAsNjA1LjAwIDEyNTEuMDAsNjAxLjAwIFExMjUwLjAwLDU5Ny4wMCAxMjUwLjAwLDU3Ny41MCBMMTI1MC4wMCw1NTguMDAgTDEyNDMuNTAsNTU4LjAwIEwxMjM3LjAwLDU1OC4wMCBMMTIzNy4wMCw1NDYuNTAgTDEyMzcuMDAsNTM1LjAwIEwxMjQzLjUwLDUzNS4wMCBMMTI1MC4wMCw1MzUuMDAgTDEyNTAuMDAsNTI0LjAwIFogTTg5OS41MCw1MzQuNTAgUTkwNC4wMCw1MzMuMDAgOTEyLjAwLDUzMy4wMCBROTIwLjAwLDUzMy4wMCA5MjMuNTAsNTM0LjAwIFE5MjcuMDAsNTM1LjAwIDkzMS41MCw1MzcuNTAgUTkzNi4wMCw1NDAuMDAgOTQwLjUwLDU0NC41MCBROTQ1LjAwLDU0OS4wMCA5NDguNTAsNTU2LjUwIFE5NTIuMDAsNTY0LjAwIDk1Mi41MCw1NzUuNTAgUTk1My4wMCw1ODcuMDAgOTQ5LjUwLDU5Ni4wMCBROTQ2LjAwLDYwNS4wMCA5NDAuNTAsNjEwLjUwIFE5MzUuMDAsNjE2LjAwIDkyOS41MCw2MTguNTAgUTkyNC4wMCw2MjEuMDAgOTE0LjUwLDYyMS41MCBROTA1LjAwLDYyMi4wMCA5MDAuNTAsNjIwLjUwIFE4OTYuMDAsNjE5LjAwIDg5My4wMCw2MTYuMDAgTDg5MC4wMCw2MTMuMDAgTDg4OS4wMCw2MTMuMDAgTDg4OC4wMCw2MTMuMDAgTDg4OC4wMCw2MjEuMDAgUTg4OC4wMCw2MjkuMDAgODg4LjAwLDY0MC41MCBMODg4LjAwLDY1Mi4wMCBMODc0LjUwLDY1Mi4wMCBMODYxLjAwLDY1Mi4wMCBMODYxLjAwLDU5My4wMCBMODYxLjAwLDUzNC4wMCBMODc0LjAwLDUzNC4wMCBMODg3LjAwLDUzNC4wMCBMODg4LjAwLDUzOC4wMCBMODg5LjAwLDU0Mi4wMCBMODkyLjAwLDUzOS4wMCBRODk1LjAwLDUzNi4wMCA4OTkuNTAsNTM0LjUwIFogTTEwMDUuMDAsNTM0LjUwIFExMDA5LjAwLDUzMy4wMCAxMDE5LjUwLDUzMy41MCBRMTAzMC4wMCw1MzQuMDAgMTAzOC41MCw1MzkuMDAgTDEwNDcuMDAsNTQ0LjAwIEwxMDQ3LjAwLDU0NS4wMCBMMTA0Ny4wMCw1NDYuMDAgTDEwNTAuMDAsNTQ5LjAwIFExMDUzLjAwLDU1Mi4wMCAxMDU1LjUwLDU1OC4wMCBRMTA1OC4wMCw1NjQuMDAgMTA1OC41MCw1NzUuNTAgUTEwNTkuMDAsNTg3LjAwIDEwNTYuMDAsNTk1LjAwIFExMDUzLjAwLDYwMy4wMCAxMDUwLjUwLDYwNi41MCBRMTA0OC4wMCw2MTAuMDAgMTA0My41MCw2MTMuNTAgUTEwMzkuMDAsNjE3LjAwIDEwMzIuNTAsNjE5LjUwIFExMDI2LjAwLDYyMi4wMCAxMDE4LjAwLDYyMi4wMCBRMTAxMC4wMCw2MjIuMDAgMTAwNi4wMCw2MjAuNTAgUTEwMDIuMDAsNjE5LjAwIDk5OS4wMCw2MTYuMDAgTDk5Ni4wMCw2MTMuMDAgTDk5NS4wMCw2MTMuMDAgTDk5NC4wMCw2MTMuMDAgTDk5NC4wMCw2MjEuMDAgUTk5NC4wMCw2MjkuMDAgOTk0LjAwLDY0MC41MCBMOTk0LjAwLDY1Mi4wMCBMOTgwLjUwLDY1Mi4wMCBMOTY3LjAwLDY1Mi4wMCBMOTY3LjAwLDU5My4wMCBMOTY3LjAwLDUzNC4wMCBMOTgwLjUwLDUzNC4wMCBMOTk0LjAwLDUzNC4wMCBMOTk0LjUwLDUzOC4wMCBMOTk1LjAwLDU0Mi4wMCBMOTk4LjAwLDUzOS4wMCBRMTAwMS4wMCw1MzYuMDAgMTAwNS4wMCw1MzQuNTAgWiBNMTA5Ny41MCw1MzYuMDAgUTExMDYuMDAsNTMzLjAwIDExMTUuMDAsNTMzLjAwIFExMTI0LjAwLDUzMy4wMCAxMTMxLjUwLDUzNS41MCBRMTEzOS4wMCw1MzguMDAgMTE0Ni4wMCw1NDQuMDAgUTExNTMuMDAsNTUwLjAwIDExNTcuMDAsNTU5LjUwIFExMTYxLjAwLDU2OS4wMCAxMTYwLjUwLDU4MC4wMCBRMTE2MC4wMCw1OTEuMDAgMTE1Ni41MCw1OTguMDAgUTExNTMuMDAsNjA1LjAwIDExNDcuMDAsNjEwLjUwIFExMTQxLjAwLDYxNi4wMCAxMTMyLjAwLDYxOS4wMCBRMTEyMy4wMCw2MjIuMDAgMTExNC41MCw2MjIuMDAgUTExMDYuMDAsNjIyLjAwIDEwOTguNTAsNjE5LjUwIFExMDkxLjAwLDYxNy4wMCAxMDg0LjAwLDYxMS4wMCBRMTA3Ny4wMCw2MDUuMDAgMTA3My4wMCw1OTYuNTAgUTEwNjkuMDAsNTg4LjAwIDEwNjkuMDAsNTc3LjUwIFExMDY5LjAwLDU2Ny4wMCAxMDcyLjUwLDU1OS4wMCBRMTA3Ni4wMCw1NTEuMDAgMTA4Mi41MCw1NDUuMDAgUTEwODkuMDAsNTM5LjAwIDEwOTcuNTAsNTM2LjAwIFogTTEyMTIuNTAsNTM2LjAwIFExMjE5LjAwLDUzMy4wMCAxMjI0LjUwLDUzMy4wMCBMMTIzMC4wMCw1MzMuMDAgTDEyMzAuMDAsNTQ1LjUwIEwxMjMwLjAwLDU1OC4wMCBMMTIyMi41MCw1NTguNTAgUTEyMTUuMDAsNTU5LjAwIDEyMTEuNTAsNTYxLjAwIFExMjA4LjAwLDU2My4wMCAxMjA2LjAwLDU2Ni4wMCBRMTIwNC4wMCw1NjkuMDAgMTIwMy41MCw1OTQuNTAgTDEyMDMuMDAsNjIwLjAwIEwxMTg5LjUwLDYyMC4wMCBMMTE3Ni4wMCw2MjAuMDAgTDExNzUuNTAsNTc3LjUwIEwxMTc1LjAwLDUzNS4wMCBMMTE4OC4wMCw1MzQuNTAgTDEyMDEuMDAsNTM0LjAwIEwxMjAxLjAwLDUzOC41MCBMMTIwMS4wMCw1NDMuMDAgTDEyMDIuNTAsNTQzLjAwIEwxMjA0LjAwLDU0My4wMCBMMTIwNS4wMCw1NDEuMDAgUTEyMDYuMDAsNTM5LjAwIDEyMTIuNTAsNTM2LjAwIFogTTc1OC4wMCw1MzQuNTAgUTc1OS4wMCw1MzQuMDAgNzcxLjUwLDUzNC4wMCBMNzg0LjAwLDUzNC4wMCBMNzg0LjAwLDU1OS41MCBRNzg0LjAwLDU4NS4wMCA3ODUuNTAsNTg5LjAwIFE3ODcuMDAsNTkzLjAwIDc4OS41MCw1OTUuMDAgUTc5Mi4wMCw1OTcuMDAgNzk5LjAwLDU5Ny4wMCBMODA2LjAwLDU5Ny4wMCBMODEwLjUwLDU5Mi4wMCBRODE1LjAwLDU4Ny4wMCA4MTUuNTAsNTYwLjUwIEw4MTYuMDAsNTM0LjAwIEw4MjkuNTAsNTM0LjAwIEw4NDMuMDAsNTM0LjAwIEw4NDMuMDAsNTUwLjUwIFE4NDMuMDAsNTY3LjAwIDg0My4wMCw1OTMuNTAgTDg0My4wMCw2MjAuMDAgTDgzMi4wMCw2MjAuMDAgTDgyMS4wMCw2MjAuMDAgTDgyMC41MCw2MTcuMDAgTDgyMC4wMCw2MTQuMDAgTDgxOS4wMCw2MTMuNTAgTDgxOC4wMCw2MTMuMDAgTDgxNi4wMCw2MTUuNTAgUTgxNC4wMCw2MTguMDAgODA5LjAwLDYyMC4wMCBRODA0LjAwLDYyMi4wMCA3OTMuNTAsNjIxLjUwIFE3ODMuMDAsNjIxLjAwIDc3NS4wMCw2MTYuNTAgUTc2Ny4wMCw2MTIuMDAgNzY0LjUwLDYwOS4wMCBRNzYyLjAwLDYwNi4wMCA3NjAuMDAsNjAxLjAwIFE3NTguMDAsNTk2LjAwIDc1Ny41MCw1NjUuNTAgTDc1Ny4wMCw1MzUuMDAgTDc1OC4wMCw1MzQuNTAgWiBNOTExLjUwLDU1Ny41MCBROTA2LjAwLDU1Ni4wMCA5MDEuMDAsNTU3LjUwIFE4OTYuMDAsNTU5LjAwIDg5My41MCw1NjEuNTAgUTg5MS4wMCw1NjQuMDAgODg5LjUwLDU2OC4wMCBRODg4LjAwLDU3Mi4wMCA4ODguMDAsNTc3LjUwIFE4ODguMDAsNTgzLjAwIDg4OS4wMCw1ODYuMDAgUTg5MC4wMCw1ODkuMDAgODkyLjUwLDU5Mi4wMCBRODk1LjAwLDU5NS4wMCA4OTguMDAsNTk2LjUwIFE5MDEuMDAsNTk4LjAwIDkwNC4wMCw1OTguMDAgUTkwNy4wMCw1OTguMDAgOTExLjAwLDU5Ny41MCBROTE1LjAwLDU5Ny4wMCA5MTguNTAsNTk0LjAwIFE5MjIuMDAsNTkxLjAwIDkyMy41MCw1ODcuNTAgUTkyNS4wMCw1ODQuMDAgOTI1LjAwLDU3Ny41MCBROTI1LjAwLDU3MS4wMCA5MjMuNTAsNTY3LjUwIFE5MjIuMDAsNTY0LjAwIDkxOS41MCw1NjEuNTAgUTkxNy4wMCw1NTkuMDAgOTExLjUwLDU1Ny41MCBaIE0xMDE2LjUwLDU1Ny4wMCBRMTAxMS4wMCw1NTYuMDAgMTAwNi41MCw1NTcuNTAgUTEwMDIuMDAsNTU5LjAwIDEwMDAuMDAsNTYxLjAwIFE5OTguMDAsNTYzLjAwIDk5Ni4wMCw1NjguMDAgUTk5NC4wMCw1NzMuMDAgOTk0LjAwLDU3Ny4wMCBROTk0LjAwLDU4MS4wMCA5OTQuNTAsNTgzLjUwIFE5OTUuMDAsNTg2LjAwIDk5OC4wMCw1OTAuNTAgUTEwMDEuMDAsNTk1LjAwIDEwMDQuMDAsNTk2LjUwIFExMDA3LjAwLDU5OC4wMCAxMDEwLjUwLDU5OC4wMCBRMTAxNC4wMCw1OTguMDAgMTAxNy41MCw1OTcuNTAgUTEwMjEuMDAsNTk3LjAwIDEwMjQuNTAsNTk0LjAwIFExMDI4LjAwLDU5MS4wMCAxMDI5LjUwLDU4OC4wMCBRMTAzMS4wMCw1ODUuMDAgMTAzMS4wMCw1NzcuNTAgUTEwMzEuMDAsNTcwLjAwIDEwMzAuMDAsNTY3LjUwIFExMDI5LjAwLDU2NS4wMCAxMDI1LjUwLDU2MS41MCBRMTAyMi4wMCw1NTguMDAgMTAxNi41MCw1NTcuMDAgWiBNMTEyMC41MCw1NTguMDAgUTExMTQuMDAsNTU2LjAwIDExMTAuMDAsNTU3LjAwIFExMTA2LjAwLDU1OC4wMCAxMTAyLjUwLDU2MS4wMCBRMTA5OS4wMCw1NjQuMDAgMTA5Ny41MCw1NjcuNTAgUTEwOTYuMDAsNTcxLjAwIDEwOTYuMDAsNTc3LjAwIFExMDk2LjAwLDU4My4wMCAxMDk5LjUwLDU4OS4wMCBRMTEwMy4wMCw1OTUuMDAgMTEwNi4wMCw1OTYuNTAgUTExMDkuMDAsNTk4LjAwIDExMTIuNTAsNTk4LjAwIFExMTE2LjAwLDU5OC4wMCAxMTIwLjUwLDU5Ny4wMCBRMTEyNS4wMCw1OTYuMDAgMTEyOC4wMCw1OTMuMDAgUTExMzEuMDAsNTkwLjAwIDExMzIuNTAsNTgyLjAwIFExMTM0LjAwLDU3NC4wMCAxMTMzLjUwLDU3MS41MCBRMTEzMy4wMCw1NjkuMDAgMTEzMC4wMCw1NjQuNTAgUTExMjcuMDAsNTYwLjAwIDExMjAuNTAsNTU4LjAwIFoiLz48L3N2Zz4=";
+const ICON = "data:image/png;base64,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";
+document.querySelectorAll("a.logo").forEach(a => { a.innerHTML = `<img class="logo-img" src="${LOGO}" alt="kobITo Support">`; });
+document.querySelectorAll(".lt-av").forEach(a => { a.innerHTML = `<img src="${ICON}" alt="">`; });
+const stages = [...document.querySelectorAll(".stage")];
+const nav = document.getElementById("vnav");
+const sel = document.getElementById("vsel");
+let group = "";
+stages.forEach(s => {
+  // 各画面に見出しを付ける
+  const head = document.createElement("div");
+  head.className = "stage-head";
+  head.innerHTML = `<span class="id">${s.id.toUpperCase()}</span><h2>${s.dataset.title}</h2><span style="font-size:13px;color:var(--sub)">${s.dataset.group}</span>`;
+  s.prepend(head);
+  if (s.dataset.group !== group) {
+    group = s.dataset.group;
+    const h = document.createElement("h4"); h.textContent = group; nav.appendChild(h);
+    const og = document.createElement("optgroup"); og.label = group; sel.appendChild(og);
+  }
+  const a = document.createElement("a");
+  a.href = "#" + s.id;
+  a.innerHTML = `<span>${s.id.toUpperCase()}</span>${s.dataset.title}`;
+  nav.appendChild(a);
+  const o = document.createElement("option"); o.value = s.id; o.textContent = `${s.id.toUpperCase()} ${s.dataset.title}`;
+  sel.lastElementChild.appendChild(o);
+});
+const all = document.createElement("a");
+all.href = "#all"; all.className = "v-all"; all.innerHTML = "<span>ALL</span>全画面を並べて見る";
+nav.appendChild(all);
+const oa = document.createElement("option"); oa.value = "all"; oa.textContent = "全画面を並べて見る"; sel.appendChild(oa);
+sel.addEventListener("change", () => location.hash = sel.value);
+
+function show() {
+  const id = location.hash.slice(1) || "c01";
+  document.body.classList.toggle("all", id === "all");
+  stages.forEach(s => s.classList.toggle("on", s.id === id));
+  nav.querySelectorAll("a").forEach(a => a.classList.toggle("on", a.getAttribute("href") === "#" + id));
+  sel.value = id;
+  window.scrollTo(0, 0);
+}
+window.addEventListener("hashchange", show);
+show();
+</script>
+</body>
+</html>
