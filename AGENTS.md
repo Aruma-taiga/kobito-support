@@ -24,6 +24,7 @@
 - Keep service/company identity, invoice registration, and bank details configurable. The later runtime public settings source is the `settings` table; do not hardcode business identity in application logic.
 - Add focused tests for financial arithmetic, periods, credits, invoice numbering, duplicate webhook delivery, and customer data scoping in the stages that implement those behaviors.
 - Keep `packages/shared` deterministic and free of database/network access. Web and API consumers must use its shared calculation, status, type, and validation APIs instead of reimplementing them. Keep Japanese validation messages and plan labels centralized there, and cover domain boundaries with tests.
+- In the API, create principals only after Firebase Admin verifies an ID token and `user_accounts` resolves the UID. Derive `CustomerScope` from that principal and require it for customer repository reads/writes. Admin operations require DB role plus verified second-factor evidence, and mutation plus audit record share one transaction. Log only generated request IDs, route templates, methods, status, and duration; never raw request or database errors.
 
 ## Local development
 
