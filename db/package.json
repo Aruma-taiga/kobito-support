@@ -1,0 +1,21 @@
+{
+  "name": "@kobito/db",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "migrate": "tsx scripts/migrate.ts",
+    "seed": "tsx scripts/seed.ts",
+    "reset": "tsx scripts/reset.ts",
+    "test:db": "tsx scripts/test-db.ts"
+  },
+  "dependencies": {
+    "dotenv": "16.6.1",
+    "pg": "8.16.3"
+  },
+  "devDependencies": {
+    "@types/pg": "8.15.5",
+    "tsx": "4.20.6"
+  }
+}

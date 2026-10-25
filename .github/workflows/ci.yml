@@ -38,7 +38,20 @@ jobs:
         run: pnpm typecheck
       - name: Test
         run: pnpm test
-      - name: Validate schema against PostgreSQL 16
+      - name: Apply migrations twice
         env:
-          PGPASSWORD: kobito
-        run: psql -h 127.0.0.1 -U kobito -d kobito_support -v ON_ERROR_STOP=1 -f docs/schema-v1.sql
+          DATABASE_URL: postgres://kobito:kobito@127.0.0.1:5432/kobito_support
+          NODE_ENV: development
+        run: |
+          pnpm db:migrate
+          pnpm db:migrate
+      - name: Seed development defaults
+        env:
+          DATABASE_URL: postgres://kobito:kobito@127.0.0.1:5432/kobito_support
+          NODE_ENV: development
+        run: pnpm db:seed
+      - name: Test migrations and seeds against PostgreSQL 16
+        env:
+          DATABASE_URL: postgres://kobito:kobito@127.0.0.1:5432/kobito_support
+          NODE_ENV: test
+        run: pnpm test:db

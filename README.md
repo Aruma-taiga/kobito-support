@@ -4,7 +4,7 @@ TypeScript の基幹システムです。設計と作業順は `docs/` を参照
 
 ## 現在の段階
 
-PR1 は開発基盤のみです。pnpm workspace（web / api / shared）、環境設定の検証、PostgreSQL 16 と Firebase Auth Emulator のローカル環境、lint・型検査・テスト・SQL 検証 CI を用意しています。申込画面、API、認証フロー、業務処理はまだありません。`pnpm dev` でアプリを起動する段階ではありません。
+PR1 と PR2 で、pnpm workspace、環境設定の検証、PostgreSQL 16 と Firebase Auth Emulator のローカル環境、DB migration runner・初期 seed、lint・型検査・unit / PostgreSQL integration tests を用意しています。まだ申込画面、API routes、ログインフローなどの業務アプリはありません。`pnpm dev` はありません。
 
 ## 必要なもの
 
@@ -22,36 +22,55 @@ pnpm --version
 pnpm install --frozen-lockfile
 ```
 
-`.tools/` は Git 管理外です。Node.js 22.x 上で pnpm 10.22.0 が使われることを確認してください。
+`.tools/` は Git 管理外です。Node.js 22 以上と pnpm 10.22.0 が使われていることを確認してください。
 
-## ローカル依存サービス
+## ローカル設定と DB
 
-空欄の `.env.example` を実行設定として使うことはできません。API 起動時には DB URL、Firebase project ID、web origin が必要です。現在は API 実装前ですが、後続の開発用値は次のとおりです。
+空欄の `.env.example` はそのまま実行設定には使えません。コピーして、次のローカル開発値を `.env` に設定してください。会社名、住所、インボイス登録番号、銀行口座は空欄のままです。コンビニ払いの手数料は未決のため、seed でも `null` にします。
+
+```sh
+cp .env.example .env
+```
 
 ```dotenv
 NODE_ENV=development
 PORT=3000
-DATABASE_URL=postgres://kobito:kobito@127.0.0.1:5432/kobito_support
+DATABASE_URL=postgres://kobito:kobito@127.0.0.1:55433/kobito_support
+TEST_DATABASE_URL=
 FIREBASE_PROJECT_ID=demo-kobito-support
 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099
 WEB_ORIGIN=http://localhost:5173
+SERVICE_NAME=
+COMPANY_NAME=
 INVOICE_PREFIX=KS
+INVOICE_REGISTRATION_NO=
+BANK_ACCOUNT_NAME=
+BANK_ACCOUNT_BRANCH=
+BANK_ACCOUNT_TYPE=
+BANK_ACCOUNT_NUMBER=
+POSTGRES_USER=kobito
+POSTGRES_PASSWORD=kobito
+POSTGRES_DB=kobito_support
+POSTGRES_PORT=55433
 ```
 
-サービス名、会社名、登録番号、振込口座は未設定のままにしてください。後続ステージで公開設定 API を実装した後は settings テーブルを値の正とします。API はこの PR では値を読み込むだけで、認証や業務用途に使いません。
+PostgreSQL は `127.0.0.1:55433`、Auth Emulator は `127.0.0.1:9099` のみに公開します。Postgres の既定 port を使う場合は `DATABASE_URL` と `POSTGRES_PORT` を合わせてください。reset は Postgres が起動中なら loopback 接続を最大30回（各接続500ms timeout、半秒間隔）試し、準備前は DROP を行いません。`pnpm db:reset` は loopback 上の `kobito_support` のみを削除して作り直します。データが消えるので、必要な値があるときは先に退避してください。テストも `kobito_support_test` だけを自動作成・初期化し、他 DB は使いません。
 
 ```sh
-docker compose up --build -d
+docker compose up -d
 docker compose ps
+pnpm db:reset
+pnpm test:db
 ```
 
-PostgreSQL は `127.0.0.1:5432`、Auth Emulator は `127.0.0.1:9099` のみに公開します。5432 が使用中なら `POSTGRES_PORT=55433 docker compose up --build -d` のように変更できます。両方の health が `healthy` になれば利用可能です。DB schema は CI で空 DB に対して検証します。ローカル DB はこの段階では空で、migration runner は後続 PR で追加します。volume を消すとローカル DB の内容が消えます。
+`db:reset` を使わずスキーマだけ適用する場合:
 
 ```sh
-docker compose down
-# DB を初期化し直す場合だけ:
-docker compose down -v
+pnpm db:migrate
+pnpm db:seed
 ```
+
+初期 migration は `docs/schema-v1.sql` の byte-for-byte copy です。migration ごとに checksum と適用日時を `schema_migrations` に保存し、1 migration 単位の transaction と PostgreSQL advisory lock で二重適用を防ぎます。`db:seed` はプランと初期設定を追加し、既存の設定値を上書きしません。サービス名の初期値は「コビトサポート（kobITo Support）」、請求番号 prefix は `KS` です。公開設定 API は未実装です。
 
 ## 検査
 
@@ -59,6 +78,7 @@ docker compose down -v
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:db
 ```
 
-CI は Pull Request ごとに上記を実行し、PostgreSQL 16 の空 DB に `docs/schema-v1.sql` を適用します。現在の段階では migration runner はまだありません。
+Pull Request CI は PostgreSQL 16 に対して migration を2回実行し、seed と DB integration tests を確認します。
