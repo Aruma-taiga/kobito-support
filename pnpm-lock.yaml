@@ -48,7 +48,11 @@ importers:
         specifier: 4.20.6
         version: 4.20.6
 
-  packages/shared: {}
+  packages/shared:
+    dependencies:
+      zod:
+        specifier: 4.1.12
+        version: 4.1.12
 
 packages:
 
