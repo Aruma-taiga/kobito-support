@@ -28,8 +28,10 @@
 
 ## Local development
 
-- Node.js 22 or newer; pnpm version is pinned by the root `packageManager` field and lockfile.
+- Node.js 22.22.2 or newer; pnpm version is pinned by the root `packageManager` field and lockfile. jsdom in the web test toolchain requires Node 22.22.2 on the Node 22 line.
 - Use the repo-local Corepack shim in `.tools/bin` where needed so a project's setup does not replace a global toolchain used by other repositories.
 - Root checks: `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm test:db`. The DB integration command prepares only the exact loopback `kobito_support_test` database before using it.
 - Local services: `docker compose up -d`; inspect readiness with `docker compose ps`, and stop only this repository's services with `docker compose down`.
 - `pnpm db:reset` is destructive by design. Its implementation must reject production mode, non-loopback hosts, query/fragment overrides, and database names other than `kobito_support` in development or `kobito_support_test` in test mode before creating a connection. Never broaden that allowlist.
+- The web app uses Firebase Auth for sign-in and calls business APIs through the API client. Keep browser Firebase configuration in `VITE_` variables only, attach ID tokens automatically to authenticated API calls, and never add direct database access or card fields to the web app.
+- Keep Japanese user-facing web text in `packages/shared/src/messages.ts`. The service name comes from the public settings API; do not bake service/company identity into web UI assets.

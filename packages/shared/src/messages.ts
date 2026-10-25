@@ -22,3 +22,28 @@ export const validationMessages = {
   boolean: "選択内容を確認してください。",
   unknownField: "入力内容に使用できない項目があります。",
 } as const;
+
+export const webMessages = {
+  genericServiceName: "サービス",
+  serviceConfigLoading: "サービス情報を読み込んでいます。",
+  serviceConfigError: "サービス情報を読み込めませんでした。",
+  loginTitle: "ログイン",
+  loginDescription: "メールアドレスとパスワードを入力してください。",
+  emailLabel: "メールアドレス",
+  passwordLabel: "パスワード",
+  loginButton: "ログイン",
+  loginSubmitting: "ログインしています…",
+  loginError: "ログインできませんでした。入力内容を確認してください。",
+  sessionLoading: "ログイン状態を確認しています。",
+  homeTitle: "マイページ",
+  profileLoading: "お客様情報を読み込んでいます。",
+  profileError: "お客様情報を読み込めませんでした。",
+  sessionExpiredError:
+    "ログイン状態を確認できません。ログアウトして、もう一度ログインしてください。",
+  retry: "再試行",
+  shopNameLabel: "店舗名",
+  contactNameLabel: "ご担当者",
+  logout: "ログアウト",
+  logoutError: "ログアウトできませんでした。もう一度お試しください。",
+  configurationError: "画面の設定を確認できませんでした。",
+} as const;
