@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kobito}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kobito}
+      POSTGRES_DB: ${POSTGRES_DB:-kobito_support}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kobito} -d ${POSTGRES_DB:-kobito_support}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  firebase-auth:
+    build:
+      context: .
+      dockerfile: docker/firebase-auth/Dockerfile
+    command: ["firebase", "emulators:start", "--only", "auth", "--project", "demo-kobito-support", "--config", "/workspace/firebase.json"]
+    ports:
+      - "127.0.0.1:9099:9099"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9099/').then((r) => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  postgres-data:
