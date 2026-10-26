@@ -716,13 +716,6 @@ export function ApplicationPage({
                     <small>{webMessages.applicationUnavailablePayment}</small>
                   </span>
                 </label>
-                <label className="choice-card disabled">
-                  <input type="radio" disabled />
-                  <span>
-                    <strong>{webMessages.applicationKonbiniPayment}</strong>
-                    <small>{webMessages.applicationUnavailablePayment}</small>
-                  </span>
-                </label>
               </fieldset>
               <Field
                 label={webMessages.applicationBillingName}

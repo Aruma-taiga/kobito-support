@@ -66,7 +66,11 @@ const invoice = {
   ],
 };
 
-const user = { email: "customer@example.jp", getIdToken: async () => "token" };
+const user = {
+  uid: "customer-test",
+  email: "customer@example.jp",
+  getIdToken: async () => "token",
+};
 const authClient: AuthClient = {
   currentUser: () => user,
   subscribe: (listener) => {

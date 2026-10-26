@@ -256,7 +256,7 @@ export const webMessages = {
   applicationBankTransferDescription:
     "振込先は審査後にお送りする請求書でご案内します。",
   applicationCardPayment: "クレジットカード",
-  applicationKonbiniPayment: "コンビニ払い",
+  historicalKonbiniPayment: "コンビニ払い",
   applicationTermsLink: "利用規約",
   applicationPrivacyLink: "プライバシーポリシー",
   applicationDisclosureLink: "特定商取引法に基づく表記",
@@ -463,4 +463,27 @@ export const webMessages = {
   contractNoCredits: "入金確認後にクレジットをご利用いただけます。",
   contractBalanceUnit: "クレジット",
   contractPreview: "開発用データ",
+  meWaitingTitle: "お申し込みの状況",
+  meWaitingDescription: "審査・お見積り・入金の状況をご案内します。",
+  meWaitingUnderReview: "お申し込み内容を審査しています。",
+  meWaitingQuoting: "プランのお見積りを準備しています。",
+  meWaitingPayment: "初月分のお支払いをお待ちしています。",
+  meFinishedTitle: "お申し込みは終了しました",
+  meFinishedDescription: "このアカウントではマイページをご利用いただけません。",
+  meWelcomeTitle: "ご契約が始まりました",
+  meWelcomeDescription:
+    "LINEなどでご相談いただいた内容を、当社が依頼として登録します。マイページでは、お見積りの確認・了承と作業状況を確認できます。",
+  meWelcomeFlowTitle: "ご依頼から作業まで",
+  meWelcomeFlowRequest: "LINEなどで担当者へご相談ください。",
+  meWelcomeFlowEstimate:
+    "当社が内容を確認して依頼を登録し、お見積りと作業目安日をお知らせします。",
+  meWelcomeFlowApprove:
+    "お見積りを確認して了承すると、クレジットを予約します。",
+  meWelcomeFlowWork: "了承後に作業を開始し、完了後に利用分を反映します。",
+  meWelcomeContinue: "マイページへ進む",
+  meWelcomeError:
+    "ご案内を確認済みにできませんでした。もう一度お試しください。",
+  accessLoadError: "ご利用状況を確認できませんでした。再読み込みしてください。",
+  accessEndedInvoicesUntil: "請求書は{date}まで確認できます。",
+  accessNotFound: "ページが見つかりません。",
 } as const;

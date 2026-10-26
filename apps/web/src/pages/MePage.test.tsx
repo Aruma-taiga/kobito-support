@@ -11,6 +11,7 @@ import { MePage } from "./MePage.js";
 describe("expired customer session recovery", () => {
   it("shows recovery instead of waiting forever if sign-out does not update auth state", async () => {
     const currentUser = {
+      uid: "customer-test",
       email: "customer@example.jp",
       getIdToken: vi.fn(async () => "stale-token"),
     };
@@ -21,7 +22,11 @@ describe("expired customer session recovery", () => {
         return () => undefined;
       },
       signIn: async () => undefined,
-      signUp: async () => ({ email: null, getIdToken: async () => "token" }),
+      signUp: async () => ({
+        uid: "customer-test",
+        email: null,
+        getIdToken: async () => "token",
+      }),
       signOut: async () => {
         throw new Error("transient client failure");
       },
@@ -66,6 +71,7 @@ describe("expired customer session recovery", () => {
 describe("customer contract summary", () => {
   it("shows the agreed plan and available period details from the contract API", async () => {
     const currentUser = {
+      uid: "customer-test",
       email: "customer@example.jp",
       getIdToken: vi.fn(async () => "customer-token"),
     };
@@ -76,7 +82,11 @@ describe("customer contract summary", () => {
         return () => undefined;
       },
       signIn: async () => undefined,
-      signUp: async () => ({ email: null, getIdToken: async () => "token" }),
+      signUp: async () => ({
+        uid: "customer-test",
+        email: null,
+        getIdToken: async () => "token",
+      }),
       signOut: async () => undefined,
     };
     const fetcher = vi.fn<typeof fetch>(async (input) => {

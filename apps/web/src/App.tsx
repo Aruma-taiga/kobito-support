@@ -7,11 +7,16 @@ import { AuthProvider, RequireAuth } from "./auth/session.js";
 import { AdminApp } from "./pages/AdminApp.js";
 import { ApplicationPage } from "./pages/ApplicationPage.js";
 import {
-  MyInvoiceDetailPage,
-  MyInvoiceListPage,
-} from "./pages/InvoicePages.js";
+  CustomerAccessGuard,
+  CustomerFinishedPage,
+  CustomerHomePage,
+  CustomerInvoicesPage,
+  CustomerPlanQuoteUnavailablePage,
+  CustomerWaitingPage,
+  CustomerWelcomePage,
+} from "./pages/CustomerAccessPages.js";
+import { MyInvoiceDetailPage } from "./pages/InvoicePages.js";
 import { LoginPage } from "./pages/LoginPage.js";
-import { MePage } from "./pages/MePage.js";
 import { MyRequestDetailPage, MyRequestsPage } from "./pages/RequestPages.js";
 import type { AdminApiClient } from "./platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "./platform/api-client.js";
@@ -123,23 +128,41 @@ export function App({
                 }
               />
               <Route element={<RequireAuth />}>
-                <Route path="/me" element={<MePage apiClient={apiClient} />} />
-                <Route
-                  path="/me/requests"
-                  element={<MyRequestsPage apiClient={apiClient} />}
-                />
-                <Route
-                  path="/me/requests/:id"
-                  element={<MyRequestDetailPage apiClient={apiClient} />}
-                />
-                <Route
-                  path="/me/invoices"
-                  element={<MyInvoiceListPage apiClient={apiClient} />}
-                />
-                <Route
-                  path="/me/invoices/:id"
-                  element={<MyInvoiceDetailPage apiClient={apiClient} />}
-                />
+                <Route element={<CustomerAccessGuard apiClient={apiClient} />}>
+                  <Route
+                    path="/me"
+                    element={<CustomerHomePage apiClient={apiClient} />}
+                  />
+                  <Route path="/me/waiting" element={<CustomerWaitingPage />} />
+                  <Route
+                    path="/me/welcome"
+                    element={<CustomerWelcomePage apiClient={apiClient} />}
+                  />
+                  <Route
+                    path="/me/finished"
+                    element={<CustomerFinishedPage />}
+                  />
+                  <Route
+                    path="/me/plan-quote"
+                    element={<CustomerPlanQuoteUnavailablePage />}
+                  />
+                  <Route
+                    path="/me/requests"
+                    element={<MyRequestsPage apiClient={apiClient} />}
+                  />
+                  <Route
+                    path="/me/requests/:id"
+                    element={<MyRequestDetailPage apiClient={apiClient} />}
+                  />
+                  <Route
+                    path="/me/invoices"
+                    element={<CustomerInvoicesPage apiClient={apiClient} />}
+                  />
+                  <Route
+                    path="/me/invoices/:id"
+                    element={<MyInvoiceDetailPage apiClient={apiClient} />}
+                  />
+                </Route>
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

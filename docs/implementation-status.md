@@ -4,6 +4,8 @@
 
 ユーザー指示：残りの実装も完了まで継続。安価なモデルのサブエージェントを使い、金額・期間・状態はTDDで検証。小さなPRごとにCI通過を確認する。マージ・デプロイ・実決済・実通知は別途の明示的な授権まで実行しない。
 
+最新の対象変更（2026-10-27）：コンビニ決済はユーザーの指示で除外。支払方法はカードと銀行振込の2方式とし、コンビニの支払画面・番号発行・手数料・期限・通知・プロバイダー試験は残作業から外す。以前の設計資料の3方式という記載より、この指示を優先する。適用済みSQLや過去データの支払方法は変更せず、履歴の表示互換性を保つ。
+
 | 段階 | 状態・残作業 |
 |---|---|
 | 土台・DB・共通計算・認証・画面骨組み | PR #1〜#5、CI成功 |
@@ -11,10 +13,10 @@
 | 管理者2段階認証・審査 | PR #7、CI成功。Auth EmulatorのSMS第2要素で通し確認。本番TOTPの通し確認は未実施 |
 | 初月請求書・PDF | PR #8、CI成功。実PDF・非rootコンテナ・顧客/管理者の取得を確認 |
 | 振込入金確認・契約成立 | PR #9、CI成功。単体236件・DB49件。実画面で期間と付与を確認 |
-| KOMOJU | Webhook署名検証・安全な受信箱はPR #11、CI成功。単体247件・DB51件とHTTP通信で検証。支払画面・カード定期課金・コンビニ・入金反映・失敗通知が残る |
+| KOMOJU（カードのみ） | Webhook署名検証・安全な受信箱はPR #11、CI成功。単体247件・DB51件とHTTP通信で検証。カード支払画面・定期課金・入金反映・失敗通知が残る。コンビニ決済は対象外 |
 | 毎月の処理 | 期間作成・請求・付与/失効・期限/失敗通知の予定作成と配信が残る |
-| 依頼・見積・個別プラン見積り | 依頼登録・見積の版管理・顧客了承と予約はPR #12、CI成功。単体267件・DB62件、実画面の改版・取消・了承・残高不足、400px表示を確認。完了時の予約取消/消費も実装し、単体281件・DB70件と実画面で検証。PR作成・CI確認中。個別プラン承諾は後続 |
-| マイページの状態別画面 | `/me/waiting`・`/me/welcome`、契約内容ページ、初回案内・既読管理が残る |
+| 依頼・見積・個別プラン見積り | 依頼登録・見積の版管理・顧客了承と予約はPR #12、CI成功。単体267件・DB62件、実画面の改版・取消・了承・残高不足、400px表示を確認。完了時の予約取消/消費はPR #13、CI成功。単体281件・DB70件と実画面で検証。個別プラン承諾は後続 |
+| マイページの状態別画面 | `/me/waiting`・`/me/welcome`・終了画面、初回案内の既読管理とAPI閲覧制限を実装。単体313件・DB79件、実画面の待機/初回案内/承諾しない表示とPC/400pxを検証。PR作成・CI確認中。契約内容ページは後続 |
 | 管理運用 | ダッシュボード・設定・先行利用・請求書取消/差し替えが残る |
 | 追加クレジット | 契約中の追加購入・請求・入金後付与が残る。料金基準は上記の確認事項に従う |
 | LINE | 連携ログイン・LIFF・通知・リッチメニュー設定の準備が残る |
@@ -27,7 +29,7 @@
 
 - 会社情報・インボイス登録番号・銀行口座・公開法務文書の確定が必要。値を仮定せず、未設定では正式発行/受付を止める。
 - 本番PDFは設計上Cloud Storage。現状はローカル確認用PostgreSQL保管で、本番の発行/取得は未対応として拒否する。
-- KOMOJUのテスト資格情報、請求番号とカード定期課金の対応、月末・自動再試行、コンビニ発行手数料の確定とプロバイダー上の試作が必要。
+- KOMOJUのテスト資格情報、請求番号とカード定期課金の対応、月末・自動再試行の確認とプロバイダー上の試作が必要。コンビニ発行手数料の確定は不要。
 - 公式Webhookの決済オブジェクトにはカード有効期限などが含まれ得る。原文JSONを永続化する設計記載より、カード情報禁止の明示指示を優先する。署名は原文バイト列で確認し、保存は非機密項目のallowlist方式とする。この差分は該当PRにも記載する。
 - 初月期限後の入金と、失効済み申込みへの期限内入金の後日確認について、契約を復活させる運用は未確定。現在は自動成立を拒否する。
 - LINE・メール送信サービス・GCP・Cloudflareのアカウント/設定と本番ドメインの準備状況は未確認。認証情報はコミットしない。
@@ -44,7 +46,7 @@
 ## 外部仕様の確認記録（KOMOJU）
 
 - Webhookは `X-Komoju-Signature` のHMAC-SHA256で原文バイト列を検証する。配信IDと本文のイベントIDを混同しない。[公式Webhook仕様](https://docs.komoju.com/en/docs/introduction/core-concepts/webhooks)
-- Hosted PageのSessionは請求番号を `payment_data.external_order_num` で渡せる。Sessionの有効期限とコンビニ支払番号の有効期限は別。[Hosted Page](https://docs.komoju.com/en/docs/integration-guides/web-integrations/hosted-page/standard-mode)、[Session作成](https://ja.doc.komoju.com/reference/createsession-1)、[コンビニ期限](https://help.komoju.com/hc/en-us/articles/4747480397982-How-to-Change-the-Payment-Expiry-Date-for-Konbini)
+- Hosted PageのSessionは請求番号を `payment_data.external_order_num` で渡せる。[Hosted Page](https://docs.komoju.com/en/docs/integration-guides/web-integrations/hosted-page/standard-mode)、[Session作成](https://ja.doc.komoju.com/reference/createsession-1)
 - Hosted Sessionの `customer_payment` とSubscription APIの組合せが公式仕様上の候補。初回決済後の二重課金防止、次回の課金起点・月末・09:00の扱い、生成されるイベントの対応は加盟店テストで確認するまで有効化しない。カード情報や決済方法トークンを当アプリで受け取るフォームは作らない。[Customer mode](https://docs.komoju.com/en/docs/integration-guides/web-integrations/hosted-page/customer-mode)、[Subscription作成](https://ja.doc.komoju.com/reference/createsubscription-1)
 - 外向きPOSTの `X-KOMOJU-IDEMPOTENCY` とWebhookイベントの重複排除は別の仕組み。[公式冪等性仕様](https://docs.komoju.com/en/docs/introduction/core-concepts/idempotent-requests)
 

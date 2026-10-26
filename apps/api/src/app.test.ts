@@ -5,12 +5,16 @@ type TestAccount = NonNullable<
   Awaited<ReturnType<AppDependencies["accounts"]["findByAuthUserId"]>>
 >;
 type AppOverrides = Partial<
-  Omit<AppDependencies, "accounts" | "applications" | "invoices">
+  Omit<
+    AppDependencies,
+    "accounts" | "applications" | "invoices" | "customerAccess"
+  >
 > & {
   accounts?: Partial<AppDependencies["accounts"]>;
   applications?: Partial<AppDependencies["applications"]>;
   admin?: Partial<AppDependencies["admin"]>;
   invoices?: Partial<AppDependencies["invoices"]>;
+  customerAccess?: Partial<AppDependencies["customerAccess"]>;
 };
 
 const userForToken = {
@@ -114,6 +118,19 @@ function makeApp(overrides: AppOverrides = {}) {
       }),
       getCustomerContract: vi.fn(async () => ({ contract: null })),
     },
+    customerAccess: {
+      getAccess: vi.fn(async () => ({
+        contractStatus: null,
+        landingPath: "/me" as const,
+        access: "none" as const,
+        welcomeRequired: false,
+        invoiceAccess: false,
+        invoiceAccessUntil: null,
+      })),
+      markWelcomeSeen: vi.fn(async () => ({
+        seenAt: "2026-01-01T00:00:00.000Z",
+      })),
+    },
     publicSettings: { getServiceName: vi.fn(async () => "コビトサポート") },
     komojuInbox: { receive: vi.fn(async () => "accepted" as const) },
     logger: { info: vi.fn(), error: vi.fn() },
@@ -125,6 +142,10 @@ function makeApp(overrides: AppOverrides = {}) {
     applications: { ...defaults.applications, ...overrides.applications },
     admin: { ...defaults.admin, ...overrides.admin },
     invoices: { ...defaults.invoices, ...overrides.invoices },
+    customerAccess: {
+      ...defaults.customerAccess,
+      ...overrides.customerAccess,
+    },
   });
 }
 
@@ -176,6 +197,8 @@ describe("API routes and auth pipeline", () => {
     const response = await makeApp().request("/api/v1/me/future-resource");
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: { code: "unauthorized" } });
+    const access = await makeApp().request("/api/v1/me/access");
+    expect(access.status).toBe(401);
   });
 
   it("loads only the authenticated customer and returns the minimal profile", async () => {
@@ -468,6 +491,40 @@ describe("API routes and auth pipeline", () => {
       submission: expect.objectContaining({ email: "new@example.test" }),
       requestContext: {},
     });
+  });
+
+  it("exposes a minimal access landing decision for an authenticated customer", async () => {
+    const response = await makeApp().request("/api/v1/me/access", {
+      headers: { authorization: "Bearer good-token" },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      contractStatus: null,
+      landingPath: "/me",
+      access: "none",
+      welcomeRequired: false,
+      invoiceAccess: false,
+      invoiceAccessUntil: null,
+    });
+  });
+
+  it("records first welcome acknowledgement and returns the stable replay result", async () => {
+    const markWelcomeSeen = vi.fn(async () => ({
+      seenAt: "2026-01-01T00:00:00.000Z",
+    }));
+    const first = await makeApp({
+      customerAccess: { markWelcomeSeen },
+    }).request("/api/v1/me/welcome-seen", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer good-token",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(markWelcomeSeen).toHaveBeenCalledOnce();
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ seenAt: expect.any(String) });
   });
 
   it("rejects password-bearing and identity-mismatched application submissions without calling the module", async () => {

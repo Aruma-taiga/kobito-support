@@ -14,7 +14,15 @@ type PageState =
   | { status: "ready"; data: MeResponse }
   | { status: "error"; reason: "profile" | "session" };
 
-export function MePage({ apiClient }: { apiClient: ReturnTypeApiClient }) {
+export function MePage({
+  apiClient,
+  showAccountLinks = true,
+  showContractAccess = true,
+}: {
+  apiClient: ReturnTypeApiClient;
+  showAccountLinks?: boolean;
+  showContractAccess?: boolean;
+}) {
   const { signOut } = useAuthSession();
   const [state, setState] = useState<PageState>({
     status: "loading",
@@ -43,21 +51,26 @@ export function MePage({ apiClient }: { apiClient: ReturnTypeApiClient }) {
         }
         setState({ status: "error", reason: "profile" });
       });
-    void apiClient
-      .getContract()
-      .then((value) => {
-        if (current) {
-          setContract(value);
-          setContractError(false);
-        }
-      })
-      .catch(() => {
-        if (current) setContractError(true);
-      });
+    if (showContractAccess) {
+      void apiClient
+        .getContract()
+        .then((value) => {
+          if (current) {
+            setContract(value);
+            setContractError(false);
+          }
+        })
+        .catch(() => {
+          if (current) setContractError(true);
+        });
+    } else {
+      setContract(null);
+      setContractError(false);
+    }
     return () => {
       current = false;
     };
-  }, [apiClient, attempt]);
+  }, [apiClient, attempt, showContractAccess]);
 
   async function handleSignOut() {
     setLogoutError(false);
@@ -162,7 +175,8 @@ export function MePage({ apiClient }: { apiClient: ReturnTypeApiClient }) {
               {contract?.contract && !contract.contract.currentPeriod ? (
                 <p>{webMessages.contractNoCredits}</p>
               ) : null}
-              {!contractError && contract?.contract === null ? (
+              {!showContractAccess ||
+              (!contractError && contract?.contract === null) ? (
                 <p>{webMessages.contractNone}</p>
               ) : null}
               {contract?.contract?.preview ? (
@@ -174,12 +188,12 @@ export function MePage({ apiClient }: { apiClient: ReturnTypeApiClient }) {
           </>
         ) : null}
         <div className="profile-actions">
-          {state.status === "ready" ? (
+          {state.status === "ready" && showAccountLinks ? (
             <Link className="secondary-button" to="/me/requests">
               {webMessages.myRequestsTitle}
             </Link>
           ) : null}
-          {state.status === "ready" ? (
+          {state.status === "ready" && showAccountLinks ? (
             <Link className="secondary-button" to="/me/invoices">
               {webMessages.invoiceListTitle}
             </Link>

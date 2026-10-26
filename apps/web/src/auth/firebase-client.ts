@@ -34,6 +34,7 @@ export function createFirebaseAuthClient(config: WebConfig): AuthClient {
   }
 
   const wrapUser = (user: User): AuthUser => ({
+    uid: user.uid,
     email: user.email,
     getIdToken: () => user.getIdToken(),
   });

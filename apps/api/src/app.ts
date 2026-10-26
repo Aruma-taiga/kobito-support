@@ -7,6 +7,9 @@ import type { AdminModule } from "./modules/admin/contracts.js";
 import { createAdminRoutes } from "./modules/admin/routes.js";
 import type { ApplicationsModule } from "./modules/applications/contracts.js";
 import { createApplicationRoutes } from "./modules/applications/routes.js";
+import type { CustomerAccessModule } from "./modules/customer-access/contracts.js";
+import { requireCustomerAccess } from "./modules/customer-access/guard.js";
+import { createCustomerAccessRoutes } from "./modules/customer-access/routes.js";
 import type { InvoiceModule } from "./modules/invoices/contracts.js";
 import { createInvoiceCustomerRoutes } from "./modules/invoices/routes.js";
 import type { RequestModule } from "./modules/requests/contracts.js";
@@ -33,6 +36,7 @@ export interface AppDependencies {
   admin: AdminModule;
   invoices: InvoiceModule;
   requests?: RequestModule;
+  customerAccess: CustomerAccessModule;
   publicSettings: { getServiceName(): Promise<string> };
   logger: ApiLogger;
   komojuInbox: KomojuInbox;
@@ -81,8 +85,19 @@ export function createApp(dependencies: AppDependencies) {
     return context.json({ serviceName, application: catalog.application });
   });
 
-  app.use("/api/v1/me", authenticate, requireCustomer());
-  app.use("/api/v1/me/*", authenticate, requireCustomer());
+  app.use(
+    "/api/v1/me",
+    authenticate,
+    requireCustomer(),
+    requireCustomerAccess(dependencies.customerAccess),
+  );
+  app.use(
+    "/api/v1/me/*",
+    authenticate,
+    requireCustomer(),
+    requireCustomerAccess(dependencies.customerAccess),
+  );
+  app.route("/api/v1", createCustomerAccessRoutes(dependencies.customerAccess));
   app.route(
     "/api/v1",
     createAccountsRoutes(new AccountsService(dependencies.accounts)),

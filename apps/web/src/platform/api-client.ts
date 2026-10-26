@@ -3,9 +3,11 @@ import {
   type ApproveEstimateResponse,
   applicationReceiptSchema,
   approveEstimateResponseSchema,
+  type CustomerAccess,
   type CustomerContractResponse,
   type CustomerRequestDetail,
   type CustomerRequestSummary,
+  customerAccessSchema,
   customerContractResponseSchema,
   customerRequestDetailSchema,
   customerRequestListSchema,
@@ -21,6 +23,8 @@ import {
   publicConfigSchema,
   publicPartnerSchema,
   publicPlansSchema,
+  type WelcomeSeenResponse,
+  welcomeSeenResponseSchema,
 } from "@kobito/shared";
 
 export interface ApiAuthUser {
@@ -317,6 +321,10 @@ export function createApiClient(options: ApiClientOptions) {
       getJson("/api/v1/me", meResponseSchema, true),
     getContract: (): Promise<CustomerContractResponse> =>
       getJson("/api/v1/me/contract", customerContractResponseSchema, true),
+    getCustomerAccess: (): Promise<CustomerAccess> =>
+      getJson("/api/v1/me/access", customerAccessSchema, true),
+    markWelcomeSeen: (): Promise<WelcomeSeenResponse> =>
+      postJson("/api/v1/me/welcome-seen", welcomeSeenResponseSchema, {}),
     getCustomerRequests(
       openOnly = false,
     ): Promise<{ items: CustomerRequestSummary[] }> {
