@@ -1147,21 +1147,27 @@ describe("request estimate API integration", () => {
     expect(
       balances.rows.find((row) => row.period_id === nextPeriodId)?.balance,
     ).toBe(5);
+    // screen-flow-spec-v1 §2 exposes invoice history, not request history, after contract end.
+    const customerList = await completionApp.request("/api/v1/me/requests", {
+      headers: { authorization: `Bearer ${fixture.customer.token}` },
+    });
+    expect.soft(customerList.status).toBe(200);
+    expect.soft(await customerList.json()).toEqual({ items: [] });
     const customerDetail = await completionApp.request(
       `/api/v1/me/requests/${fixture.requestId}`,
       { headers: { authorization: `Bearer ${fixture.customer.token}` } },
     );
-    const customerDetailBody = await customerDetail.json();
-    expect(
-      customerRequestDetailSchema.safeParse(customerDetailBody).success,
-    ).toBe(true);
-    expect(customerDetailBody).toMatchObject({
-      request: {
-        status: "done",
-        completion: {
-          periodId: fixture.periodId,
-          reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
-        },
+    expect.soft(customerDetail.status).toBe(404);
+    const adminDetail = await completionApp.request(
+      `/api/v1/admin/requests/${fixture.requestId}`,
+      { headers: { authorization: `Bearer ${adminToken}` } },
+    );
+    expect(adminDetail.status).toBe(200);
+    expect(await adminDetail.json()).toMatchObject({
+      status: "done",
+      completion: {
+        periodId: fixture.periodId,
+        reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
       },
     });
   });

@@ -473,7 +473,7 @@ export class RequestRepository implements RequestModule {
     const result = await this.pool.query<
       RequestRow & { approved_estimate_id: string | null }
     >(
-      `${selectRequest} join contracts c on c.id=r.contract_id where c.customer_id=$1 and ($2::boolean=false or r.status in ('received','awaiting_approval','in_progress')) order by r.received_on desc,r.created_at desc`,
+      `${selectRequest} join contracts c on c.id=r.contract_id where c.customer_id=$1 and c.status in ('active','cancel_scheduled') and ($2::boolean=false or r.status in ('received','awaiting_approval','in_progress')) order by r.received_on desc,r.created_at desc`,
       [scope.customerId, openOnly],
     );
     return {
@@ -496,7 +496,7 @@ export class RequestRepository implements RequestModule {
         available_credits: string | null;
       }
     >(
-      `${customerRequestQuery} join contracts c on c.id=r.contract_id left join lateral (select p.id as period_id,(select coalesce(sum(ce.amount),0)::text from credit_entries ce where ce.period_id=p.id) available_credits from billing_periods p where p.contract_id=c.id and $3::date between p.starts_on and p.ends_on order by p.seq desc limit 1) current_period on true where r.id=$2 and c.customer_id=$1`,
+      `${customerRequestQuery} join contracts c on c.id=r.contract_id left join lateral (select p.id as period_id,(select coalesce(sum(ce.amount),0)::text from credit_entries ce where ce.period_id=p.id) available_credits from billing_periods p where p.contract_id=c.id and $3::date between p.starts_on and p.ends_on order by p.seq desc limit 1) current_period on true where r.id=$2 and c.customer_id=$1 and c.status in ('active','cancel_scheduled')`,
       [scope.customerId, id, currentDate],
     );
     const row = result.rows[0];
