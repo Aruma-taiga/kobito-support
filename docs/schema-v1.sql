@@ -16,13 +16,13 @@ create table plans (
   id            uuid primary key default gen_random_uuid(),
   code          text not null,               -- light / standard / premium / custom（個別見積り）
   name          text not null,
-  price_incl_tax integer,                    -- 5000 / 10000 / 15000。個別見積りは空（plan_quotes で決める）
+  price_excl_tax integer,                    -- 税抜：5000 / 10000 / 15000。個別見積りは空（plan_quotes で決める）。2026-10-26 に税別表示へ
   credits       integer,                     -- 1 / 3 / 5。個別見積りは空
   is_custom     boolean not null default false,
   valid_from    date not null,
   valid_to      date,
   unique (code, valid_from),
-  check (is_custom or (price_incl_tax is not null and credits is not null))
+  check (is_custom or (price_excl_tax is not null and credits is not null))
 );
 
 -- ===== パートナー =====
@@ -126,7 +126,7 @@ create table plan_quotes (
   id              uuid primary key default gen_random_uuid(),
   contract_id     uuid not null references contracts(id),
   version         integer not null,
-  price_incl_tax  integer not null check (price_incl_tax > 0),
+  price_excl_tax  integer not null check (price_excl_tax > 0), -- 月額（税抜）
   credits         integer not null check (credits > 0),
   description     text not null,
   expires_on      date not null,             -- 案：送ってから14日
@@ -148,7 +148,7 @@ create table billing_periods (
   starts_on    date not null,
   ends_on      date not null,                -- 次の期間の始まりの前日
   plan_id      uuid not null references plans(id),
-  price_incl_tax integer not null,          -- この期間の月額の写し（固定プラン・個別見積りの両方）
+  price_excl_tax integer not null,          -- この期間の月額（税抜）の写し（固定プラン・個別見積りの両方）
   credits      integer not null,             -- この期間に付与するクレジット数の写し
   unique (contract_id, seq)
 );
@@ -170,9 +170,10 @@ create table invoices (
   payment_method   text not null check (payment_method in ('card','konbini','bank_transfer')),
   issued_on        date not null,
   due_on           date,
-  total_incl_tax   integer not null,
-  total_excl_tax   integer not null,
-  tax_amount       integer not null,
+  total_excl_tax   integer not null,         -- 税抜の小計（明細の合計）
+  tax_amount       integer not null,         -- 消費税＝税抜の小計×10%の端数を切り捨て（請求書ごと・税率ごとに1回）
+  total_incl_tax   integer not null,         -- 税込合計＝小計＋消費税。お客様が払う額
+  check (total_incl_tax = total_excl_tax + tax_amount),
   billing_name     text not null,            -- 発行時点の宛名の写し
   issuer_snapshot  jsonb not null,           -- 当社名・登録番号・振込先の写し（INV-02）
   komoju_payment_id text,                    -- コンビニ・追加C
@@ -193,8 +194,8 @@ create table invoice_lines (
   line_kind     text not null check (line_kind in ('monthly_fee','extra_credit','konbini_fee')),
   description   text not null,
   quantity      integer not null default 1,
-  unit_price_incl_tax integer not null,
-  amount_incl_tax integer not null,
+  unit_price_excl_tax integer not null,      -- 税抜
+  amount_excl_tax integer not null,          -- 税抜（単価×数量）
   tax_rate      numeric(4,3) not null default 0.100
 );
 
@@ -202,7 +203,7 @@ create table payments (
   id              uuid primary key default gen_random_uuid(),
   invoice_id      uuid not null references invoices(id),
   method          text not null check (method in ('card','konbini','bank_transfer')),
-  amount          integer not null,
+  amount          integer not null,          -- 税込合計（実際に払われた額）
   paid_on         date not null,
   confirmed_via   text not null check (confirmed_via in ('webhook','manual')),
   komoju_payment_id text unique,
@@ -282,7 +283,7 @@ create table partner_rewards (
   payment_id    uuid not null unique references payments(id),
   target_month  date not null,               -- 入金のあった月（1日で持つ）
   month_index   integer not null,            -- 1〜max_months
-  base_amount   integer not null,            -- 月額基本料（税込）。追加C・コンビニ手数料は含めない
+  base_amount   integer not null,            -- 月額基本料（税抜・暫定）。追加C・コンビニ手数料は含めない
   reward_amount integer not null,
   paid_on       date
 );

@@ -18,7 +18,7 @@
 | c07 | マイページ（ホーム） | /me | customer（active, cancel_scheduled） | 契約が利用中または解約予定 | GET /me, GET /me/credits, GET /me/requests?open=1, GET /me/invoices?unpaid=1 | — | 契約の状態、今期の残りクレジットと期限、了承待ちの見積、未払いの請求 |
 | c08 | ご依頼の状況 | /me/requests | customer（active, cancel_scheduled） | 同上 | GET /me/requests | — | 受付済み／見積・了承待ち／作業中／完了。目安日、使ったクレジット |
 | c09 | 見積の了承 | /me/requests/:id/estimate | customer（本人の依頼のみ） | 依頼が awaiting_approval で、見積の版が最新 | GET /me/requests/:id, POST /me/estimates/:id/approve | 了承：estimates.approved_at、依頼を in_progress、クレジットを予約（reserve） | 残りが足りないときはボタンを押せず「LINEで相談」。最新でない版は了承できない（409）。二重送信は同じ結果を返す |
-| c10 | 請求書とお支払い | /me/invoices | customer | — | GET /me/invoices, GET /me/invoices/:id/pdf | — | PDF（期限つきURL）、支払い済み／未払い、支払いの案内（カードのリンク／支払番号／振込先） |
+| c10 | 請求書とお支払い | /me/invoices | customer | — | GET /me/invoices, GET /me/invoices/:id/pdf | — | PDF（期限つきURL）、税抜の小計・消費税・税込合計、支払い済み／未払い、支払いの案内（カードのリンク／支払番号／振込先） |
 | c11 | ご契約内容 | /me/contract | customer | — | GET /me/contract, POST /me/line/link | LINE連携の登録 | プラン、契約日、次の請求日、LINE連携。追加・変更・解約は「LINEで連絡」 |
 | c12 | プランのお見積り（個別見積り） | /me/plan-quote | customer（awaiting_quote_approval） | 契約が見積り了承待ち | GET /me/plan-quote, POST /me/plan-quote/:id/approve | 了承：plan_quotes.approved_at、契約を awaiting_payment、初月の請求書を自動発行 | 有効期限切れは了承できない。出し直した古い版は了承できない |
 | l01 | トーク画面とリッチメニュー | （LINE内） | LINEの友だち | — | — | — | リッチメニュー6つ：マイページ／相談・依頼／残りのクレジット／請求書／よくある質問／お問い合わせ。LINE公式の管理画面で設定（アプリ側は作らない） |
@@ -28,11 +28,11 @@
 | a02 | 今日やること（トップ） | /admin | admin（2段階認証済み） | — | GET /admin/dashboard | — | 審査待ち、プランの見積りを作る申込み、見積を作る依頼、振込の消込、失敗した課金、了承済みの依頼、KPI |
 | a03 | 顧客一覧 | /admin/customers | admin（2FA） | — | GET /admin/customers?status=&q= | — | 状態で絞り込み |
 | a04 | 顧客の詳細（申込みの審査） | /admin/customers/:id | admin（2FA） | — | GET /admin/customers/:id, POST /admin/applications/:id/approve, POST /admin/applications/:id/decline, POST /admin/contracts/:id/cancel-request, POST /admin/contracts/:id/early-access | 審査完了：固定プラン→請求書を自動発行（awaiting_payment）／個別見積り→quoting。承諾しない→declined。解約予定、先に使えるようにする | 契約・期間・クレジットの動き・請求・依頼を1画面に。操作は audit_logs に残す |
-| a04-2 | プランの見積りを作る（個別見積り） | /admin/customers/:id/plan-quote | admin（2FA） | 契約が quoting または awaiting_quote_approval | POST /admin/contracts/:id/plan-quotes | 送信で契約を awaiting_quote_approval、LINE・メールで通知。出し直しは新しい版 | 月額（税込）、クレジット数、内容、有効期限（案：14日） |
+| a04-2 | プランの見積りを作る（個別見積り） | /admin/customers/:id/plan-quote | admin（2FA） | 契約が quoting または awaiting_quote_approval | POST /admin/contracts/:id/plan-quotes | 送信で契約を awaiting_quote_approval、LINE・メールで通知。出し直しは新しい版 | 月額（税抜）、クレジット数、内容、有効期限（案：14日）。税込の目安を併記する案（要確認） |
 | a05 | 依頼の記録と見積 | /admin/requests（/:id） | admin（2FA） | — | GET/POST /admin/requests, POST /admin/requests/:id/estimates, POST /admin/requests/:id/complete | 見積送信で awaiting_approval（LINE通知）。完了で予約を戻し実績を消費 | 見積は作業内容（必須）、完了の状態（必須）、含まれないもの、ご用意いただくもの |
 | a06 | 銀行振込の入金確認 | /admin/bank-transfers | admin（2FA） | — | GET /admin/bank-transfers/pending, POST /admin/invoices/:id/confirm-payment | 請求を paid、クレジットを付与。初月なら契約成立（active、契約日、期間1） | 入金日を入力。二重に押しても1回だけ反映 |
 | a07 | 請求書一覧 | /admin/invoices | admin（2FA） | — | GET /admin/invoices, POST /admin/invoices/:id/void | 取消（void）と出し直し（新しい番号） | 番号は欠番にしない。取消した番号は残す |
-| a08 | 紹介・報酬 | /admin/referrals | admin（2FA） | — | GET /admin/referrals?month= | — | 月ごと・パートナーごとの報酬。基準は入金のあった月額（税込） |
+| a08 | 紹介・報酬 | /admin/referrals | admin（2FA） | — | GET /admin/referrals?month= | — | 月ごと・パートナーごとの報酬。基準は入金のあった月額（税抜・暫定） |
 
 ## 2. ログイン後の行き先
 
