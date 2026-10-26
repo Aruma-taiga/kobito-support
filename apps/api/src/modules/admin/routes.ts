@@ -1,5 +1,6 @@
 import {
   adminApplicationQueueQuerySchema,
+  approveApplicationRequestSchema,
   declineApplicationRequestSchema,
 } from "@kobito/shared";
 import { Hono } from "hono";
@@ -11,14 +12,17 @@ import {
 } from "../../platform/auth.js";
 import { ApiError, type ApiVariables } from "../../platform/types.js";
 import type { AccountsDataRepository } from "../accounts/repository.js";
+import type { InvoiceModule } from "../invoices/contracts.js";
 import type { AdminModule } from "./contracts.js";
 
 const maxDeclineBodyBytes = 16 * 1024;
+const maxApproveBodyBytes = 4 * 1024;
 
 export function createAdminRoutes(dependencies: {
   admin: AdminModule;
   verifier: IdentityVerifier;
   accounts: AccountsDataRepository;
+  invoices: InvoiceModule;
 }) {
   const routes = new Hono<{ Variables: ApiVariables }>();
   const authenticate = createAuthenticate(
@@ -29,6 +33,38 @@ export function createAdminRoutes(dependencies: {
   routes.use("*", authenticate, requireAdmin());
 
   routes.get("/session", (context) => context.json({ role: "admin" as const }));
+
+  routes.post(
+    "/applications/:id/approve",
+    bodyLimit({
+      maxSize: maxApproveBodyBytes,
+      onError: (context) =>
+        context.json({ error: { code: "invalid_request" } }, 400),
+    }),
+    async (context) => {
+      const contentType = context.req
+        .header("content-type")
+        ?.split(";", 1)[0]
+        ?.trim()
+        .toLowerCase();
+      if (contentType !== "application/json")
+        throw new ApiError(400, "invalid_request");
+      let raw: unknown;
+      try {
+        raw = await context.req.json();
+      } catch {
+        throw new ApiError(400, "invalid_request");
+      }
+      if (!approveApplicationRequestSchema.safeParse(raw).success)
+        throw new ApiError(422, "validation_error");
+      return context.json(
+        await dependencies.invoices.approveApplication(
+          context.get("principal"),
+          context.req.param("id"),
+        ),
+      );
+    },
+  );
 
   routes.get("/customers", async (context) => {
     const params = [...new URL(context.req.url).searchParams.entries()];
@@ -47,6 +83,37 @@ export function createAdminRoutes(dependencies: {
       context.req.param("id"),
     );
     return context.json(detail);
+  });
+
+  routes.get("/invoices", async (context) =>
+    context.json(
+      await dependencies.invoices.listAdmin(context.get("principal")),
+    ),
+  );
+  routes.get("/invoices/readiness", async (context) =>
+    context.json(
+      await dependencies.invoices.getReadiness(context.get("principal")),
+    ),
+  );
+  routes.get("/invoices/:id", async (context) =>
+    context.json(
+      await dependencies.invoices.getAdmin(
+        context.get("principal"),
+        context.req.param("id"),
+      ),
+    ),
+  );
+  routes.get("/invoices/:id/pdf", async (context) => {
+    const pdf = await dependencies.invoices.getAdminPdf(
+      context.get("principal"),
+      context.req.param("id"),
+    );
+    return context.body(Buffer.from(pdf.content), 200, {
+      "content-type": "application/pdf",
+      "content-disposition": `attachment; filename="${pdf.invoiceNo}.pdf"`,
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+    });
   });
 
   routes.post(

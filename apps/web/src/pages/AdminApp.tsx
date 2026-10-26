@@ -1,4 +1,8 @@
-import { contractStatusLabels, webMessages } from "@kobito/shared";
+import {
+  contractStatusLabels,
+  type InvoiceListItem,
+  webMessages,
+} from "@kobito/shared";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Navigate, Route, Routes, useParams } from "react-router-dom";
 import {
@@ -11,6 +15,10 @@ import {
 } from "../auth/admin-session.js";
 import { AdminAuthClientError } from "../auth/firebase-admin-client.js";
 import type { AdminApiClient } from "../platform/admin-api-client.js";
+import {
+  AdminInvoiceDetailPage,
+  AdminInvoiceListPage,
+} from "./InvoicePages.js";
 
 export type { AdminApiClient } from "../platform/admin-api-client.js";
 
@@ -481,6 +489,22 @@ function AdminCustomerPage({ apiClient }: { apiClient: AdminApiClient }) {
   const [declining, setDeclining] = useState(false);
   const [declineError, setDeclineError] = useState<string | null>(null);
   const [declineSuccess, setDeclineSuccess] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [approveNotice, setApproveNotice] = useState<string | null>(null);
+  const [issuedInvoice, setIssuedInvoice] = useState<InvoiceListItem | null>(
+    null,
+  );
+  const [readiness, setReadiness] = useState<
+    | { status: "loading" }
+    | { status: "error" }
+    | {
+        status: "ready";
+        canIssue: boolean;
+        mode: "live" | "preview" | "unavailable";
+      }
+  >({ status: "loading" });
 
   useEffect(() => {
     let active = true;
@@ -501,6 +525,28 @@ function AdminCustomerPage({ apiClient }: { apiClient: AdminApiClient }) {
       active = false;
     };
   }, [apiClient, id]);
+
+  useEffect(() => {
+    let active = true;
+    setReadiness({ status: "loading" });
+    void apiClient
+      .getInvoiceReadiness()
+      .then((value) => {
+        if (active) {
+          setReadiness({
+            status: "ready",
+            canIssue: value.canIssue,
+            mode: value.mode,
+          });
+        }
+      })
+      .catch(() => {
+        if (active) setReadiness({ status: "error" });
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiClient]);
 
   async function decline() {
     if (!data || declining || data.contract.status !== "under_review") return;
@@ -538,6 +584,44 @@ function AdminCustomerPage({ apiClient }: { apiClient: AdminApiClient }) {
     }
   }
 
+  async function approve() {
+    if (!data || approving || data.contract.status !== "under_review") return;
+    setApproving(true);
+    setApproveError(null);
+    setApproveNotice(null);
+    try {
+      const response = await apiClient.approveApplication(data.application.id);
+      setData((current) =>
+        current
+          ? {
+              ...current,
+              application: { ...current.application, reviewResult: "approved" },
+              contract: { ...current.contract, status: response.status },
+            }
+          : current,
+      );
+      setApproveOpen(false);
+      setApproveNotice(
+        response.status === "quoting"
+          ? webMessages.adminQuoteSuccess
+          : response.invoice?.preview
+            ? webMessages.adminApprovePreviewSuccess
+            : webMessages.adminApproveSuccess,
+      );
+      setIssuedInvoice(response.invoice);
+    } catch (caught) {
+      setApproveError(
+        (caught as { code?: string })?.code === "invoice_unavailable"
+          ? webMessages.invoiceUnavailable
+          : (caught as { code?: string })?.code === "conflict"
+            ? webMessages.adminApplicationConflict
+            : webMessages.adminApproveError,
+      );
+    } finally {
+      setApproving(false);
+    }
+  }
+
   if (loading)
     return (
       <main className="page-main">
@@ -558,18 +642,37 @@ function AdminCustomerPage({ apiClient }: { apiClient: AdminApiClient }) {
       </main>
     );
 
-  const terms = data.application.shownTerms;
-  const planName = typeof terms.planName === "string" ? terms.planName : "";
-  const price =
-    typeof terms.priceInclTax === "number" ? terms.priceInclTax : null;
-  const credits = typeof terms.credits === "number" ? terms.credits : null;
-  const paymentMethod =
-    typeof terms.paymentMethod === "string"
-      ? formatPaymentMethod(terms.paymentMethod)
-      : "";
-  const canDecline =
+  const paymentMethod = formatPaymentMethod(data.application.paymentMethod);
+  const canReview =
     data.contract.status === "under_review" &&
     data.application.reviewResult === null;
+  const shownTerms = data.application.shownTerms;
+  const planName =
+    typeof shownTerms.planName === "string" ? shownTerms.planName : "";
+  const rawPrice = shownTerms.priceInclTax;
+  const price =
+    typeof shownTerms.priceInclTax === "number"
+      ? shownTerms.priceInclTax
+      : null;
+  const credits =
+    typeof shownTerms.credits === "number" ? shownTerms.credits : null;
+  const hasPlanName = planName.trim().length > 0;
+  const isFixedBankPlan =
+    price !== null &&
+    credits !== null &&
+    hasPlanName &&
+    data.application.paymentMethod === "bank_transfer";
+  const isCustomPlan =
+    rawPrice === null &&
+    hasPlanName &&
+    data.application.paymentMethod === "bank_transfer";
+  const isUnsupportedPaymentMethod =
+    hasPlanName &&
+    data.application.paymentMethod !== "bank_transfer" &&
+    (rawPrice === null || (price !== null && credits !== null));
+  const isIncompleteSnapshot =
+    !hasPlanName || (rawPrice !== null && (price === null || credits === null));
+  const invoiceReady = readiness.status === "ready" && readiness.canIssue;
 
   return (
     <main className="page-main">
@@ -687,7 +790,133 @@ function AdminCustomerPage({ apiClient }: { apiClient: AdminApiClient }) {
             {declineError}
           </p>
         ) : null}
-        {canDecline && !declineOpen ? (
+        {approveNotice ? (
+          <output className="notice info">{approveNotice}</output>
+        ) : null}
+        {approveError ? (
+          <p className="error-message" role="alert">
+            {approveError}
+          </p>
+        ) : null}
+        {issuedInvoice ? (
+          <p>
+            <Link
+              to={`/admin/invoices/${encodeURIComponent(issuedInvoice.id)}`}
+            >
+              {issuedInvoice.invoiceNo}
+            </Link>
+          </p>
+        ) : null}
+        {canReview &&
+        !approveOpen &&
+        !declineOpen &&
+        isFixedBankPlan &&
+        invoiceReady ? (
+          <button
+            className="primary-button"
+            onClick={() => setApproveOpen(true)}
+            type="button"
+          >
+            {webMessages.adminApprove}
+          </button>
+        ) : null}
+        {canReview && !approveOpen && !declineOpen && isCustomPlan ? (
+          <button
+            className="primary-button"
+            onClick={() => setApproveOpen(true)}
+            type="button"
+          >
+            {webMessages.adminApproveCustom}
+          </button>
+        ) : null}
+        {canReview &&
+        !approveOpen &&
+        !declineOpen &&
+        isUnsupportedPaymentMethod ? (
+          <p className="muted-text">
+            {webMessages.adminInvoicePaymentUnsupported}
+          </p>
+        ) : null}
+        {canReview && !approveOpen && !declineOpen && isIncompleteSnapshot ? (
+          <p className="muted-text">
+            {webMessages.adminReviewSnapshotIncomplete}
+          </p>
+        ) : null}
+        {canReview &&
+        !approveOpen &&
+        !declineOpen &&
+        isFixedBankPlan &&
+        readiness.status === "loading" ? (
+          <output className="status-message">
+            {webMessages.invoiceReadinessLoading}
+          </output>
+        ) : null}
+        {canReview &&
+        !approveOpen &&
+        !declineOpen &&
+        isFixedBankPlan &&
+        readiness.status === "error" ? (
+          <p className="error-message" role="alert">
+            {webMessages.invoiceReadinessError}
+          </p>
+        ) : null}
+        {canReview &&
+        !approveOpen &&
+        !declineOpen &&
+        isFixedBankPlan &&
+        readiness.status === "ready" &&
+        !readiness.canIssue ? (
+          <p className="error-message" role="alert">
+            {webMessages.invoiceUnavailable}
+          </p>
+        ) : null}
+        {canReview && approveOpen && !declineOpen ? (
+          <section
+            className="admin-decline"
+            aria-labelledby="admin-approve-confirm"
+          >
+            <h2 id="admin-approve-confirm">
+              {isCustomPlan
+                ? webMessages.adminQuoteConfirm
+                : readiness.status === "ready" && readiness.mode === "preview"
+                  ? webMessages.adminApprovePreviewConfirm
+                  : webMessages.adminApproveConfirm}
+            </h2>
+            {readiness.status === "ready" && readiness.mode === "preview" ? (
+              <p className="invoice-preview-warning" role="note">
+                {webMessages.invoicePreviewWarning}
+              </p>
+            ) : null}
+            {isFixedBankPlan ? (
+              <p>{formatPlanSummary(planName, price, credits)}</p>
+            ) : null}
+            <div className="admin-actions">
+              <button
+                className="primary-button"
+                disabled={approving}
+                onClick={() => void approve()}
+                type="button"
+              >
+                {approving
+                  ? isCustomPlan
+                    ? webMessages.adminQuoteWorking
+                    : webMessages.adminApproveWorking
+                  : isCustomPlan
+                    ? webMessages.adminQuoteConfirmButton
+                    : webMessages.adminApproveConfirmButton}
+              </button>
+              <button
+                className="secondary-button"
+                disabled={approving}
+                onClick={() => setApproveOpen(false)}
+                type="button"
+              >
+                {webMessages.adminApproveCancel}
+              </button>
+            </div>
+          </section>
+        ) : null}
+        {canReview && !declineOpen && !approveOpen ? (
           <button
             className="secondary-button"
             onClick={() => setDeclineOpen(true)}
@@ -696,7 +925,7 @@ function AdminCustomerPage({ apiClient }: { apiClient: AdminApiClient }) {
             {webMessages.adminDecline}
           </button>
         ) : null}
-        {canDecline && declineOpen ? (
+        {canReview && declineOpen && !approveOpen ? (
           <section
             className="admin-decline"
             aria-labelledby="admin-decline-confirm"
@@ -760,6 +989,14 @@ export function AdminApp({
           <Route
             path="customers/:id"
             element={<AdminCustomerPage apiClient={apiClient} />}
+          />
+          <Route
+            path="invoices"
+            element={<AdminInvoiceListPage apiClient={apiClient} />}
+          />
+          <Route
+            path="invoices/:id"
+            element={<AdminInvoiceDetailPage apiClient={apiClient} />}
           />
         </Route>
         <Route path="*" element={<Navigate to="/admin/login" replace />} />

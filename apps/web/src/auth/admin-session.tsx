@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { Link, Navigate, Outlet } from "react-router-dom";
 import {
   type AdminApiClient,
   AdminApiError,
@@ -168,6 +168,7 @@ export function RequireAdminAuth() {
   return (
     <div className="admin-authorized-layout">
       <header className="admin-toolbar">
+        <Link to="/admin/invoices">{webMessages.invoiceListTitle}</Link>
         <AdminLogoutButton />
       </header>
       <Outlet />

@@ -5,11 +5,12 @@ type TestAccount = NonNullable<
   Awaited<ReturnType<AppDependencies["accounts"]["findByAuthUserId"]>>
 >;
 type AppOverrides = Partial<
-  Omit<AppDependencies, "accounts" | "applications">
+  Omit<AppDependencies, "accounts" | "applications" | "invoices">
 > & {
   accounts?: Partial<AppDependencies["accounts"]>;
   applications?: Partial<AppDependencies["applications"]>;
   admin?: Partial<AppDependencies["admin"]>;
+  invoices?: Partial<AppDependencies["invoices"]>;
 };
 
 const userForToken = {
@@ -78,6 +79,36 @@ function makeApp(overrides: AppOverrides = {}) {
         replayed: false,
       })),
     },
+    invoices: {
+      getReadiness: vi.fn(async () => ({
+        canIssue: false,
+        mode: "unavailable" as const,
+        reason: "issuer_not_configured" as const,
+      })),
+      approveApplication: vi.fn(async () => ({
+        applicationId: "00000000-0000-4000-8000-000000000001",
+        contractId: "00000000-0000-4000-8000-000000000002",
+        status: "awaiting_payment" as const,
+        invoice: null,
+        replayed: false,
+      })),
+      listCustomer: vi.fn(async () => ({ invoices: [] })),
+      getCustomer: vi.fn(async () => {
+        throw new Error("not found");
+      }),
+      getCustomerPdf: vi.fn(async () => ({
+        invoiceNo: "KS-2026-00001",
+        content: Buffer.from("%PDF-1.7 test"),
+      })),
+      listAdmin: vi.fn(async () => ({ invoices: [] })),
+      getAdmin: vi.fn(async () => {
+        throw new Error("not found");
+      }),
+      getAdminPdf: vi.fn(async () => ({
+        invoiceNo: "KS-2026-00001",
+        content: Buffer.from("%PDF-1.7 test"),
+      })),
+    },
     publicSettings: { getServiceName: vi.fn(async () => "コビトサポート") },
     logger: { info: vi.fn(), error: vi.fn() },
   };
@@ -87,6 +118,7 @@ function makeApp(overrides: AppOverrides = {}) {
     accounts: { ...defaults.accounts, ...overrides.accounts },
     applications: { ...defaults.applications, ...overrides.applications },
     admin: { ...defaults.admin, ...overrides.admin },
+    invoices: { ...defaults.invoices, ...overrides.invoices },
   });
 }
 

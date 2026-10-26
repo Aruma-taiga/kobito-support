@@ -7,10 +7,17 @@ import {
   adminApplicationQueueResponseSchema,
   adminCustomerDetailSchema,
   adminSessionSchema,
+  approveApplicationResponseSchema,
   type DeclineApplicationRequest,
   type DeclineApplicationResponse,
   declineApplicationRequestSchema,
   declineApplicationResponseSchema,
+  type InvoiceDetail,
+  type InvoiceList,
+  type InvoiceReadiness,
+  invoiceDetailSchema,
+  invoiceListSchema,
+  invoiceReadinessSchema,
 } from "@kobito/shared";
 
 export interface AdminApiAuthUser {
@@ -25,6 +32,7 @@ export type AdminApiErrorCode =
   | "validation_error"
   | "network"
   | "server"
+  | "invoice_unavailable"
   | "invalid_response";
 
 export class AdminApiError extends Error {
@@ -84,10 +92,10 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
         404: "not_found",
         409: "conflict",
         422: "validation_error",
+        503: "invoice_unavailable",
       };
       throw new AdminApiError(codes[response.status] ?? "server");
     }
-
     let payload: unknown;
     try {
       payload = await response.json();
@@ -97,6 +105,51 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
     const parsed = schema.safeParse(payload);
     if (!parsed.success) throw new AdminApiError("invalid_response");
     return parsed.data;
+  }
+
+  async function requestBlob(endpoint: string): Promise<Blob> {
+    const user = options.getCurrentUser();
+    if (!user) throw new AdminApiError("unauthorized");
+    let token: string;
+    try {
+      token = await user.getIdToken();
+    } catch {
+      throw new AdminApiError("unauthorized");
+    }
+    let response: Response;
+    try {
+      response = await fetcher(new URL(endpoint, options.baseUrl), {
+        headers: {
+          Accept: "application/pdf",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "omit",
+        redirect: "error",
+        cache: "no-store",
+      });
+    } catch {
+      throw new AdminApiError("network");
+    }
+    if (!response.ok) {
+      const codes: Record<number, AdminApiErrorCode> = {
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not_found",
+        409: "conflict",
+      };
+      throw new AdminApiError(codes[response.status] ?? "server");
+    }
+    if (
+      response.headers.get("content-type")?.split(";")[0]?.trim() !==
+      "application/pdf"
+    ) {
+      throw new AdminApiError("invalid_response");
+    }
+    try {
+      return await response.blob();
+    } catch {
+      throw new AdminApiError("invalid_response");
+    }
   }
 
   return {
@@ -137,6 +190,33 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
           method: "POST",
           body: JSON.stringify(parsed.data),
         },
+      );
+    },
+    approveApplication(applicationId: string) {
+      return request(
+        `/api/v1/admin/applications/${encodeURIComponent(applicationId)}/approve`,
+        approveApplicationResponseSchema,
+        { method: "POST", body: "{}" },
+      );
+    },
+    getInvoices(): Promise<InvoiceList> {
+      return request("/api/v1/admin/invoices", invoiceListSchema);
+    },
+    getInvoiceReadiness(): Promise<InvoiceReadiness> {
+      return request(
+        "/api/v1/admin/invoices/readiness",
+        invoiceReadinessSchema,
+      );
+    },
+    getInvoice(invoiceId: string): Promise<InvoiceDetail> {
+      return request(
+        `/api/v1/admin/invoices/${encodeURIComponent(invoiceId)}`,
+        invoiceDetailSchema,
+      );
+    },
+    getInvoicePdf(invoiceId: string): Promise<Blob> {
+      return requestBlob(
+        `/api/v1/admin/invoices/${encodeURIComponent(invoiceId)}/pdf`,
       );
     },
   };

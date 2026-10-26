@@ -1,6 +1,10 @@
 import {
   type ApplicationReceipt,
   applicationReceiptSchema,
+  type InvoiceDetail,
+  type InvoiceList,
+  invoiceDetailSchema,
+  invoiceListSchema,
   type MeResponse,
   meResponseSchema,
   type PublicConfig,
@@ -162,6 +166,58 @@ export function createApiClient(options: ApiClientOptions) {
     return parsed.data;
   }
 
+  async function getInvoicePdf(invoiceId: string): Promise<Blob> {
+    const user = options.getCurrentUser();
+    if (!user) throw new ApiClientError("unauthorized");
+    let token: string;
+    try {
+      token = await user.getIdToken();
+    } catch {
+      await options.signOut().catch(() => undefined);
+      throw new ApiClientError("unauthorized");
+    }
+    let response: Response;
+    try {
+      response = await fetcher(
+        new URL(
+          `/api/v1/me/invoices/${encodeURIComponent(invoiceId)}/pdf`,
+          options.baseUrl,
+        ),
+        {
+          headers: {
+            Accept: "application/pdf",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "omit",
+          redirect: "error",
+          cache: "no-store",
+        },
+      );
+    } catch {
+      throw new ApiClientError("network");
+    }
+    if (response.status === 401) {
+      await options.signOut().catch(() => undefined);
+      throw new ApiClientError("unauthorized");
+    }
+    if (!response.ok) {
+      if (response.status === 403) throw new ApiClientError("forbidden");
+      if (response.status === 404) throw new ApiClientError("not_found");
+      throw new ApiClientError("server");
+    }
+    if (
+      response.headers.get("content-type")?.split(";")[0]?.trim() !==
+      "application/pdf"
+    ) {
+      throw new ApiClientError("invalid_response");
+    }
+    try {
+      return await response.blob();
+    } catch {
+      throw new ApiClientError("invalid_response");
+    }
+  }
+
   return {
     getPublicConfig: (): Promise<PublicConfig> =>
       getJson("/api/v1/public/config", publicConfigSchema, false),
@@ -176,6 +232,15 @@ export function createApiClient(options: ApiClientOptions) {
     postApplication,
     getMe: (): Promise<MeResponse> =>
       getJson("/api/v1/me", meResponseSchema, true),
+    getInvoices: (): Promise<InvoiceList> =>
+      getJson("/api/v1/me/invoices", invoiceListSchema, true),
+    getInvoice: (invoiceId: string): Promise<InvoiceDetail> =>
+      getJson(
+        `/api/v1/me/invoices/${encodeURIComponent(invoiceId)}`,
+        invoiceDetailSchema,
+        true,
+      ),
+    getInvoicePdf,
   };
 }
 

@@ -70,6 +70,22 @@ describe("loadConfig", () => {
     ).toBe("KS");
   });
 
+  it("allows invoice previews only as an explicit local-development setting", () => {
+    expect(loadConfig(validEnvironment).devInvoicePreview).toBe(false);
+    expect(
+      loadConfig({ ...validEnvironment, DEV_INVOICE_PREVIEW: "1" })
+        .devInvoicePreview,
+    ).toBe(true);
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        FIREBASE_AUTH_EMULATOR_HOST: "",
+        DEV_INVOICE_PREVIEW: "1",
+      }),
+    ).toThrow();
+  });
+
   it("accepts an optional valid operations notification recipient", () => {
     expect(loadConfig(validEnvironment).operationsEmail).toBeUndefined();
     expect(

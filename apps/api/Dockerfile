@@ -8,6 +8,8 @@ RUN pnpm --filter @kobito/api deploy --prod --legacy /prod/api
 
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=8080
+RUN apt-get update && apt-get install -y --no-install-recommends chromium fonts-noto-cjk && rm -rf /var/lib/apt/lists/*
+ENV INVOICE_CHROMIUM_EXECUTABLE=/usr/bin/chromium
 WORKDIR /app
 COPY --from=build --chown=node:node /prod/api ./
 USER node

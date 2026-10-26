@@ -19,6 +19,20 @@ import { AdminApp } from "./AdminApp.js";
 const customerId = "11111111-1111-4111-8111-111111111111";
 const applicationId = "22222222-2222-4222-8222-222222222222";
 const contractId = "33333333-3333-4333-8333-333333333333";
+const invoiceId = "44444444-4444-4444-8444-444444444444";
+const invoice = {
+  id: invoiceId,
+  invoiceNo: "INV-2026-001",
+  kind: "initial" as const,
+  status: "issued" as const,
+  issuedOn: "2026-10-26",
+  dueOn: "2026-11-02",
+  totalInclTax: 5500,
+  totalExclTax: 5000,
+  taxAmount: 500,
+  preview: true,
+  paymentMethod: "bank_transfer" as const,
+};
 const user = {
   email: "admin@example.jp",
   getIdToken: vi.fn(async () => "admin-token"),
@@ -49,6 +63,7 @@ const detail = {
   application: {
     id: applicationId,
     submittedAt: queueItem.submittedAt,
+    paymentMethod: "bank_transfer" as const,
     termsVersion: "terms-v1",
     privacyVersion: "privacy-v1",
     disclosureVersion: "disclosure-v1",
@@ -56,7 +71,11 @@ const detail = {
     consentTerms: true,
     consentMarketing: false,
     consentPartnerShare: null,
-    shownTerms: { planName: "ライト", priceInclTax: 5000, credits: 1 },
+    shownTerms: {
+      planName: "ライト",
+      priceInclTax: 5000,
+      credits: 1,
+    },
     referralCode: null,
     freeText: "<img src=x onerror=alert(1)>",
     reviewResult: null,
@@ -74,6 +93,11 @@ function setup(
     getApplications?: ReturnType<typeof vi.fn>;
     getCustomerDetail?: ReturnType<typeof vi.fn>;
     declineApplication?: ReturnType<typeof vi.fn>;
+    approveApplication?: ReturnType<typeof vi.fn>;
+    getInvoices?: ReturnType<typeof vi.fn>;
+    getInvoice?: ReturnType<typeof vi.fn>;
+    getInvoicePdf?: ReturnType<typeof vi.fn>;
+    getInvoiceReadiness?: ReturnType<typeof vi.fn>;
     completeSecondFactor?: ReturnType<typeof vi.fn>;
     signOut?: ReturnType<typeof vi.fn>;
   } = {},
@@ -141,6 +165,58 @@ function setup(
         contractId,
         status: "declined" as const,
         replayed: false,
+      })),
+    approveApplication:
+      options.approveApplication ??
+      vi.fn(async () => ({
+        applicationId,
+        contractId,
+        status: "awaiting_payment" as const,
+        invoice,
+        replayed: false,
+      })),
+    getInvoices: options.getInvoices ?? vi.fn(async () => ({ invoices: [] })),
+    getInvoice:
+      options.getInvoice ??
+      vi.fn(async () => ({
+        ...invoice,
+        acceptedPlan: {
+          planId: "55555555-5555-4555-8555-555555555555",
+          planCode: "light",
+          planName: "ライト（申込時）",
+          monthlyPriceInclTax: 5500,
+          credits: 1,
+        },
+        billingName: "喫茶ひだまり",
+        billingAddress: "東京都杉並区1-2-3",
+        issuer: {
+          serviceName: "受付サービス",
+          companyName: "運営会社",
+          companyAddress: "東京都千代田区1-1",
+          invoiceRegistrationNo: null,
+          bankAccountName: null,
+          bankAccountBranch: null,
+          bankAccountType: null,
+          bankAccountNumber: null,
+        },
+        lines: [
+          {
+            description: "ライトプラン 初月分",
+            quantity: 1,
+            unitPriceInclTax: 5500,
+            amountInclTax: 5500,
+            taxRate: 0.1,
+          },
+        ],
+      })),
+    getInvoicePdf:
+      options.getInvoicePdf ?? vi.fn(async () => new Blob(["pdf"])),
+    getInvoiceReadiness:
+      options.getInvoiceReadiness ??
+      vi.fn(async () => ({
+        canIssue: true,
+        mode: "preview" as const,
+        reason: "preview_only" as const,
       })),
   };
   render(
@@ -326,6 +402,247 @@ describe("admin MFA and review UI", () => {
       page: 1,
       pageSize: 25,
     });
+  });
+
+  it("does not approve until confirmed and then shows the issued invoice instead of stale actions", async () => {
+    const { apiClient } = setup({
+      initialPath: `/admin/customers/${customerId}`,
+      signedIn: true,
+    });
+    await screen.findByRole("heading", { name: webMessages.adminDetailTitle });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminApprove }),
+    );
+    expect(
+      screen.getByText(webMessages.adminApprovePreviewConfirm),
+    ).toBeTruthy();
+    expect(screen.getByText(webMessages.invoicePreviewWarning)).toBeTruthy();
+    expect(apiClient.approveApplication).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminDeclineCancel }),
+    );
+    expect(apiClient.approveApplication).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminApprove }),
+    );
+    const confirm = screen.getByRole("button", {
+      name: webMessages.adminApproveConfirmButton,
+    });
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(apiClient.approveApplication).toHaveBeenCalledOnce(),
+    );
+    expect(apiClient.approveApplication).toHaveBeenCalledWith(applicationId);
+    expect(
+      await screen.findByText(webMessages.adminApprovePreviewSuccess),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: invoice.invoiceNo })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: webMessages.adminDecline }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: webMessages.adminApprove }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("link", { name: invoice.invoiceNo }));
+    expect(
+      await screen.findByText(webMessages.invoicePreviewWarning),
+    ).toBeTruthy();
+  });
+
+  it("disables repeated approval while the first request is pending", async () => {
+    let finishApproval:
+      | ((result: {
+          applicationId: string;
+          contractId: string;
+          status: "awaiting_payment";
+          invoice: typeof invoice;
+          replayed: boolean;
+        }) => void)
+      | undefined;
+    const approveApplication = vi.fn(
+      () =>
+        new Promise<{
+          applicationId: string;
+          contractId: string;
+          status: "awaiting_payment";
+          invoice: typeof invoice;
+          replayed: boolean;
+        }>((resolve) => {
+          finishApproval = resolve;
+        }),
+    );
+    setup({
+      initialPath: `/admin/customers/${customerId}`,
+      signedIn: true,
+      approveApplication,
+    });
+    await screen.findByRole("heading", { name: webMessages.adminDetailTitle });
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminApprove }),
+    );
+    const confirm = screen.getByRole("button", {
+      name: webMessages.adminApproveConfirmButton,
+    });
+    fireEvent.click(confirm);
+    expect(confirm.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(confirm);
+    expect(approveApplication).toHaveBeenCalledOnce();
+    await act(async () => {
+      finishApproval?.({
+        applicationId,
+        contractId,
+        status: "awaiting_payment",
+        invoice,
+        replayed: false,
+      });
+    });
+    expect(
+      await screen.findByText(webMessages.adminApprovePreviewSuccess),
+    ).toBeTruthy();
+  });
+
+  it("shows the server configuration error without pretending an invoice was issued", async () => {
+    const approveApplication = vi.fn(async () => {
+      throw new AdminApiError("invoice_unavailable");
+    });
+    const { apiClient } = setup({
+      initialPath: `/admin/customers/${customerId}`,
+      signedIn: true,
+      approveApplication,
+    });
+    await screen.findByRole("heading", { name: webMessages.adminDetailTitle });
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminApprove }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: webMessages.adminApproveConfirmButton,
+      }),
+    );
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      webMessages.invoiceUnavailable,
+    );
+    expect(apiClient.approveApplication).toHaveBeenCalledOnce();
+    expect(screen.queryByText(webMessages.adminApproveSuccess)).toBeNull();
+  });
+
+  it("blocks fixed-price approval when readiness says live invoice settings are unavailable", async () => {
+    const approveApplication = vi.fn();
+    const { apiClient } = setup({
+      initialPath: `/admin/customers/${customerId}`,
+      signedIn: true,
+      approveApplication,
+      getInvoiceReadiness: vi.fn(async () => ({
+        canIssue: false,
+        mode: "unavailable" as const,
+        reason: "issuer_not_configured" as const,
+      })),
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      webMessages.invoiceUnavailable,
+    );
+    expect(apiClient.approveApplication).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: webMessages.adminApprove }),
+    ).toBeNull();
+  });
+
+  it("fails closed when the admin invoice readiness request fails", async () => {
+    const approveApplication = vi.fn();
+    setup({
+      initialPath: `/admin/customers/${customerId}`,
+      signedIn: true,
+      approveApplication,
+      getInvoiceReadiness: vi.fn(async () => {
+        throw new AdminApiError("forbidden");
+      }),
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      webMessages.invoiceReadinessError,
+    );
+    expect(approveApplication).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: webMessages.adminApprove }),
+    ).toBeNull();
+  });
+
+  it("uses the quote path for a custom application and creates no invoice link", async () => {
+    const customDetail = {
+      ...detail,
+      application: {
+        ...detail.application,
+        shownTerms: {
+          planName: "個別見積り",
+          priceInclTax: null,
+          credits: null,
+        },
+      },
+    };
+    const approveApplication = vi.fn(async () => ({
+      applicationId,
+      contractId,
+      status: "quoting" as const,
+      invoice: null,
+      replayed: false,
+    }));
+    setup({
+      initialPath: `/admin/customers/${customerId}`,
+      signedIn: true,
+      getCustomerDetail: vi.fn(async () => customDetail),
+      approveApplication,
+    });
+    await screen.findByRole("heading", { name: webMessages.adminDetailTitle });
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminApproveCustom }),
+    );
+    expect(screen.getByText(webMessages.adminQuoteConfirm)).toBeTruthy();
+    expect(screen.queryByText(webMessages.adminApproveConfirm)).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminQuoteConfirmButton }),
+    );
+    expect(await screen.findByText(webMessages.adminQuoteSuccess)).toBeTruthy();
+    expect(approveApplication).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("link", { name: invoice.invoiceNo })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: webMessages.adminApproveCustom }),
+    ).toBeNull();
+  });
+
+  it("does not offer a custom quote action for a non-bank application", async () => {
+    const customDetail = {
+      ...detail,
+      application: {
+        ...detail.application,
+        paymentMethod: "card" as const,
+        shownTerms: {
+          planName: "個別見積り",
+          priceInclTax: null,
+          credits: null,
+        },
+      },
+    };
+    const approveApplication = vi.fn();
+    setup({
+      initialPath: `/admin/customers/${customerId}`,
+      signedIn: true,
+      getCustomerDetail: vi.fn(async () => customDetail),
+      approveApplication,
+    });
+
+    expect(
+      await screen.findByRole("heading", {
+        name: webMessages.adminDetailTitle,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(webMessages.adminInvoicePaymentUnsupported),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: webMessages.adminApproveCustom }),
+    ).toBeNull();
+    expect(approveApplication).not.toHaveBeenCalled();
   });
 
   it("prevents repeated decline requests while the first request is pending", async () => {

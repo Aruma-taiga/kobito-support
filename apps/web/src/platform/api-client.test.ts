@@ -132,4 +132,54 @@ describe("authenticated web API client", () => {
     });
     expect(fetcher).not.toHaveBeenCalled();
   });
+
+  it("loads only the authenticated customer's invoice list without a customer ID parameter", async () => {
+    const user = { getIdToken: vi.fn(async () => "signed-id-token") };
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ invoices: [] }),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => user,
+      signOut: vi.fn(async () => undefined),
+      fetcher,
+    });
+
+    await expect(client.getInvoices()).resolves.toEqual({ invoices: [] });
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/me/invoices",
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer signed-id-token",
+    });
+    expect(String(fetcher.mock.calls[0]?.[0])).not.toMatch(
+      /customerId|tenant/i,
+    );
+  });
+
+  it("downloads a customer invoice PDF with the ID token in the authorization header", async () => {
+    const fetcher = vi.fn<typeof fetch>(
+      async () => new Response(new Blob(["pdf"], { type: "application/pdf" })),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        getIdToken: vi.fn(async () => "private-token"),
+      }),
+      signOut: vi.fn(async () => undefined),
+      fetcher,
+    });
+
+    await expect(
+      client.getInvoicePdf("44444444-4444-4444-8444-444444444444"),
+    ).resolves.toBeInstanceOf(Blob);
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/me/invoices/44444444-4444-4444-8444-444444444444/pdf",
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer private-token",
+      Accept: "application/pdf",
+    });
+    expect(String(fetcher.mock.calls[0]?.[0])).not.toContain("private-token");
+  });
 });

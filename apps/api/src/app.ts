@@ -7,6 +7,8 @@ import type { AdminModule } from "./modules/admin/contracts.js";
 import { createAdminRoutes } from "./modules/admin/routes.js";
 import type { ApplicationsModule } from "./modules/applications/contracts.js";
 import { createApplicationRoutes } from "./modules/applications/routes.js";
+import type { InvoiceModule } from "./modules/invoices/contracts.js";
+import { createInvoiceCustomerRoutes } from "./modules/invoices/routes.js";
 import {
   type AccountLookup,
   createAuthenticate,
@@ -25,6 +27,7 @@ export interface AppDependencies {
   accounts: AccountLookup & AccountsDataRepository;
   applications: ApplicationsModule;
   admin: AdminModule;
+  invoices: InvoiceModule;
   publicSettings: { getServiceName(): Promise<string> };
   logger: ApiLogger;
 }
@@ -80,11 +83,17 @@ export function createApp(dependencies: AppDependencies) {
   );
 
   app.route(
+    "/api/v1",
+    createInvoiceCustomerRoutes({ invoices: dependencies.invoices }),
+  );
+
+  app.route(
     "/api/v1/admin",
     createAdminRoutes({
       admin: dependencies.admin,
       verifier: dependencies.verifier,
       accounts: dependencies.accounts,
+      invoices: dependencies.invoices,
     }),
   );
 

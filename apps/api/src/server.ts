@@ -8,6 +8,9 @@ import { AdminRepository } from "./modules/admin/repository.js";
 import { AdminService } from "./modules/admin/service.js";
 import { ApplicationsRepository } from "./modules/applications/repository.js";
 import { ApplicationsService } from "./modules/applications/service.js";
+import { ChromiumInvoicePdfRenderer } from "./modules/invoices/renderer.js";
+import { InvoiceRepository } from "./modules/invoices/repository.js";
+import { InvoiceService } from "./modules/invoices/service.js";
 import { createFirebaseVerifier } from "./platform/auth.js";
 import { loadConfig } from "./platform/config.js";
 import { consoleLogger } from "./platform/logger.js";
@@ -27,12 +30,16 @@ const applications = new ApplicationsService(
   new ApplicationsRepository(pool),
   config,
 );
+const invoices = new InvoiceService(
+  new InvoiceRepository(pool, config, new ChromiumInvoicePdfRenderer()),
+);
 const app = createApp({
   config,
   verifier,
   accounts,
   applications,
   admin: new AdminService(new AdminRepository(pool)),
+  invoices,
   publicSettings: new PublicSettingsRepository(pool),
   logger: consoleLogger,
 });

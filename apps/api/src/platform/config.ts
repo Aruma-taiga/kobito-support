@@ -43,6 +43,7 @@ const environmentSchema = z
     BANK_ACCOUNT_BRANCH: optionalText,
     BANK_ACCOUNT_TYPE: optionalText,
     BANK_ACCOUNT_NUMBER: optionalText,
+    DEV_INVOICE_PREVIEW: z.enum(["0", "1"]).default("0"),
   })
   .superRefine((environment, context) => {
     if (
@@ -53,6 +54,16 @@ const environmentSchema = z
         code: "custom",
         path: ["FIREBASE_AUTH_EMULATOR_HOST"],
         message: "must not be configured in production",
+      });
+    }
+    if (
+      environment.NODE_ENV === "production" &&
+      environment.DEV_INVOICE_PREVIEW === "1"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["DEV_INVOICE_PREVIEW"],
+        message: "must not be enabled in production",
       });
     }
   });
@@ -73,6 +84,7 @@ export interface RuntimeConfig {
   bankAccountBranch?: string;
   bankAccountType?: string;
   bankAccountNumber?: string;
+  devInvoicePreview?: boolean;
 }
 
 export function loadConfig(
@@ -128,5 +140,6 @@ export function loadConfig(
     ...(value.BANK_ACCOUNT_NUMBER === undefined
       ? {}
       : { bankAccountNumber: value.BANK_ACCOUNT_NUMBER }),
+    devInvoicePreview: value.DEV_INVOICE_PREVIEW === "1",
   };
 }

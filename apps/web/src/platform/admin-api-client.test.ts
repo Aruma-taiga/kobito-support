@@ -93,6 +93,71 @@ describe("admin API client", () => {
     });
   });
 
+  it("approves from the reviewed snapshot and parses the idempotent result", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        applicationId: "33333333-3333-4333-8333-333333333333",
+        contractId: "22222222-2222-4222-8222-222222222222",
+        status: "awaiting_payment",
+        invoice: {
+          id: "44444444-4444-4444-8444-444444444444",
+          invoiceNo: "INV-2026-001",
+          kind: "initial",
+          status: "issued",
+          issuedOn: "2026-10-26",
+          dueOn: "2026-11-02",
+          totalInclTax: 5500,
+          totalExclTax: 5000,
+          taxAmount: 500,
+          preview: true,
+          paymentMethod: "bank_transfer",
+        },
+        replayed: false,
+      }),
+    );
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher,
+    });
+
+    await expect(
+      client.approveApplication("33333333-3333-4333-8333-333333333333"),
+    ).resolves.toMatchObject({ status: "awaiting_payment", replayed: false });
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/admin/applications/33333333-3333-4333-8333-333333333333/approve",
+    );
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      body: "{}",
+      headers: {
+        Authorization: "Bearer admin-id-token",
+        "Content-Type": "application/json",
+      },
+    });
+  });
+
+  it("uses the admin token for invoice PDF downloads and returns a blob", async () => {
+    const pdf = new Blob(["pdf bytes"], { type: "application/pdf" });
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(pdf));
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher,
+    });
+
+    await expect(
+      client.getInvoicePdf("44444444-4444-4444-8444-444444444444"),
+    ).resolves.toBeInstanceOf(Blob);
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/admin/invoices/44444444-4444-4444-8444-444444444444/pdf",
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer admin-id-token",
+      Accept: "application/pdf",
+    });
+  });
+
   it("maps role, MFA, and status conflicts to safe typed errors", async () => {
     const cases = [
       [404, "not_found"],
@@ -113,5 +178,47 @@ describe("admin API client", () => {
       await expect(client.getSession()).rejects.toBeInstanceOf(AdminApiError);
       await expect(client.getSession()).rejects.toMatchObject({ code });
     }
+  });
+
+  it("maps missing invoice settings to a safe invoice-specific error", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json(
+        { error: { code: "invoice_unavailable", private: "database detail" } },
+        { status: 503 },
+      ),
+    );
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher,
+    });
+
+    await expect(
+      client.approveApplication("33333333-3333-4333-8333-333333333333"),
+    ).rejects.toMatchObject({ code: "invoice_unavailable" });
+  });
+
+  it("loads safe invoice readiness through the admin session", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        canIssue: false,
+        mode: "unavailable",
+        reason: "issuer_not_configured",
+      }),
+    );
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher,
+    });
+
+    await expect(client.getInvoiceReadiness()).resolves.toEqual({
+      canIssue: false,
+      mode: "unavailable",
+      reason: "issuer_not_configured",
+    });
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/admin/invoices/readiness",
+    );
   });
 });
