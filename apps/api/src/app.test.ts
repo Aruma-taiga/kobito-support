@@ -115,6 +115,7 @@ function makeApp(overrides: AppOverrides = {}) {
       getCustomerContract: vi.fn(async () => ({ contract: null })),
     },
     publicSettings: { getServiceName: vi.fn(async () => "コビトサポート") },
+    komojuInbox: { receive: vi.fn(async () => "accepted" as const) },
     logger: { info: vi.fn(), error: vi.fn() },
   };
   return createApp({

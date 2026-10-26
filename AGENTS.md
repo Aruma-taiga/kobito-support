@@ -3,7 +3,7 @@
 ## Scope and delivery
 
 - Repository: `kobito-support`; GitHub account: `Aruma-taiga`.
-- The five foundation PR stages are complete. The user authorized continuing with applications, review, initial invoicing, bank-transfer reconciliation, and contract activation. Deliver bounded vertical slices as separate PRs and wait for each slice's CI before starting the next implementation stage. Do not merge PRs or deploy without authorization.
+- The user has requested continuing until all planned work is done. Foundation, applications, review, initial invoicing, bank-transfer reconciliation, and contract activation are implemented through PR #9. Continue the remaining payment, monthly processing, requests/estimates, custom quotes, LINE, partner rewards, cancellation/deletion, infrastructure preparation, and end-to-end validation stages. Track implementation and external verification separately in `docs/implementation-status.md`. Deliver bounded vertical slices as separate PRs and wait for each slice's CI before starting the next implementation stage. Do not merge PRs, deploy, send real notifications, or initiate provider payments without specific authorization.
 - Keep PR titles and descriptions in Japanese.
 - Prefer the low-cost `gpt-6-luna` model for implementation and testing work. Use test-driven development: write meaningful tests first, observe the failing result, implement, and run them again.
 - Test integration boundaries in the same shape as the application, including nested routing, session lifecycle, and provider SDK behavior. Isolated mocks do not replace a real local workflow check; distinguish emulator coverage from production-only verification.

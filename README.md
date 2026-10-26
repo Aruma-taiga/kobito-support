@@ -1,6 +1,6 @@
 # コビトサポート
 
-TypeScript の基幹システムです。設計と作業順は `docs/` を参照してください。
+TypeScript の基幹システムです。設計と作業順は `docs/`、残りの実装と外部検証は [実装状況](docs/implementation-status.md) を参照してください。
 
 ## 現在の段階
 
@@ -205,6 +205,14 @@ pnpm db:seed
 ```
 
 初期 migration は `docs/schema-v1.sql` の byte-for-byte copy です。migration ごとに checksum と適用日時を `schema_migrations` に保存し、1 migration 単位の transaction と PostgreSQL advisory lock で二重適用を防ぎます。`db:seed` はプランと初期設定を追加し、既存の設定値を上書きしません。サービス名の初期値は「コビトサポート（kobITo Support）」、請求番号 prefix は `KS` です。
+
+## KOMOJU Webhook受信箱
+
+`POST /webhooks/komoju` は `X-Komoju-Signature` で原文バイト列のHMAC-SHA256を検証します。`.env` の `KOMOJU_WEBHOOK_SECRET` が未設定なら503を返し、イベントを受け付けません。秘密値はKOMOJU側の設定と一致させ、Gitには保存しないでください。外部へAPIリクエストを送る設定ではありません。
+
+現段階では受信箱への永続化までを扱い、支払い済み・契約成立・クレジット付与には進めません。保存完了前に成功応答を返さず、DB障害は再送可能な503とします。本文のイベントIDで重複を排除し、配信ヘッダーのIDは重複判定に使いません。同じイベントIDで意味のある内容が変わった場合は元の記録を保持して競合を記録し、409を返します。隔離されたイベントは自動処理しません。
+
+公式の決済データにはカード情報が含まれ得るため、受信JSONやカード情報を保存・ログ出力せず、イベントID・種類と、決済ID・状態・金額・通貨・請求番号の許可した項目だけを保存します。署名・秘密値・カード詳細・任意のmetadataは保存しません。外部KOMOJUとのテスト接続はまだ実施していません。
 
 ## 検査
 

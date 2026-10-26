@@ -15,6 +15,7 @@ import { createFirebaseVerifier } from "./platform/auth.js";
 import { loadConfig } from "./platform/config.js";
 import { consoleLogger } from "./platform/logger.js";
 import { PublicSettingsRepository } from "./platform/settings.js";
+import { KomojuInboxRepository } from "./webhooks/komoju-repository.js";
 
 if (process.env.NODE_ENV !== "production") {
   dotenv.config({
@@ -42,6 +43,7 @@ const app = createApp({
   invoices,
   publicSettings: new PublicSettingsRepository(pool),
   logger: consoleLogger,
+  komojuInbox: new KomojuInboxRepository(pool),
 });
 
 const server = serve({

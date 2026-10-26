@@ -138,6 +138,7 @@ function makeApp(
       getCustomerContract: async () => ({ contract: null }),
     },
     publicSettings: new PublicSettingsRepository(pool),
+    komojuInbox: { receive: async () => "accepted" as const },
     logger,
   };
   return createApp(dependencies);

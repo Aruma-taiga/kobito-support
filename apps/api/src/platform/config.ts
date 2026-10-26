@@ -6,6 +6,12 @@ const optionalText = z.preprocess(
   z.string().trim().min(1).optional(),
 );
 
+const optionalSecret = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().min(1).optional(),
+);
+
 const optionalEmail = z.preprocess(
   (value) =>
     typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -44,6 +50,7 @@ const environmentSchema = z
     BANK_ACCOUNT_TYPE: optionalText,
     BANK_ACCOUNT_NUMBER: optionalText,
     DEV_INVOICE_PREVIEW: z.enum(["0", "1"]).default("0"),
+    KOMOJU_WEBHOOK_SECRET: optionalSecret,
   })
   .superRefine((environment, context) => {
     if (
@@ -85,6 +92,7 @@ export interface RuntimeConfig {
   bankAccountType?: string;
   bankAccountNumber?: string;
   devInvoicePreview?: boolean;
+  komojuWebhookSecret?: string;
 }
 
 export function loadConfig(
@@ -141,5 +149,8 @@ export function loadConfig(
       ? {}
       : { bankAccountNumber: value.BANK_ACCOUNT_NUMBER }),
     devInvoicePreview: value.DEV_INVOICE_PREVIEW === "1",
+    ...(value.KOMOJU_WEBHOOK_SECRET === undefined
+      ? {}
+      : { komojuWebhookSecret: value.KOMOJU_WEBHOOK_SECRET }),
   };
 }
