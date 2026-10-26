@@ -32,7 +32,7 @@
 | a05 | 依頼の記録と見積 | /admin/requests（/:id） | admin（2FA） | — | GET/POST /admin/requests, POST /admin/requests/:id/estimates, POST /admin/requests/:id/complete | 見積送信で awaiting_approval（LINE通知）。完了で予約を戻し実績を消費 | 見積は作業内容（必須）、完了の状態（必須）、含まれないもの、ご用意いただくもの |
 | a06 | 銀行振込の入金確認 | /admin/bank-transfers | admin（2FA） | — | GET /admin/bank-transfers/pending, POST /admin/invoices/:id/confirm-payment | 請求を paid、クレジットを付与。初月なら契約成立（active、契約日、期間1） | 入金日を入力。二重に押しても1回だけ反映 |
 | a07 | 請求書一覧 | /admin/invoices | admin（2FA） | — | GET /admin/invoices, POST /admin/invoices/:id/void | 取消（void）と出し直し（新しい番号） | 番号は欠番にしない。取消した番号は残す |
-| a08 | 紹介・報酬 | /admin/referrals | admin（2FA） | — | GET /admin/referrals?month= | — | 月ごと・パートナーごとの報酬。基準は入金のあった月額（表示価格・税抜） |
+| a08 | 紹介・報酬 | /admin/referrals | admin（2FA） | — | GET /admin/referrals?month= | — | 月ごと・パートナーごとの報酬。基準は入金のあった月額（表示価格・税抜）。支払いは報酬＋消費税 |
 
 ## 2. ログイン後の行き先
 
