@@ -1,4 +1,8 @@
-import { createEstimateSchema, createRequestSchema } from "@kobito/shared";
+import {
+  completeRequestSchema,
+  createEstimateSchema,
+  createRequestSchema,
+} from "@kobito/shared";
 import { z } from "zod";
 import type { CustomerScope } from "../../platform/scope.js";
 import { ApiError, type Principal } from "../../platform/types.js";
@@ -43,5 +47,11 @@ export class RequestService implements RequestModule {
   approveEstimate(scope: CustomerScope, principal: Principal, id: string) {
     if (!uuid.safeParse(id).success) throw new ApiError(404, "not_found");
     return this.repository.approveEstimate(scope, principal, id);
+  }
+  completeRequest(principal: Principal, id: string, body: unknown) {
+    if (!uuid.safeParse(id).success) throw new ApiError(404, "not_found");
+    const parsed = completeRequestSchema.safeParse(body);
+    if (!parsed.success) throw new ApiError(422, "validation_error");
+    return this.repository.completeRequest(principal, id, parsed.data);
   }
 }

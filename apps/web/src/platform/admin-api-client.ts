@@ -12,9 +12,13 @@ import {
   adminRequestListSchema,
   adminSessionSchema,
   approveApplicationResponseSchema,
+  type CompleteRequest,
+  type CompleteRequestResponse,
   type ConfirmBankPaymentRequest,
   type CreateEstimate,
   type CreateRequest,
+  completeRequestResponseSchema,
+  completeRequestSchema,
   confirmBankPaymentRequestSchema,
   confirmBankPaymentResponseSchema,
   createEstimateResponseSchema,
@@ -276,6 +280,18 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
           headers: { "Idempotency-Key": idempotencyKey },
           body: JSON.stringify(parsed.data),
         },
+      );
+    },
+    completeRequest(
+      requestId: string,
+      value: CompleteRequest,
+    ): Promise<CompleteRequestResponse> {
+      const parsed = completeRequestSchema.safeParse(value);
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      return request(
+        `/api/v1/admin/requests/${encodeURIComponent(requestId)}/complete`,
+        completeRequestResponseSchema,
+        { method: "POST", body: JSON.stringify(parsed.data) },
       );
     },
     getInvoices(): Promise<InvoiceList> {

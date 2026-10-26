@@ -140,6 +140,48 @@ describe("admin API client", () => {
     });
   });
 
+  it("completes a request through the admin API with separate date, time, and credit actuals", async () => {
+    const requestId = "33333333-3333-4333-8333-333333333333";
+    const completion = {
+      requestId,
+      status: "done",
+      completedOn: "2026-10-27",
+      actualMinutes: 45,
+      actualCredits: 2,
+      reservedCredits: 1,
+      periodId: "55555555-5555-4555-8555-555555555555",
+      reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
+      replayed: false,
+    };
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json(completion));
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher,
+    });
+
+    await expect(
+      client.completeRequest(requestId, {
+        completedOn: "2026-10-27",
+        actualMinutes: 45,
+        actualCredits: 2,
+      }),
+    ).resolves.toEqual(completion);
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      `https://api.example.test/api/v1/admin/requests/${requestId}/complete`,
+    );
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      headers: { Authorization: "Bearer admin-id-token" },
+      body: JSON.stringify({
+        completedOn: "2026-10-27",
+        actualMinutes: 45,
+        actualCredits: 2,
+      }),
+      credentials: "omit",
+    });
+  });
+
   it("loads pending bank transfers with the administrator session token", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({ items: [] }),

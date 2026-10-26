@@ -1,5 +1,6 @@
 import {
   approveEstimateSchema,
+  type CompleteRequest,
   type CreateEstimate,
   type CreateRequest,
 } from "@kobito/shared";
@@ -54,6 +55,23 @@ export function createRequestAdminRoutes(
   );
   routes.get("/requests/:id", async (c) =>
     c.json(await requests.getAdmin(c.req.param("id"))),
+  );
+  routes.post(
+    "/requests/:id/complete",
+    bodyLimit({
+      maxSize: 4096,
+      onError: (c) => c.json({ error: { code: "invalid_request" } }, 400),
+    }),
+    async (c) => {
+      const body = await jsonBody(c);
+      return c.json(
+        await requests.completeRequest(
+          c.get("principal"),
+          c.req.param("id"),
+          body as CompleteRequest,
+        ),
+      );
+    },
   );
   routes.post(
     "/requests/:id/estimates",

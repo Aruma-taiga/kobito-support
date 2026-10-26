@@ -14,7 +14,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AdminAuthClient } from "../auth/admin-session.js";
 import type { AuthClient } from "../auth/session.js";
 import { AuthProvider, RequireAuth } from "../auth/session.js";
-import type { AdminApiClient } from "../platform/admin-api-client.js";
+import {
+  type AdminApiClient,
+  AdminApiError,
+} from "../platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
 import { ApiClientError } from "../platform/api-client.js";
 import { AdminApp } from "./AdminApp.js";
@@ -48,6 +51,7 @@ const adminRequest = {
   status: "awaiting_approval" as const,
   createdAt: "2026-10-26T00:00:00.000Z",
   latestEstimate: estimate,
+  completion: null,
   customer: { customerId, shopName: "喫茶ひだまり", contactName: "山田 花子" },
   estimates: [estimate],
 };
@@ -167,6 +171,26 @@ function customerSetup(path: string, overrides: Record<string, unknown> = {}) {
     </MemoryRouter>,
   );
   return { apiClient, authClient };
+}
+
+async function fillCompletionForm(
+  actualMinutes: number,
+  actualCredits: number,
+) {
+  expect(
+    await screen.findByLabelText(webMessages.adminRequestCompletedOn),
+  ).toBeTruthy();
+  fireEvent.change(screen.getByLabelText(webMessages.adminRequestCompletedOn), {
+    target: { value: "2026-10-27" },
+  });
+  fireEvent.change(
+    screen.getByLabelText(webMessages.adminRequestActualMinutes),
+    { target: { value: String(actualMinutes) } },
+  );
+  fireEvent.change(
+    screen.getByLabelText(webMessages.adminRequestActualCredits),
+    { target: { value: String(actualCredits) } },
+  );
 }
 
 describe("request and estimate routes", () => {
@@ -409,6 +433,382 @@ describe("request and estimate routes", () => {
       screen.queryByRole("button", { name: webMessages.adminEstimateRevise }),
     ).toBeNull();
     expect(apiClient.sendEstimate).not.toHaveBeenCalled();
+  });
+
+  it("offers completion entry for an in-progress request with separate time and credit actuals", async () => {
+    const { apiClient } = adminSetup(`/admin/requests/${requestId}`, {
+      getAdminRequest: vi.fn(async () => ({
+        ...adminRequest,
+        status: "in_progress" as const,
+      })),
+    });
+
+    expect(await screen.findByText("予約フォームの表示を整える")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: webMessages.adminRequestComplete }),
+    ).toBeTruthy();
+    expect(
+      screen.getByLabelText(webMessages.adminRequestCompletedOn),
+    ).toBeTruthy();
+    expect(
+      screen.getByLabelText(webMessages.adminRequestActualMinutes),
+    ).toBeTruthy();
+    expect(
+      screen.getByLabelText(webMessages.adminRequestActualCredits),
+    ).toBeTruthy();
+    expect(apiClient.getAdminRequest).toHaveBeenCalledWith(requestId);
+  });
+
+  it.each([
+    0, 1, 2,
+  ])("records %i actual credits separately from actual minutes after explicit confirmation", async (actualCredits) => {
+    const completed = {
+      ...adminRequest,
+      status: "done" as const,
+      completion: {
+        completedOn: "2026-10-27",
+        actualMinutes: 45,
+        actualCredits,
+        reservedCredits: 1,
+        periodId,
+        reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
+      },
+    };
+    const getAdminRequest = vi.fn().mockResolvedValueOnce({
+      ...adminRequest,
+      status: "in_progress" as const,
+    });
+    const completeRequest = vi.fn(async () => ({
+      requestId,
+      status: "done" as const,
+      ...completed.completion,
+      replayed: false,
+    }));
+    const { apiClient } = adminSetup(`/admin/requests/${requestId}`, {
+      getAdminRequest,
+      completeRequest,
+    });
+    expect(
+      await screen.findByLabelText(webMessages.adminRequestCompletedOn),
+    ).toBeTruthy();
+    fireEvent.change(
+      screen.getByLabelText(webMessages.adminRequestCompletedOn),
+      {
+        target: { value: "2026-10-27" },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText(webMessages.adminRequestActualMinutes),
+      {
+        target: { value: "45" },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText(webMessages.adminRequestActualCredits),
+      {
+        target: { value: String(actualCredits) },
+      },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminRequestComplete }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(adminRequest.summary)).toBeTruthy();
+    expect(within(dialog).getByText(/喫茶ひだまり（山田 花子）/)).toBeTruthy();
+    expect(within(dialog).getAllByText("1 クレジット").length).toBeGreaterThan(
+      0,
+    );
+    if (actualCredits > 1) {
+      expect(
+        within(dialog).getByText(webMessages.adminRequestActualExceedsEstimate),
+      ).toBeTruthy();
+    }
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: webMessages.adminRequestComplete,
+      }),
+    );
+    expect(await screen.findByText(webMessages.adminRequestCompletionSuccess));
+    expect(completeRequest).toHaveBeenCalledOnce();
+    expect(completeRequest).toHaveBeenCalledWith(requestId, {
+      completedOn: "2026-10-27",
+      actualMinutes: 45,
+      actualCredits,
+    });
+    expect(
+      screen.getByText(webMessages.adminRequestActualMinutes).nextElementSibling
+        ?.textContent,
+    ).toContain("45");
+    expect(screen.getByText("2026-10-27", { exact: true })).toBeTruthy();
+    expect(
+      screen.getByText(webMessages.adminRequestReservedPeriod),
+    ).toBeTruthy();
+    if (actualCredits > 1) {
+      expect(
+        screen.getByText(webMessages.adminRequestActualExceedsEstimate),
+      ).toBeTruthy();
+    }
+    expect(apiClient.getAdminRequest).toHaveBeenCalledOnce();
+  });
+
+  it("cancels completion confirmation without mutation and prevents double submit while busy", async () => {
+    let resolveCompletion: ((value: unknown) => void) | undefined;
+    const completeRequest = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveCompletion = resolve;
+        }),
+    );
+    adminSetup(`/admin/requests/${requestId}`, {
+      getAdminRequest: vi.fn(async () => ({
+        ...adminRequest,
+        status: "in_progress" as const,
+      })),
+      completeRequest,
+    });
+    expect(
+      await screen.findByLabelText(webMessages.adminRequestCompletedOn),
+    ).toBeTruthy();
+    await fillCompletionForm(0, 0);
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminRequestComplete }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "戻る" }));
+    expect(completeRequest).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminRequestComplete }),
+    );
+    const confirmation = await screen.findByRole("dialog");
+    const confirmButton = within(confirmation).getByRole("button", {
+      name: webMessages.adminRequestComplete,
+    });
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
+    await waitFor(() => expect(completeRequest).toHaveBeenCalledOnce());
+    expect(confirmButton.hasAttribute("disabled")).toBe(true);
+    resolveCompletion?.({
+      requestId,
+      status: "done",
+      completedOn: "2026-10-27",
+      actualMinutes: 0,
+      actualCredits: 0,
+      reservedCredits: 1,
+      periodId,
+      reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
+      replayed: false,
+    });
+  });
+
+  it.each([
+    "2026-10-25",
+    "9999-12-31",
+  ])("rejects completion date %s outside the received-to-Tokyo-today range", async (invalidDate) => {
+    const completeRequest = vi.fn();
+    adminSetup(`/admin/requests/${requestId}`, {
+      getAdminRequest: vi.fn(async () => ({
+        ...adminRequest,
+        status: "in_progress" as const,
+      })),
+      completeRequest,
+    });
+    expect(
+      await screen.findByLabelText(webMessages.adminRequestCompletedOn),
+    ).toBeTruthy();
+    fireEvent.change(
+      screen.getByLabelText(webMessages.adminRequestCompletedOn),
+      {
+        target: { value: invalidDate },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText(webMessages.adminRequestActualMinutes),
+      { target: { value: "0" } },
+    );
+    fireEvent.change(
+      screen.getByLabelText(webMessages.adminRequestActualCredits),
+      { target: { value: "0" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminRequestComplete }),
+    );
+    expect(
+      screen.getAllByText(webMessages.adminRequestCompletionValidation).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(completeRequest).not.toHaveBeenCalled();
+  });
+
+  it("retries the identical completion payload after a network error", async () => {
+    const completed = {
+      ...adminRequest,
+      status: "done" as const,
+      completion: {
+        completedOn: "2026-10-27",
+        actualMinutes: 45,
+        actualCredits: 1,
+        reservedCredits: 1,
+        periodId,
+        reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
+      },
+    };
+    const getAdminRequest = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...adminRequest,
+        status: "in_progress" as const,
+      })
+      .mockResolvedValueOnce(completed);
+    const response = {
+      requestId,
+      status: "done" as const,
+      ...completed.completion,
+      replayed: false,
+    };
+    const completeRequest = vi
+      .fn()
+      .mockRejectedValueOnce(new AdminApiError("network"))
+      .mockResolvedValueOnce(response);
+    adminSetup(`/admin/requests/${requestId}`, {
+      getAdminRequest,
+      completeRequest,
+    });
+    await fillCompletionForm(45, 1);
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminRequestComplete }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    const confirm = () =>
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: webMessages.adminRequestComplete,
+      });
+    fireEvent.click(confirm());
+    expect(
+      await within(dialog).findByText(webMessages.requestActionError),
+    ).toBeTruthy();
+    fireEvent.click(confirm());
+    expect(
+      await screen.findByText(webMessages.adminRequestCompletionSuccess),
+    ).toBeTruthy();
+    expect(completeRequest).toHaveBeenCalledTimes(2);
+    expect(completeRequest.mock.calls[0]).toEqual(
+      completeRequest.mock.calls[1],
+    );
+  });
+
+  it("refreshes completed state after a completion conflict", async () => {
+    const completed = {
+      ...adminRequest,
+      status: "done" as const,
+      completion: {
+        completedOn: "2026-10-27",
+        actualMinutes: 15,
+        actualCredits: 1,
+        reservedCredits: 1,
+        periodId,
+        reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
+      },
+    };
+    const getAdminRequest = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...adminRequest,
+        status: "in_progress" as const,
+      })
+      .mockResolvedValueOnce(completed);
+    const completeRequest = vi.fn(async () => {
+      throw new AdminApiError("request_conflict");
+    });
+    adminSetup(`/admin/requests/${requestId}`, {
+      getAdminRequest,
+      completeRequest,
+    });
+    await fillCompletionForm(15, 1);
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminRequestComplete }),
+    );
+    fireEvent.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: webMessages.adminRequestComplete,
+      }),
+    );
+    expect(
+      await screen.findByText(webMessages.adminRequestCompletionConflict),
+    ).toBeTruthy();
+    expect(screen.getByText("2026-10-27", { exact: true })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: webMessages.adminRequestComplete,
+      }),
+    ).toBeNull();
+    expect(getAdminRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a completed customer's actual completion details as read-only", async () => {
+    const completedRequest = {
+      ...customerRequest,
+      status: "done" as const,
+      completion: {
+        completedOn: "2026-10-27",
+        actualMinutes: 45,
+        actualCredits: 1,
+        reservedCredits: 1,
+        periodId,
+        reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
+      },
+    };
+    customerSetup(`/me/requests/${requestId}`, {
+      getCustomerRequest: vi.fn(async () => ({
+        request: completedRequest,
+        latestEstimate: estimate,
+        currentPeriodId: periodId,
+        availableCredits: 2,
+        canApprove: false,
+      })),
+    });
+    expect(await screen.findByText("2026-10-27", { exact: true })).toBeTruthy();
+    expect(
+      screen.getByText(webMessages.myRequestCompletionActualMinutes),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(webMessages.myRequestCompletionActualCredits),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(webMessages.myRequestCompletionActualMinutes)
+        .nextElementSibling?.textContent,
+    ).toContain("45");
+    expect(
+      screen.getByText(webMessages.myRequestCompletionActualCredits)
+        .nextElementSibling?.textContent,
+    ).toContain("1");
+    expect(
+      screen.queryByRole("button", { name: webMessages.adminRequestComplete }),
+    ).toBeNull();
+  });
+
+  it("shows actual completion credits and date in the customer's own request history", async () => {
+    const completedRequest = {
+      ...customerRequest,
+      status: "done" as const,
+      completion: {
+        completedOn: "2026-10-27",
+        actualMinutes: 45,
+        actualCredits: 0,
+        reservedCredits: 1,
+        periodId,
+        reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
+      },
+    };
+    customerSetup("/me/requests", {
+      getCustomerRequests: vi.fn(async () => ({ items: [completedRequest] })),
+    });
+    expect(await screen.findByText(completedRequest.summary)).toBeTruthy();
+    expect(screen.getByText("2026-10-27")).toBeTruthy();
+    expect(
+      screen.getByText(webMessages.myRequestCompletionActualCredits)
+        .nextElementSibling?.textContent,
+    ).toContain("0");
+    expect(screen.queryByText(webMessages.estimateCredits)).toBeNull();
   });
 
   it("lets a customer review an estimate, cancel confirmation, then approve only after confirming", async () => {

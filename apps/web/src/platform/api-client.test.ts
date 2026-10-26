@@ -33,6 +33,7 @@ describe("authenticated web API client", () => {
               status: "awaiting_approval",
               createdAt: "2026-10-26T00:00:00.000Z",
               latestEstimate: estimate,
+              completion: null,
               approvedEstimateId: null,
             },
           ],

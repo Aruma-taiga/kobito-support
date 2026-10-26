@@ -22,6 +22,7 @@ import {
 import type { Pool, PoolClient } from "pg";
 import { withAdminAudit } from "../../platform/audit.js";
 import type { RuntimeConfig } from "../../platform/config.js";
+import { safePgInteger } from "../../platform/db/integers.js";
 import type { CustomerScope } from "../../platform/scope.js";
 import { ApiError, type Principal } from "../../platform/types.js";
 import type { InvoiceModule } from "./contracts.js";
@@ -432,11 +433,11 @@ export class InvoiceRepository implements InvoiceModule {
       ends_on: string | null;
       price_incl_tax: number | null;
       credits: number | null;
-      balance: number | null;
+      balance: string | null;
     }>(
       `select c.id,c.status,c.anchor_date::text as anchor_date, coalesce((i.issuer_snapshot->>'preview')::boolean,false) as preview,
               i.issuer_snapshot->'acceptedPlan' as accepted_plan, bp.id as period_id,bp.seq,bp.starts_on::text as starts_on,
-              bp.ends_on::text as ends_on,bp.price_incl_tax,bp.credits,coalesce(cb.balance,0)::int as balance
+              bp.ends_on::text as ends_on,bp.price_incl_tax,bp.credits,coalesce(cb.balance,0)::text as balance
          from contracts c
          left join lateral (select invoice.* from invoices invoice where invoice.contract_id=c.id and invoice.kind='initial' order by invoice.created_at desc limit 1) i on true
          left join lateral (select period.* from billing_periods period where period.contract_id=c.id and c.status in ('active','cancel_scheduled') and period.starts_on <= $2::date and period.ends_on >= $2::date order by period.seq desc limit 1) bp on true
@@ -471,7 +472,7 @@ export class InvoiceRepository implements InvoiceModule {
             endsOn: row.ends_on,
             priceInclTax: row.price_incl_tax,
             credits: row.credits,
-            balance: row.balance ?? 0,
+            balance: safePgInteger(row.balance ?? "0"),
           }
         : null;
     return customerContractResponseSchema.parse({

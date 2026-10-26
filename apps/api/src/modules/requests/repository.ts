@@ -1,13 +1,22 @@
 import { createHash } from "node:crypto";
 import type {
   ApproveEstimateResponse,
+  CompleteRequest,
+  CompleteRequestResponse,
   CreateEstimate,
   CreateRequest,
+  RequestCompletion,
   RequestEstimate,
   RequestStatus,
 } from "@kobito/shared";
-import { canApprove, canTransitionRequest, toTokyoDate } from "@kobito/shared";
+import {
+  canApprove,
+  canTransitionRequest,
+  completionEntriesForPeriod,
+  toTokyoDate,
+} from "@kobito/shared";
 import type { Pool, PoolClient } from "pg";
+import { safePgInteger } from "../../platform/db/integers.js";
 import { withTransaction } from "../../platform/db/transaction.js";
 import type { CustomerScope } from "../../platform/scope.js";
 import { ApiError, type Principal } from "../../platform/types.js";
@@ -38,6 +47,13 @@ interface RequestRow {
   urgent: boolean;
   status: RequestStatus;
   approved_estimate_id: string | null;
+  completed_on?: string | null;
+  actual_minutes?: number | null;
+  actual_credits?: number | null;
+  reserved_period_id?: string | null;
+  reserved_credits?: number | null;
+  reserved_period_starts_on?: string | null;
+  reserved_period_ends_on?: string | null;
   created_at: Date | string;
   latest_id?: string | null;
   latest_version?: number | null;
@@ -105,6 +121,20 @@ function summary(row: RequestRow) {
       supersededAt: iso(row.latest_superseded_at),
     };
   }
+  let completion: RequestCompletion | null = null;
+  if (row.status === "done") {
+    completion = {
+      completedOn: required(row.completed_on),
+      actualMinutes: required(row.actual_minutes),
+      actualCredits: required(row.actual_credits),
+      reservedCredits: required(row.reserved_credits),
+      periodId: required(row.reserved_period_id),
+      reservedPeriod: {
+        startsOn: required(row.reserved_period_starts_on),
+        endsOn: required(row.reserved_period_ends_on),
+      },
+    };
+  }
   return {
     id: row.id,
     contractId: row.contract_id,
@@ -114,11 +144,16 @@ function summary(row: RequestRow) {
     status: row.status,
     createdAt: requiredIso(row.created_at),
     latestEstimate,
+    completion,
   };
 }
 const selectRequest = `select r.id,r.contract_id,r.received_on::text,r.summary,r.urgent,r.status,r.approved_estimate_id,r.created_at,
+ r.completed_on::text as completed_on,r.actual_minutes,r.actual_credits,
  e.id as latest_id,e.version as latest_version,e.credits as latest_credits,e.due_on::text as latest_due_on,e.work_items as latest_work_items,e.done_criteria as latest_done_criteria,e.exclusions as latest_exclusions,e.customer_prep as latest_customer_prep,e.sent_at as latest_sent_at,e.approved_at as latest_approved_at,e.superseded_at as latest_superseded_at
- from service_requests r left join lateral (select * from estimates where request_id=r.id and sent_at is not null order by version desc limit 1) e on true`;
+ ,reservation.period_id as reserved_period_id,reservation.reserved_credits,
+ reservation.starts_on::text as reserved_period_starts_on,reservation.ends_on::text as reserved_period_ends_on
+ from service_requests r left join lateral (select * from estimates where request_id=r.id and sent_at is not null order by version desc limit 1) e on true
+ left join lateral (select ce.period_id,-ce.amount as reserved_credits,p.starts_on,p.ends_on from credit_entries ce join billing_periods p on p.id=ce.period_id where ce.request_id=r.id and ce.kind='reserve' order by ce.occurred_at limit 1) reservation on true`;
 function hash(command: unknown) {
   return createHash("sha256").update(JSON.stringify(command)).digest("hex");
 }
@@ -150,6 +185,7 @@ async function queueNotification(
   kind: "NT-06" | "NT-07",
   lineUserId: string | null,
   version: number | null = null,
+  event: "approved" | "completed" = "approved",
 ) {
   const preview = await client.query<{ preview: boolean }>(
     `select coalesce((i.issuer_snapshot->>'preview')::boolean,false) preview from contracts c left join lateral (select issuer_snapshot from invoices where contract_id=c.id and kind='initial' order by created_at desc limit 1) i on true join service_requests r on r.contract_id=c.id where r.id=$1`,
@@ -163,10 +199,13 @@ async function queueNotification(
       customerId,
       kind,
       channel,
-      `${kind}:${requestId}:${kind === "NT-06" ? `estimate:${version}` : "approved"}`,
+      `${kind}:${requestId}:${kind === "NT-06" ? `estimate:${version}` : event}`,
       JSON.stringify({
         requestId,
         ...(version === null ? {} : { estimateVersion: version }),
+        ...(kind === "NT-07"
+          ? { status: event === "approved" ? "in_progress" : "done" }
+          : {}),
       }),
     ],
   );
@@ -434,7 +473,7 @@ export class RequestRepository implements RequestModule {
     const result = await this.pool.query<
       RequestRow & { approved_estimate_id: string | null }
     >(
-      `${selectRequest} join contracts c on c.id=r.contract_id where c.customer_id=$1 and c.status in ('active','cancel_scheduled') and ($2::boolean=false or r.status in ('received','awaiting_approval','in_progress')) order by r.received_on desc,r.created_at desc`,
+      `${selectRequest} join contracts c on c.id=r.contract_id where c.customer_id=$1 and ($2::boolean=false or r.status in ('received','awaiting_approval','in_progress')) order by r.received_on desc,r.created_at desc`,
       [scope.customerId, openOnly],
     );
     return {
@@ -454,16 +493,16 @@ export class RequestRepository implements RequestModule {
       RequestRow & {
         approved_estimate_id: string | null;
         period_id: string | null;
-        available_credits: number | null;
+        available_credits: string | null;
       }
     >(
-      `${customerRequestQuery} join contracts c on c.id=r.contract_id left join lateral (select p.id as period_id,(select coalesce(sum(ce.amount),0)::int from credit_entries ce where ce.period_id=p.id) available_credits from billing_periods p where p.contract_id=c.id and $3::date between p.starts_on and p.ends_on order by p.seq desc limit 1) current_period on true where r.id=$2 and c.customer_id=$1 and c.status in ('active','cancel_scheduled')`,
+      `${customerRequestQuery} join contracts c on c.id=r.contract_id left join lateral (select p.id as period_id,(select coalesce(sum(ce.amount),0)::text from credit_entries ce where ce.period_id=p.id) available_credits from billing_periods p where p.contract_id=c.id and $3::date between p.starts_on and p.ends_on order by p.seq desc limit 1) current_period on true where r.id=$2 and c.customer_id=$1`,
       [scope.customerId, id, currentDate],
     );
     const row = result.rows[0];
     if (!row) throw new ApiError(404, "not_found");
     const currentPeriodId = row.period_id;
-    const availableCredits = row.available_credits ?? 0;
+    const availableCredits = safePgInteger(row.available_credits ?? "0");
     const latest = summary(row).latestEstimate;
     const approvalReady = Boolean(
       latest &&
@@ -551,11 +590,13 @@ export class RequestRepository implements RequestModule {
         [req.rows[0].contract_id, approvalDate],
       );
       if (!period.rows[0]) throw new ApiError(409, "request_conflict");
-      const balance = await client.query<{ balance: number }>(
-        "select coalesce(sum(amount),0)::int balance from credit_entries where contract_id=$1 and period_id=$2",
+      const balance = await client.query<{ balance: string }>(
+        "select coalesce(sum(amount),0)::text balance from credit_entries where contract_id=$1 and period_id=$2",
         [req.rows[0].contract_id, period.rows[0].id],
       );
-      if (!canApprove(e.credits, balance.rows[0]?.balance ?? 0))
+      if (
+        !canApprove(e.credits, safePgInteger(balance.rows[0]?.balance ?? "0"))
+      )
         throw new ApiError(409, "insufficient_credits");
       const update = await client.query<{ approved_at: Date }>(
         "update estimates set approved_at=now(),approved_by=$2 where id=$1 and approved_at is null returning approved_at",
@@ -587,6 +628,229 @@ export class RequestRepository implements RequestModule {
         status: "in_progress",
         approvedAt: requiredIso(update.rows[0].approved_at),
         reservedCredits: e.credits,
+        replayed: false,
+      };
+    });
+  }
+
+  async completeRequest(
+    principal: Principal,
+    id: string,
+    body: CompleteRequest,
+  ): Promise<CompleteRequestResponse> {
+    requireAdmin(principal);
+    const today = toTokyoDate(this.now());
+    if (body.completedOn > today) throw new ApiError(422, "validation_error");
+
+    return withTransaction(this.pool, async (client) => {
+      const requestHead = await client.query<{ contract_id: string }>(
+        "select contract_id from service_requests where id=$1",
+        [id],
+      );
+      const contractId = requestHead.rows[0]?.contract_id;
+      if (!contractId) throw new ApiError(404, "not_found");
+
+      // Every request mutation locks contract first, then request, to serialize
+      // settlement with approval and other work on this contract.
+      const contract = await client.query<{ id: string }>(
+        "select id from contracts where id=$1 for update",
+        [contractId],
+      );
+      if (!contract.rows[0]) throw new ApiError(404, "not_found");
+      const selectedRequest = await client.query<{
+        contract_id: string;
+        customer_id: string;
+        line_user_id: string | null;
+        received_on: string;
+        status: RequestStatus;
+        approved_estimate_id: string | null;
+        completed_on: string | null;
+        actual_minutes: number | null;
+        actual_credits: number | null;
+      }>(
+        `select r.contract_id,r.received_on::text,r.status,r.approved_estimate_id,
+                r.completed_on::text,r.actual_minutes,r.actual_credits,
+                c.customer_id,cu.line_user_id
+           from service_requests r join contracts c on c.id=r.contract_id
+           join customers cu on cu.id=c.customer_id
+          where r.id=$1 for update of r`,
+        [id],
+      );
+      const request = selectedRequest.rows[0];
+      if (!request) throw new ApiError(404, "not_found");
+      if (request.contract_id !== contractId)
+        throw new ApiError(409, "request_conflict");
+      if (
+        body.completedOn < request.received_on ||
+        (request.status !== "done" &&
+          (!canTransitionRequest(request.status, "done") ||
+            request.status !== "in_progress" ||
+            !request.approved_estimate_id))
+      )
+        throw new ApiError(409, "request_conflict");
+
+      const reservationResult = await client.query<{
+        period_id: string;
+        reserved_credits: number;
+        estimate_credits: number;
+        estimate_id: string;
+        estimate_approved_at: Date | string | null;
+        starts_on: string;
+        ends_on: string;
+      }>(
+        `select ce.period_id,-ce.amount as reserved_credits,e.credits as estimate_credits,
+                e.id as estimate_id,e.approved_at as estimate_approved_at,
+                p.starts_on::text,p.ends_on::text
+           from credit_entries ce join billing_periods p on p.id=ce.period_id
+           join estimates e on e.id=$2 and e.request_id=ce.request_id
+          where ce.request_id=$1 and ce.kind='reserve' and ce.contract_id=$3
+            and p.contract_id=$3 and ce.amount < 0`,
+        [id, request.approved_estimate_id, contractId],
+      );
+      if (reservationResult.rows.length !== 1)
+        throw new ApiError(409, "request_conflict");
+      const reservation = required(reservationResult.rows[0]);
+      if (
+        reservation.estimate_id !== request.approved_estimate_id ||
+        !reservation.estimate_approved_at ||
+        reservation.reserved_credits !== reservation.estimate_credits
+      )
+        throw new ApiError(409, "request_conflict");
+
+      if (request.status === "done") {
+        if (
+          request.completed_on !== body.completedOn ||
+          request.actual_minutes !== body.actualMinutes ||
+          request.actual_credits !== body.actualCredits
+        )
+          throw new ApiError(409, "request_conflict");
+        const existingSettlement = await client.query<{
+          kind: string;
+          amount: number;
+        }>(
+          "select kind,amount from credit_entries where request_id=$1 and kind in ('release','consume','expire') order by kind",
+          [id],
+        );
+        const expected: Array<{ kind: string; amount: number }> = [
+          { kind: "consume", amount: -body.actualCredits },
+          { kind: "release", amount: reservation.reserved_credits },
+        ];
+        const expiryRows = existingSettlement.rows.filter(
+          (entry) => entry.kind === "expire",
+        );
+        const expectedExpiryAmount =
+          body.actualCredits < reservation.reserved_credits
+            ? -(reservation.reserved_credits - body.actualCredits)
+            : null;
+        if (
+          expiryRows.length > 1 ||
+          (expiryRows.length === 1 &&
+            (expectedExpiryAmount === null ||
+              expiryRows[0]?.amount !== expectedExpiryAmount))
+        )
+          throw new ApiError(409, "request_conflict");
+        expected.push(...expiryRows);
+        expected.sort((left, right) => left.kind.localeCompare(right.kind));
+        if (
+          existingSettlement.rows.length !== expected.length ||
+          existingSettlement.rows.some(
+            (entry, index) =>
+              entry.kind !== expected[index]?.kind ||
+              entry.amount !== expected[index]?.amount,
+          )
+        )
+          throw new ApiError(409, "request_conflict");
+        return {
+          requestId: id,
+          status: "done",
+          completedOn: body.completedOn,
+          actualMinutes: body.actualMinutes,
+          actualCredits: body.actualCredits,
+          reservedCredits: reservation.reserved_credits,
+          periodId: reservation.period_id,
+          reservedPeriod: {
+            startsOn: reservation.starts_on,
+            endsOn: reservation.ends_on,
+          },
+          replayed: true,
+        };
+      }
+
+      const [release, consume] = completionEntriesForPeriod(
+        reservation.period_id,
+        reservation.reserved_credits,
+        body.actualCredits,
+      );
+      await client.query(
+        `insert into credit_entries(contract_id,period_id,kind,amount,request_id,note)
+         values($1,$2,$3,$4,$5,'Request completion settlement'),($1,$2,$6,$7,$5,'Request completion settlement')`,
+        [
+          contractId,
+          release.periodId,
+          release.kind,
+          release.amount,
+          id,
+          consume.kind,
+          consume.amount,
+        ],
+      );
+      if (
+        reservation.ends_on < today &&
+        body.actualCredits < reservation.reserved_credits
+      ) {
+        await client.query(
+          `insert into credit_entries(contract_id,period_id,kind,amount,request_id,note)
+           values($1,$2,'expire',$3,$4,'Unused request reservation after period expiry')`,
+          [
+            contractId,
+            reservation.period_id,
+            -(reservation.reserved_credits - body.actualCredits),
+            id,
+          ],
+        );
+      }
+      const update = await client.query(
+        `update service_requests
+            set status='done',completed_on=$2,actual_minutes=$3,actual_credits=$4
+          where id=$1 and status='in_progress' returning id`,
+        [id, body.completedOn, body.actualMinutes, body.actualCredits],
+      );
+      if (!update.rows[0]) throw new ApiError(409, "request_conflict");
+      await queueNotification(
+        client,
+        request.customer_id,
+        id,
+        "NT-07",
+        request.line_user_id,
+        null,
+        "completed",
+      );
+      await client.query(
+        "insert into audit_logs(actor,action,target_type,target_id,detail) values($1,'request.completed','service_request',$2,$3::jsonb)",
+        [
+          principal.authUserId,
+          id,
+          JSON.stringify({
+            completedOn: body.completedOn,
+            actualMinutes: body.actualMinutes,
+            actualCredits: body.actualCredits,
+            reservedCredits: reservation.reserved_credits,
+            periodId: reservation.period_id,
+          }),
+        ],
+      );
+      return {
+        requestId: id,
+        status: "done",
+        completedOn: body.completedOn,
+        actualMinutes: body.actualMinutes,
+        actualCredits: body.actualCredits,
+        reservedCredits: reservation.reserved_credits,
+        periodId: reservation.period_id,
+        reservedPeriod: {
+          startsOn: reservation.starts_on,
+          endsOn: reservation.ends_on,
+        },
         replayed: false,
       };
     });
