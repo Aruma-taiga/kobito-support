@@ -283,7 +283,7 @@ create table partner_rewards (
   payment_id    uuid not null unique references payments(id),
   target_month  date not null,               -- 入金のあった月（1日で持つ）
   month_index   integer not null,            -- 1〜max_months
-  base_amount   integer not null,            -- 月額基本料（税抜・暫定）。追加C・コンビニ手数料は含めない
+  base_amount   integer not null,            -- 月額基本料（表示価格・税抜）。追加C・コンビニ手数料は含めない
   reward_amount integer not null,
   paid_on       date
 );
