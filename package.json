@@ -19,6 +19,8 @@
     "dev:api": "pnpm --filter @kobito/api dev",
     "dev:web": "pnpm build:shared && pnpm --filter @kobito/web dev",
     "dev:seed-auth": "pnpm --filter @kobito/api seed:dev-auth",
+    "dev:seed-admin": "pnpm --filter @kobito/api seed:dev-admin",
+    "dev:admin-code": "pnpm --filter @kobito/api admin:dev-code",
     "dev:smoke-auth": "pnpm --filter @kobito/api smoke:local-auth",
     "db:migrate": "pnpm --filter @kobito/db migrate",
     "db:seed": "pnpm --filter @kobito/db seed",

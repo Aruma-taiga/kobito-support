@@ -8,6 +8,8 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "seed:dev-auth": "tsx scripts/seed-dev-auth.ts",
+    "seed:dev-admin": "tsx scripts/seed-dev-admin.ts",
+    "admin:dev-code": "tsx scripts/dev-admin-code.ts",
     "smoke:local-auth": "tsx scripts/smoke-local-auth.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json"
   },

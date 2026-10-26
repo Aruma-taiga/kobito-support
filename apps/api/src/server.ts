@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import { Pool } from "pg";
 import { createApp } from "./app.js";
 import { AccountsRepository } from "./modules/accounts/repository.js";
+import { AdminRepository } from "./modules/admin/repository.js";
+import { AdminService } from "./modules/admin/service.js";
 import { ApplicationsRepository } from "./modules/applications/repository.js";
 import { ApplicationsService } from "./modules/applications/service.js";
 import { createFirebaseVerifier } from "./platform/auth.js";
@@ -30,6 +32,7 @@ const app = createApp({
   verifier,
   accounts,
   applications,
+  admin: new AdminService(new AdminRepository(pool)),
   publicSettings: new PublicSettingsRepository(pool),
   logger: consoleLogger,
 });

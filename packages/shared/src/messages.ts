@@ -5,6 +5,18 @@ export const planLabels = {
   custom: "個別見積り",
 } as const;
 
+export const contractStatusLabels = {
+  under_review: "審査待ち",
+  quoting: "見積り作成中",
+  awaiting_quote_approval: "見積り了承待ち",
+  awaiting_payment: "入金待ち",
+  active: "利用中",
+  cancel_scheduled: "解約予定",
+  ended: "終了",
+  declined: "承諾しない",
+  lapsed: "失効",
+} as const;
+
 export const validationMessages = {
   required: "入力してください。",
   maxLength: "入力文字数が上限を超えています。",
@@ -177,4 +189,54 @@ export const webMessages = {
   applicationConsentMarketing: "サービスの案内やお知らせを受け取る（任意）",
   applicationConsentPartner:
     "紹介者に、契約の有無・開始と解約の月・支払いの有無を知らせることに同意します。",
+  adminLoginTitle: "管理者ログイン",
+  adminLoginDescription: "管理者アカウントでログインしてください。",
+  adminLoginButton: "管理画面にログイン",
+  adminMfaChallengeTitle: "追加認証",
+  adminMfaCodeLabel: "認証コード",
+  adminMfaSmsCodeLabel: "SMS認証コード",
+  adminMfaTotpCodeLabel: "認証アプリのコード",
+  adminMfaFactorPrompt: "認証方法を選択してください。",
+  adminMfaCodeSubmit: "認証する",
+  adminMfaRetry: "認証をやり直す",
+  adminMfaChallengeError:
+    "追加認証を開始できませんでした。再度ログインしてください。",
+  adminMfaInvalidCode:
+    "認証コードを確認できませんでした。もう一度お試しください。",
+  adminAccountDisabled:
+    "このアカウントは利用できません。管理者にお問い合わせください。",
+  adminRoleRequired: "管理者として登録されたアカウントでログインしてください。",
+  adminQueueTitle: "審査待ちの申込み",
+  adminQueueLoading: "申込みを読み込んでいます。",
+  adminQueueError: "申込みを読み込めませんでした。",
+  adminDetailTitle: "申込みの審査",
+  adminDecline: "承諾しない",
+  adminDeclineConfirm: "この申込みを承諾しない状態にしますか？",
+  adminDeclineReason: "お断りの理由（任意）",
+  adminDeclineSuccess: "申込みを承諾しない状態にしました。通知は送信待ちです。",
+  adminDeclineError: "申込みを更新できませんでした。",
+  adminApplicationConflict:
+    "この申込みはすでに審査が進んでいるため更新できません。",
+  adminSearchLabel: "店舗名・担当者・メールアドレスで検索",
+  adminSearchButton: "検索",
+  adminQueueEmpty: "該当する申込みはありません。",
+  adminPreviousPage: "前のページ",
+  adminNextPage: "次のページ",
+  adminSubmittedAt: "申込日時",
+  adminPlan: "プラン",
+  adminPaymentMethod: "お支払い方法",
+  adminBillingDetails: "請求先情報",
+  adminConsentSummary: "同意内容",
+  adminNotesHeading: "ご要望",
+  adminDeclineCancel: "戻る",
+  adminDeclineWorking: "更新しています…",
+  adminLogout: "ログアウト",
+  adminQueuePlanSummaryFixed:
+    "{name}：月額{price}円（税込）、毎月{credits}クレジット",
+  adminConsentGiven: "同意あり",
+  adminConsentNotGiven: "同意なし",
+  adminConsentNotApplicable: "対象外",
+  adminRequestError: "申込み詳細を読み込めませんでした。",
+  adminDeclineConfirmButton: "承諾しない",
+  adminStatusLabel: "契約状態",
 } as const;
