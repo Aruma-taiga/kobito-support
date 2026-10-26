@@ -6,11 +6,15 @@ import { ApiError, type ApiVariables, type Principal } from "./types.js";
 
 export interface VerifiedIdentity {
   uid: string;
+  email?: string | undefined;
   firebase?: { sign_in_second_factor?: unknown };
 }
 
 export interface IdentityVerifier {
-  verifyIdToken(token: string): Promise<VerifiedIdentity>;
+  verifyIdToken(
+    token: string,
+    checkRevoked?: boolean,
+  ): Promise<VerifiedIdentity>;
 }
 
 export interface AccountLookup {
@@ -42,7 +46,8 @@ export function createFirebaseVerifier(
     getApps().find((candidate) => candidate.name === "kobito-api") ??
     initializeApp({ projectId: config.firebaseProjectId }, "kobito-api");
   return {
-    verifyIdToken: async (token) => getAuth(app).verifyIdToken(token),
+    verifyIdToken: async (token, checkRevoked = false) =>
+      getAuth(app).verifyIdToken(token, checkRevoked),
   };
 }
 

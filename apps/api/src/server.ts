@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import { Pool } from "pg";
 import { createApp } from "./app.js";
 import { AccountsRepository } from "./modules/accounts/repository.js";
+import { ApplicationsRepository } from "./modules/applications/repository.js";
+import { ApplicationsService } from "./modules/applications/service.js";
 import { createFirebaseVerifier } from "./platform/auth.js";
 import { loadConfig } from "./platform/config.js";
 import { consoleLogger } from "./platform/logger.js";
@@ -19,10 +21,15 @@ const config = loadConfig(process.env);
 const verifier = createFirebaseVerifier(config);
 const pool = new Pool({ connectionString: config.databaseUrl });
 const accounts = new AccountsRepository(pool);
+const applications = new ApplicationsService(
+  new ApplicationsRepository(pool),
+  config,
+);
 const app = createApp({
   config,
   verifier,
   accounts,
+  applications,
   publicSettings: new PublicSettingsRepository(pool),
   logger: consoleLogger,
 });

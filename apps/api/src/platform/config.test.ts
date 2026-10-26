@@ -69,4 +69,28 @@ describe("loadConfig", () => {
       loadConfig({ ...validEnvironment, INVOICE_PREFIX: "" }).invoicePrefix,
     ).toBe("KS");
   });
+
+  it("accepts an optional valid operations notification recipient", () => {
+    expect(loadConfig(validEnvironment).operationsEmail).toBeUndefined();
+    expect(
+      loadConfig({
+        ...validEnvironment,
+        OPERATIONS_EMAIL: "ops@example.test",
+      }).operationsEmail,
+    ).toBe("ops@example.test");
+  });
+
+  it("rejects malformed operations recipient values without echoing them", () => {
+    const invalidAddress = "ops-private-sentinel";
+    try {
+      loadConfig({
+        ...validEnvironment,
+        OPERATIONS_EMAIL: invalidAddress,
+      });
+      throw new Error("expected configuration error");
+    } catch (error) {
+      expect(String(error)).toContain("OPERATIONS_EMAIL");
+      expect(String(error)).not.toContain(invalidAddress);
+    }
+  });
 });

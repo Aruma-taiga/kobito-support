@@ -6,6 +6,12 @@ const optionalText = z.preprocess(
   z.string().trim().min(1).optional(),
 );
 
+const optionalEmail = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().email().optional(),
+);
+
 const environmentSchema = z
   .object({
     NODE_ENV: z
@@ -23,6 +29,7 @@ const environmentSchema = z
       ),
     FIREBASE_PROJECT_ID: z.string().trim().min(1),
     WEB_ORIGIN: z.string().trim().min(1).url(),
+    OPERATIONS_EMAIL: optionalEmail,
     FIREBASE_AUTH_EMULATOR_HOST: optionalText,
     PORT: z.preprocess(
       (value) => (value === undefined || value === "" ? 3000 : Number(value)),
@@ -55,6 +62,7 @@ export interface RuntimeConfig {
   databaseUrl: string;
   firebaseProjectId: string;
   webOrigin: string;
+  operationsEmail?: string;
   authEmulatorHost?: string;
   port: number;
   serviceName?: string;
@@ -91,6 +99,9 @@ export function loadConfig(
     databaseUrl: value.DATABASE_URL,
     firebaseProjectId: value.FIREBASE_PROJECT_ID,
     webOrigin: value.WEB_ORIGIN,
+    ...(value.OPERATIONS_EMAIL === undefined
+      ? {}
+      : { operationsEmail: value.OPERATIONS_EMAIL }),
     ...(value.FIREBASE_AUTH_EMULATOR_HOST === undefined
       ? {}
       : { authEmulatorHost: value.FIREBASE_AUTH_EMULATOR_HOST }),

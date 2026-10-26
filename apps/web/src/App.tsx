@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import type { AuthClient } from "./auth/session.js";
 import { AuthProvider, RequireAuth } from "./auth/session.js";
+import { ApplicationPage } from "./pages/ApplicationPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { MePage } from "./pages/MePage.js";
 import type { ReturnTypeApiClient } from "./platform/api-client.js";
@@ -55,6 +56,9 @@ export function App({
     <div className="app-shell">
       <header className="topbar">
         <span className="service-name">{serviceName}</span>
+        <a className="topbar-link" href="/apply/shop">
+          {webMessages.applicationTitle}
+        </a>
       </header>
       {configState.status === "loading" ? (
         <main className="page-main">
@@ -87,6 +91,15 @@ export function App({
               <Route
                 path="/login"
                 element={<LoginPage authClient={authClient} />}
+              />
+              <Route
+                path="/apply/*"
+                element={
+                  <ApplicationPage
+                    apiClient={apiClient}
+                    authClient={authClient}
+                  />
+                }
               />
               <Route element={<RequireAuth />}>
                 <Route path="/me" element={<MePage apiClient={apiClient} />} />

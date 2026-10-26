@@ -10,7 +10,10 @@ import { MePage } from "./MePage.js";
 
 describe("expired customer session recovery", () => {
   it("shows recovery instead of waiting forever if sign-out does not update auth state", async () => {
-    const currentUser = { getIdToken: vi.fn(async () => "stale-token") };
+    const currentUser = {
+      email: "customer@example.jp",
+      getIdToken: vi.fn(async () => "stale-token"),
+    };
     const authClient: AuthClient = {
       currentUser: () => currentUser,
       subscribe: (listener) => {
@@ -18,6 +21,7 @@ describe("expired customer session recovery", () => {
         return () => undefined;
       },
       signIn: async () => undefined,
+      signUp: async () => ({ email: null, getIdToken: async () => "token" }),
       signOut: async () => {
         throw new Error("transient client failure");
       },

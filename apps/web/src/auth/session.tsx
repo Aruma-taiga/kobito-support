@@ -10,6 +10,7 @@ import {
 import { Navigate, Outlet } from "react-router-dom";
 
 export interface AuthUser {
+  email: string | null;
   getIdToken(): Promise<string>;
 }
 
@@ -17,6 +18,7 @@ export interface AuthClient {
   currentUser(): AuthUser | null;
   subscribe(listener: (user: AuthUser | null) => void): () => void;
   signIn(email: string, password: string): Promise<void>;
+  signUp(email: string, password: string): Promise<AuthUser>;
   signOut(): Promise<void>;
 }
 
