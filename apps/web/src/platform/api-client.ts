@@ -1,6 +1,8 @@
 import {
   type ApplicationReceipt,
   applicationReceiptSchema,
+  type CustomerContractResponse,
+  customerContractResponseSchema,
   type InvoiceDetail,
   type InvoiceList,
   invoiceDetailSchema,
@@ -232,6 +234,8 @@ export function createApiClient(options: ApiClientOptions) {
     postApplication,
     getMe: (): Promise<MeResponse> =>
       getJson("/api/v1/me", meResponseSchema, true),
+    getContract: (): Promise<CustomerContractResponse> =>
+      getJson("/api/v1/me/contract", customerContractResponseSchema, true),
     getInvoices: (): Promise<InvoiceList> =>
       getJson("/api/v1/me/invoices", invoiceListSchema, true),
     getInvoice: (invoiceId: string): Promise<InvoiceDetail> =>

@@ -58,11 +58,14 @@ const settings: ReadonlyArray<readonly [string, unknown]> = [
 ];
 const settingsBackup = new Map<string, unknown>();
 
-function makeApp(): ReturnType<typeof createApp> {
+function makeApp(
+  runtimeConfig: RuntimeConfig = config,
+  now = new Date("2026-01-30T15:30:00.000Z"),
+): ReturnType<typeof createApp> {
   const accounts = new AccountsRepository(pool);
   const invoiceRepository = new InvoiceRepository(
     pool,
-    config,
+    runtimeConfig,
     {
       render: async () => {
         renderCount += 1;
@@ -70,10 +73,10 @@ function makeApp(): ReturnType<typeof createApp> {
         return pdf;
       },
     },
-    () => new Date("2026-01-30T15:30:00.000Z"),
+    () => now,
   );
   const dependencies: AppDependencies = {
-    config,
+    config: runtimeConfig,
     verifier: {
       verifyIdToken: async (token) => {
         const identity = identities.get(token);
@@ -185,6 +188,17 @@ function approve(app: ReturnType<typeof createApp>, id: string) {
   });
 }
 
+function confirm(app: ReturnType<typeof createApp>, id: string, body: unknown) {
+  return app.request(`/api/v1/admin/invoices/${id}/confirm-payment`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${adminToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 beforeAll(async () => {
   const previous = await pool.query<{ key: string; value: unknown }>(
     "select key,value from settings where key=any($1::text[])",
@@ -204,11 +218,23 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.query("delete from audit_logs where target_id = any($1::text[])", [
-    applicationIds,
+    [...applicationIds, ...contractIds],
   ]);
   await pool.query(
     "delete from notifications where customer_id = any($1::uuid[])",
     [customerIds],
+  );
+  await pool.query(
+    "delete from audit_logs where target_type='invoice' and target_id in (select id::text from invoices where contract_id=any($1::uuid[]))",
+    [contractIds],
+  );
+  await pool.query(
+    "delete from credit_entries where contract_id = any($1::uuid[])",
+    [contractIds],
+  );
+  await pool.query(
+    "delete from payments where invoice_id in (select id from invoices where contract_id = any($1::uuid[]))",
+    [contractIds],
   );
   await pool.query(
     "delete from invoice_documents where invoice_id in (select id from invoices where contract_id = any($1::uuid[]))",
@@ -221,6 +247,10 @@ afterAll(async () => {
   await pool.query("delete from invoices where contract_id = any($1::uuid[])", [
     contractIds,
   ]);
+  await pool.query(
+    "delete from billing_periods where contract_id = any($1::uuid[])",
+    [contractIds],
+  );
   await pool.query("delete from contracts where id = any($1::uuid[])", [
     contractIds,
   ]);
@@ -253,6 +283,432 @@ afterAll(async () => {
 });
 
 describe("initial invoice approval and customer access", () => {
+  it("confirms a live bank payment once and activates period one from Tokyo confirmation date", async () => {
+    const fixture = await makeApplication({ price: 5432 });
+    const app = makeApp();
+    const issued = await approve(app, fixture.applicationId);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    const pending = await app.request("/api/v1/admin/bank-transfers/pending", {
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(
+      ((await pending.json()) as { items: Array<{ invoice: { id: string } }> })
+        .items,
+    ).toContainEqual(
+      expect.objectContaining({
+        invoice: expect.objectContaining({ id: invoiceId }),
+      }),
+    );
+    const noMfaToken = `${prefix}-no-mfa-bank-token`;
+    identities.set(noMfaToken, { uid: adminUid });
+    expect(
+      (
+        await app.request("/api/v1/admin/bank-transfers/pending", {
+          headers: { authorization: `Bearer ${noMfaToken}` },
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await app.request(
+          `/api/v1/admin/invoices/${invoiceId}/confirm-payment`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${noMfaToken}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ amount: 5432, paidOn: "2026-01-31" }),
+          },
+        )
+      ).status,
+    ).toBe(403);
+    await pool.query(
+      "update plans set name='後日改定プラン',price_incl_tax=9999,credits=3 where id=(select (issuer_snapshot->'acceptedPlan'->>'planId')::uuid from invoices where id=$1)",
+      [invoiceId],
+    );
+    const response = await app.request(
+      `/api/v1/admin/invoices/${invoiceId}/confirm-payment`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ amount: 5432, paidOn: "2026-01-31" }),
+      },
+    );
+    expect(response.status).toBe(200);
+    const confirmation = await response.json();
+    expect(confirmation).toMatchObject({
+      invoiceId,
+      amount: 5432,
+      paidOn: "2026-01-31",
+      anchorDate: "2026-01-31",
+      period: {
+        seq: 1,
+        startsOn: "2026-01-31",
+        endsOn: "2026-02-27",
+        priceInclTax: 5432,
+        credits: 1,
+      },
+      preview: false,
+      replayed: false,
+    });
+    const state = await pool.query<{
+      status: string;
+      payment_count: string;
+      period_count: string;
+      grant_count: string;
+      payment_date: string;
+    }>(
+      `select c.status, (select count(*)::text from payments where invoice_id=$2) payment_count,
+       (select count(*)::text from billing_periods where contract_id=c.id) period_count,
+       (select count(*)::text from credit_entries where contract_id=c.id and kind='grant' and invoice_id=$2) grant_count,
+       (select paid_on::text from payments where invoice_id=$2) payment_date
+       from contracts c where c.id=$1`,
+      [fixture.contractId, invoiceId],
+    );
+    expect(state.rows[0]).toEqual({
+      status: "active",
+      payment_count: "1",
+      period_count: "1",
+      grant_count: "1",
+      payment_date: "2026-01-31",
+    });
+    const retry = await app.request(
+      `/api/v1/admin/invoices/${invoiceId}/confirm-payment`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ amount: 5432, paidOn: "2026-01-31" }),
+      },
+    );
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({
+      paymentId: confirmation.paymentId,
+      replayed: true,
+    });
+    expect(
+      (await confirm(app, invoiceId, { amount: 5433, paidOn: "2026-01-31" }))
+        .status,
+    ).toBe(409);
+    expect(
+      (await confirm(app, invoiceId, { amount: 5432, paidOn: "2026-01-30" }))
+        .status,
+    ).toBe(409);
+    const contract = await app.request("/api/v1/me/contract", {
+      headers: { authorization: `Bearer ${fixture.token}` },
+    });
+    expect(await contract.json()).toMatchObject({
+      contract: {
+        id: fixture.contractId,
+        status: "active",
+        anchorDate: "2026-01-31",
+        preview: false,
+        plan: { name: "申込時プラン", priceInclTax: 5432, credits: 1 },
+        currentPeriod: {
+          seq: 1,
+          startsOn: "2026-01-31",
+          endsOn: "2026-02-27",
+          balance: 1,
+        },
+      },
+    });
+    expect(
+      (
+        await app.request("/api/v1/me/contract?ignored=true", {
+          headers: { authorization: `Bearer ${fixture.token}` },
+        })
+      ).status,
+    ).toBe(422);
+    const other = await makeApplication();
+    const otherContract = await app.request("/api/v1/me/contract", {
+      headers: { authorization: `Bearer ${other.token}` },
+    });
+    expect(await otherContract.json()).toMatchObject({
+      contract: {
+        id: other.contractId,
+        status: "under_review",
+        plan: null,
+        currentPeriod: null,
+      },
+    });
+    await pool.query(
+      "update billing_periods set starts_on='2026-02-01',ends_on='2026-02-28' where contract_id=$1",
+      [fixture.contractId],
+    );
+    const notCurrent = await app.request("/api/v1/me/contract", {
+      headers: { authorization: `Bearer ${fixture.token}` },
+    });
+    expect(await notCurrent.json()).toMatchObject({
+      contract: { currentPeriod: null },
+    });
+    await pool.query("update invoices set payment_method='card' where id=$1", [
+      invoiceId,
+    ]);
+    expect(
+      (await confirm(app, invoiceId, { amount: 5432, paidOn: "2026-01-31" }))
+        .status,
+    ).toBe(409);
+    await pool.query(
+      "update invoices set payment_method='bank_transfer' where id=$1",
+      [invoiceId],
+    );
+    await pool.query("update payments set method='card' where invoice_id=$1", [
+      invoiceId,
+    ]);
+    expect(
+      (await confirm(app, invoiceId, { amount: 5432, paidOn: "2026-01-31" }))
+        .status,
+    ).toBe(409);
+  });
+
+  it("uses the Tokyo confirmation day independently from a leap-day bank date", async () => {
+    const fixture = await makeApplication();
+    const issueApp = makeApp(config, new Date("2024-02-27T15:30:00.000Z"));
+    const issued = await approve(issueApp, fixture.applicationId);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    const confirmationApp = makeApp(
+      config,
+      new Date("2024-02-28T15:30:00.000Z"),
+    );
+    const response = await confirm(confirmationApp, invoiceId, {
+      amount: 5000,
+      paidOn: "2024-02-28",
+    });
+    expect(await response.json()).toMatchObject({
+      paidOn: "2024-02-28",
+      anchorDate: "2024-02-29",
+      period: { startsOn: "2024-02-29", endsOn: "2024-03-28" },
+    });
+  });
+
+  it("rejects mismatched amount and late/future dates without creating any payment", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    const issued = await approve(app, fixture.applicationId);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    expect(
+      (await confirm(app, invoiceId, { amount: 4999, paidOn: "2026-01-31" }))
+        .status,
+    ).toBe(422);
+    expect(
+      (await confirm(app, invoiceId, { amount: 5000, paidOn: "2026-02-08" }))
+        .status,
+    ).toBe(422);
+    expect(
+      (await confirm(app, invoiceId, { amount: 5000, paidOn: "2026-02-01" }))
+        .status,
+    ).toBe(422);
+    const beforeAcceptedLatePayment = await pool.query<{
+      invoice_status: string;
+      contract_status: string;
+      payment_count: string;
+    }>(
+      `select i.status invoice_status,c.status contract_status,(select count(*)::text from payments where invoice_id=i.id) payment_count
+         from invoices i join contracts c on c.id=i.contract_id where i.id=$1`,
+      [invoiceId],
+    );
+    expect(beforeAcceptedLatePayment.rows[0]).toEqual({
+      invoice_status: "issued",
+      contract_status: "awaiting_payment",
+      payment_count: "0",
+    });
+    await pool.query("update contracts set status='lapsed' where id=$1", [
+      fixture.contractId,
+    ]);
+    expect(
+      (await confirm(app, invoiceId, { amount: 5000, paidOn: "2026-01-31" }))
+        .status,
+    ).toBe(409);
+    await pool.query(
+      "update contracts set status='awaiting_payment' where id=$1",
+      [fixture.contractId],
+    );
+    await pool.query(
+      "update invoices set status='overdue',issued_on='2026-01-01',due_on='2026-01-30' where id=$1",
+      [invoiceId],
+    );
+    const pending = await app.request("/api/v1/admin/bank-transfers/pending", {
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(
+      ((await pending.json()) as { items: Array<{ invoice: { id: string } }> })
+        .items,
+    ).toContainEqual(
+      expect.objectContaining({
+        invoice: expect.objectContaining({ id: invoiceId }),
+      }),
+    );
+    expect(
+      (await confirm(app, invoiceId, { amount: 5000, paidOn: "2026-01-30" }))
+        .status,
+    ).toBe(200);
+  });
+
+  it("serializes simultaneous bank confirmations into one payment, period, grant, and notification set", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    const issued = await approve(app, fixture.applicationId);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    const responses = await Promise.all([
+      confirm(app, invoiceId, { amount: 5000, paidOn: "2026-01-31" }),
+      confirm(app, invoiceId, { amount: 5000, paidOn: "2026-01-31" }),
+    ]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    const results = (await Promise.all(
+      responses.map((response) => response.json()),
+    )) as Array<{ paymentId: string; replayed: boolean }>;
+    expect(results.map((value) => value.replayed).sort()).toEqual([
+      false,
+      true,
+    ]);
+    expect(results[0]?.paymentId).toBe(results[1]?.paymentId);
+    const state = await pool.query<{
+      payments: string;
+      periods: string;
+      grants: string;
+      notices: string;
+    }>(
+      `select (select count(*)::text from payments where invoice_id=$1) payments,
+       (select count(*)::text from billing_periods where contract_id=$2) periods,
+       (select count(*)::text from credit_entries where invoice_id=$1 and kind='grant') grants,
+       (select count(*)::text from notifications where payload->>'invoiceId'=$1::text and kind in ('NT-02b','NT-04')) notices`,
+      [invoiceId, fixture.contractId],
+    );
+    expect(state.rows[0]).toEqual({
+      payments: "1",
+      periods: "1",
+      grants: "1",
+      notices: "2",
+    });
+  });
+
+  it("allows acknowledged preview activation only through the local invoice preview guard and never queues notices", async () => {
+    const currentDb = await pool.query<{ name: string }>(
+      "select current_database() as name",
+    );
+    expect(currentDb.rows[0]?.name).toBe("kobito_support_test");
+    await pool.query(
+      "insert into settings(key,value) values ('invoice_preview_enabled','true'::jsonb) on conflict (key) do update set value='true'::jsonb",
+    );
+    const localConfig: RuntimeConfig = {
+      ...config,
+      nodeEnv: "development",
+      databaseUrl: "postgres://test@127.0.0.1:5432/kobito_support",
+      devInvoicePreview: true,
+      authEmulatorHost: "127.0.0.1:9099",
+    };
+    const fixture = await makeApplication();
+    const localApp = makeApp(localConfig);
+    const issued = await approve(localApp, fixture.applicationId);
+    const issuedBody = (await issued.json()) as {
+      invoice: { id: string; preview: boolean };
+    };
+    const invoiceId = issuedBody.invoice.id;
+    expect(issuedBody.invoice.preview).toBe(true);
+    expect(
+      (
+        await confirm(localApp, invoiceId, {
+          amount: 5000,
+          paidOn: "2026-01-31",
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await confirm(makeApp(), invoiceId, {
+          amount: 5000,
+          paidOn: "2026-01-31",
+          previewAcknowledged: true,
+        })
+      ).status,
+    ).toBe(409);
+    const productionApp = makeApp({ ...localConfig, nodeEnv: "production" });
+    expect(
+      (
+        await confirm(productionApp, invoiceId, {
+          amount: 5000,
+          paidOn: "2026-01-31",
+          previewAcknowledged: true,
+        })
+      ).status,
+    ).toBe(409);
+    const confirmed = await confirm(localApp, invoiceId, {
+      amount: 5000,
+      paidOn: "2026-01-31",
+      previewAcknowledged: true,
+    });
+    expect(await confirmed.json()).toMatchObject({
+      preview: true,
+      replayed: false,
+    });
+    const state = await pool.query<{ notices: string; payments: string }>(
+      `select (select count(*)::text from notifications where payload->>'invoiceId'=$1::text and kind in ('NT-02b','NT-04')) notices,
+       (select count(*)::text from payments where invoice_id=$2::uuid) payments`,
+      [invoiceId, invoiceId],
+    );
+    expect(state.rows[0]).toEqual({ notices: "0", payments: "1" });
+    await pool.query(
+      "update settings set value='false'::jsonb where key='invoice_preview_enabled'",
+    );
+  });
+
+  it("rolls payment, activation, credits, and queued notices back when the audit record fails", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    const issued = await approve(app, fixture.applicationId);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    const trigger = `fail_payment_audit_${randomUUID().replaceAll("-", "")}`;
+    const fn = `${trigger}_fn`;
+    await pool.query(
+      `create function ${fn}() returns trigger language plpgsql as $$ begin if new.target_id='${invoiceId}' then raise exception 'forced'; end if; return new; end $$`,
+    );
+    await pool.query(
+      `create trigger ${trigger} before insert on audit_logs for each row execute function ${fn}()`,
+    );
+    const response = await confirm(app, invoiceId, {
+      amount: 5000,
+      paidOn: "2026-01-31",
+    });
+    await pool.query(`drop trigger ${trigger} on audit_logs`);
+    await pool.query(`drop function ${fn}()`);
+    expect(response.status).toBe(500);
+    const state = await pool.query<{
+      invoice_status: string;
+      contract_status: string;
+      payments: string;
+      periods: string;
+      credits: string;
+      notices: string;
+    }>(
+      `select i.status invoice_status,c.status contract_status,
+       (select count(*)::text from payments where invoice_id=i.id) payments,
+       (select count(*)::text from billing_periods where contract_id=c.id) periods,
+       (select count(*)::text from credit_entries where invoice_id=i.id) credits,
+       (select count(*)::text from notifications where payload->>'invoiceId'=i.id::text and kind in ('NT-02b','NT-04')) notices
+       from invoices i join contracts c on c.id=i.contract_id where i.id=$1`,
+      [invoiceId],
+    );
+    expect(state.rows[0]).toEqual({
+      invoice_status: "issued",
+      contract_status: "awaiting_payment",
+      payments: "0",
+      periods: "0",
+      credits: "0",
+      notices: "0",
+    });
+  });
+
   it("creates a frozen, dated bank-transfer invoice from the application offer and replays it without re-rendering", async () => {
     const fixture = await makeApplication({ price: 5432 });
     await pool.query(
@@ -339,14 +795,18 @@ describe("initial invoice approval and customer access", () => {
     const adminList = await app.request("/api/v1/admin/invoices", {
       headers: { authorization: `Bearer ${adminToken}` },
     });
-    expect(await adminList.json()).toMatchObject({
-      invoices: [
-        expect.objectContaining({
-          id: body.invoice.id,
-          invoiceNo: body.invoice.invoiceNo,
-        }),
-      ],
-    });
+    expect(
+      (
+        (await adminList.json()) as {
+          invoices: Array<{ id: string; invoiceNo: string }>;
+        }
+      ).invoices,
+    ).toContainEqual(
+      expect.objectContaining({
+        id: body.invoice.id,
+        invoiceNo: body.invoice.invoiceNo,
+      }),
+    );
     const adminDetail = await app.request(
       `/api/v1/admin/invoices/${body.invoice.id}`,
       { headers: { authorization: `Bearer ${adminToken}` } },

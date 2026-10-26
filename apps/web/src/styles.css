@@ -204,7 +204,27 @@ button:disabled {
 }
 
 .logout-button {
+  margin-top: 0;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 12px;
   margin-top: 24px;
+}
+
+.profile-actions > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.profile-actions .secondary-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  text-align: center;
+  text-decoration: none;
 }
 
 .configuration-error {
@@ -481,11 +501,29 @@ button:disabled {
 
 .admin-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  width: min(100%, 760px);
+  justify-content: flex-start;
+  gap: 8px;
+  width: min(calc(100% - 32px), 760px);
   margin: 0 auto 12px;
+  padding: 0 0 4px;
+}
+
+.admin-toolbar > a,
+.admin-toolbar > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.admin-toolbar > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 8px;
+  color: #2f5b85;
+  font-weight: 600;
 }
 
 .admin-toolbar .error-message {
@@ -789,6 +827,57 @@ button:disabled {
   margin-top: 12px;
 }
 
+.bank-transfer-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.bank-transfer-item,
+.bank-transfer-confirmation,
+.bank-transfer-result,
+.bank-transfer-final-check,
+.contract-summary {
+  border: 1px solid #d6dce2;
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 18px;
+}
+
+.bank-transfer-item h2,
+.bank-transfer-confirmation h2,
+.bank-transfer-result h2,
+.contract-summary h2 {
+  margin-top: 0;
+}
+
+.bank-transfer-confirmation > input {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 6px 0 14px;
+  padding: 10px;
+  border: 1px solid #8996a2;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.preview-acknowledgement {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.preview-acknowledgement input {
+  min-width: 20px;
+  min-height: 20px;
+}
+
+.contract-summary {
+  margin-bottom: 18px;
+}
+
 @media (max-width: 520px) {
   .admin-card {
     padding: 24px 18px;
@@ -849,6 +938,25 @@ button:disabled {
 
   .page-main {
     padding: 32px 16px;
+  }
+
+  .admin-toolbar {
+    width: calc(100% - 32px);
+    padding: 0 0 8px;
+  }
+
+  .admin-toolbar > button {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .profile-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .profile-actions > * {
+    width: 100%;
   }
 
   .card {

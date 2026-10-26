@@ -1,8 +1,12 @@
 import type {
   ApproveApplicationResponse,
+  ConfirmBankPaymentRequest,
+  ConfirmBankPaymentResponse,
+  CustomerContractResponse,
   InvoiceDetail,
   InvoiceList,
   InvoiceReadiness,
+  PendingBankTransfers,
 } from "@kobito/shared";
 import type { CustomerScope } from "../../platform/scope.js";
 import type { Principal } from "../../platform/types.js";
@@ -25,4 +29,11 @@ export interface InvoiceModule {
     principal: Principal,
     invoiceId: string,
   ): Promise<{ invoiceNo: string; content: Uint8Array }>;
+  listPendingBankTransfers(principal: Principal): Promise<PendingBankTransfers>;
+  confirmBankPayment(
+    principal: Principal,
+    invoiceId: string,
+    request: ConfirmBankPaymentRequest,
+  ): Promise<ConfirmBankPaymentResponse>;
+  getCustomerContract(scope: CustomerScope): Promise<CustomerContractResponse>;
 }

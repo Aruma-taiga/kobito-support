@@ -108,6 +108,11 @@ function makeApp(overrides: AppOverrides = {}) {
         invoiceNo: "KS-2026-00001",
         content: Buffer.from("%PDF-1.7 test"),
       })),
+      listPendingBankTransfers: vi.fn(async () => ({ items: [] })),
+      confirmBankPayment: vi.fn(async () => {
+        throw new Error("not used");
+      }),
+      getCustomerContract: vi.fn(async () => ({ contract: null })),
     },
     publicSettings: { getServiceName: vi.fn(async () => "コビトサポート") },
     logger: { info: vi.fn(), error: vi.fn() },

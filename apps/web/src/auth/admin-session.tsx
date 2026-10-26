@@ -168,6 +168,7 @@ export function RequireAdminAuth() {
   return (
     <div className="admin-authorized-layout">
       <header className="admin-toolbar">
+        <Link to="/admin/bank-transfers">{webMessages.bankTransferTitle}</Link>
         <Link to="/admin/invoices">{webMessages.invoiceListTitle}</Link>
         <AdminLogoutButton />
       </header>

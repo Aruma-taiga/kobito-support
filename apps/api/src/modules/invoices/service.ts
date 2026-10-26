@@ -13,6 +13,23 @@ export class InvoiceService implements InvoiceModule {
       throw new ApiError(404, "not_found");
     return this.repository.approveApplication(principal, applicationId);
   }
+  listPendingBankTransfers(principal: Principal) {
+    this.requireAdmin(principal);
+    return this.repository.listPendingBankTransfers(principal);
+  }
+  confirmBankPayment(
+    principal: Principal,
+    invoiceId: string,
+    request: Parameters<InvoiceModule["confirmBankPayment"]>[2],
+  ) {
+    this.requireAdmin(principal);
+    if (!uuidSchema.safeParse(invoiceId).success)
+      throw new ApiError(404, "not_found");
+    return this.repository.confirmBankPayment(principal, invoiceId, request);
+  }
+  getCustomerContract(scope: CustomerScope) {
+    return this.repository.getCustomerContract(scope);
+  }
   getReadiness(principal: Principal) {
     this.requireAdmin(principal);
     return this.repository.getReadiness(principal);

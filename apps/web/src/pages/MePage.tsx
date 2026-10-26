@@ -1,4 +1,8 @@
-import { type MeResponse, webMessages } from "@kobito/shared";
+import {
+  contractStatusLabels,
+  type MeResponse,
+  webMessages,
+} from "@kobito/shared";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuthSession } from "../auth/session.js";
@@ -18,6 +22,10 @@ export function MePage({ apiClient }: { apiClient: ReturnTypeApiClient }) {
   });
   const [attempt, setAttempt] = useState(0);
   const [logoutError, setLogoutError] = useState(false);
+  const [contract, setContract] = useState<Awaited<
+    ReturnType<ReturnTypeApiClient["getContract"]>
+  > | null>(null);
+  const [contractError, setContractError] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -34,6 +42,17 @@ export function MePage({ apiClient }: { apiClient: ReturnTypeApiClient }) {
           return;
         }
         setState({ status: "error", reason: "profile" });
+      });
+    void apiClient
+      .getContract()
+      .then((value) => {
+        if (current) {
+          setContract(value);
+          setContractError(false);
+        }
+      })
+      .catch(() => {
+        if (current) setContractError(true);
       });
     return () => {
       current = false;
@@ -88,23 +107,93 @@ export function MePage({ apiClient }: { apiClient: ReturnTypeApiClient }) {
                 <dd>{state.data.customer.contactName}</dd>
               </div>
             </dl>
+            <section
+              className="contract-summary"
+              aria-labelledby="contract-summary-title"
+            >
+              <h2 id="contract-summary-title">{webMessages.contractTitle}</h2>
+              {contractError ? (
+                <p className="error-message" role="alert">
+                  {webMessages.contractLoadError}
+                </p>
+              ) : null}
+              {!contractError && !contract ? (
+                <output>{webMessages.contractLoading}</output>
+              ) : null}
+              {contract?.contract ? (
+                <dl className="profile-list">
+                  <div>
+                    <dt>{webMessages.contractStatus}</dt>
+                    <dd>{contractStatusLabels[contract.contract.status]}</dd>
+                  </div>
+                  <div>
+                    <dt>{webMessages.contractPlan}</dt>
+                    <dd>
+                      {contract.contract.plan
+                        ? `${contract.contract.plan.name}・${contract.contract.plan.priceInclTax.toLocaleString("ja-JP")}円（税込）・${contract.contract.plan.credits}${webMessages.contractBalanceUnit}`
+                        : webMessages.contractWaitingPayment}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{webMessages.contractDate}</dt>
+                    <dd>
+                      {contract.contract.anchorDate ??
+                        webMessages.contractWaitingPayment}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{webMessages.contractPeriod}</dt>
+                    <dd>
+                      {contract.contract.currentPeriod
+                        ? `${contract.contract.currentPeriod.startsOn}〜${contract.contract.currentPeriod.endsOn}`
+                        : webMessages.contractWaitingPayment}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{webMessages.contractCredits}</dt>
+                    <dd>
+                      {contract.contract.currentPeriod
+                        ? `${contract.contract.currentPeriod.balance} ${webMessages.contractBalanceUnit}`
+                        : `0 ${webMessages.contractBalanceUnit}`}
+                    </dd>
+                  </div>
+                </dl>
+              ) : null}
+              {contract?.contract && !contract.contract.currentPeriod ? (
+                <p>{webMessages.contractNoCredits}</p>
+              ) : null}
+              {!contractError && contract?.contract === null ? (
+                <p>{webMessages.contractNone}</p>
+              ) : null}
+              {contract?.contract?.preview ? (
+                <p className="invoice-preview-warning" role="note">
+                  {webMessages.contractPreview}
+                </p>
+              ) : null}
+            </section>
+          </>
+        ) : null}
+        <div className="profile-actions">
+          {state.status === "ready" ? (
             <Link className="secondary-button" to="/me/invoices">
               {webMessages.invoiceListTitle}
             </Link>
-          </>
-        ) : null}
-        {logoutError ? (
-          <p className="error-message" role="alert">
-            {webMessages.logoutError}
-          </p>
-        ) : null}
-        <button
-          className="secondary-button logout-button"
-          onClick={() => void handleSignOut()}
-          type="button"
-        >
-          {webMessages.logout}
-        </button>
+          ) : null}
+          <div>
+            {logoutError ? (
+              <p className="error-message" role="alert">
+                {webMessages.logoutError}
+              </p>
+            ) : null}
+            <button
+              className="secondary-button logout-button"
+              onClick={() => void handleSignOut()}
+              type="button"
+            >
+              {webMessages.logout}
+            </button>
+          </div>
+        </div>
       </section>
     </main>
   );

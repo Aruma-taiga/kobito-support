@@ -131,6 +131,11 @@ function makeApp(
       getAdminPdf: async () => {
         throw new Error("not used");
       },
+      listPendingBankTransfers: async () => ({ items: [] }),
+      confirmBankPayment: async () => {
+        throw new Error("not used");
+      },
+      getCustomerContract: async () => ({ contract: null }),
     },
     publicSettings: new PublicSettingsRepository(pool),
     logger,

@@ -326,4 +326,51 @@ export const webMessages = {
   invoiceAcceptedPlan: "申込時に合意したプラン",
   invoiceAcceptedMonthlyPrice: "申込時の月額料金（税込）",
   invoiceAcceptedCredits: "申込時の月間クレジット",
+  bankTransferTitle: "銀行振込の入金確認",
+  bankTransferIntro:
+    "通帳と請求書を照合し、実際の入金を確認してから記録してください。銀行との自動連携はありません。",
+  bankTransferLoading: "入金待ちの請求書を読み込んでいます。",
+  bankTransferLoadError: "入金待ちの請求書を読み込めませんでした。",
+  bankTransferEmpty: "入金待ちの請求書はありません。",
+  bankTransferCustomer: "お店",
+  bankTransferInvoice: "請求書",
+  bankTransferAmount: "請求金額",
+  bankTransferDue: "支払期限",
+  bankTransferDate: "通帳で確認した入金日",
+  bankTransferPreviewWarning: "開発用データです。実際の入金ではありません。",
+  bankTransferPreviewAck:
+    "開発用の入金確認として記録する（実際の入金ではありません）",
+  bankTransferConfirm: "入金を記録",
+  bankTransferCancel: "戻る",
+  bankTransferConfirmTitle: "入金内容を確認してください",
+  bankTransferReview: "入力内容を確認",
+  bankTransferFinalTitle: "次の内容で入金を記録します",
+  bankTransferAnchorNotice:
+    "初回契約日は入金確認を確定した日本時間の日付として記録されます。入力した入金日とは別の日付です。",
+  bankTransferWorking: "記録しています…",
+  bankTransferSuccess:
+    "入金を記録しました。契約が開始され、期間とクレジットが反映されました。",
+  bankTransferSuccessPreview:
+    "開発用の入金確認を記録しました。実際の入金ではなく、通知も送信していません。",
+  bankTransferConflict:
+    "請求の状態が変わっています。一覧を更新して確認してください。",
+  bankTransferError:
+    "入金を記録できませんでした。入力を確認して再試行してください。",
+  bankTransferAmountInvalid: "請求金額と一致する正の整数を入力してください。",
+  bankTransferDateInvalid:
+    "入金日を確認してください。発行日から支払期限までの日付を入力できます。",
+  bankTransferAckRequired: "開発用データの記録には確認チェックが必要です。",
+  contractTitle: "ご契約内容",
+  contractStatus: "契約状況",
+  contractLoading: "ご契約内容を読み込んでいます。",
+  contractLoadError: "ご契約内容を読み込めませんでした。",
+  contractNone: "現在、有効な契約情報はありません。",
+  contractWaitingPayment: "入金確認待ち",
+  contractPeriod: "現在の契約期間",
+  contractDate: "契約日",
+  contractPlan: "ご契約プラン",
+  contractCredits: "今月の利用可能クレジット",
+  contractNoCredits: "入金確認後にクレジットをご利用いただけます。",
+  contractBalanceUnit: "クレジット",
+  contractPreview: "開発用データ",
 } as const;

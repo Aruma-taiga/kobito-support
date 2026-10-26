@@ -1,5 +1,6 @@
 export * from "./admin.js";
 export * from "./application.js";
+export * from "./bank-transfer.js";
 export * from "./credits.js";
 export * from "./invoice.js";
 export * from "./invoice-number.js";
