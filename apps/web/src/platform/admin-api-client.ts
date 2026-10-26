@@ -2,12 +2,15 @@ import {
   type AdminApplicationQueueQuery,
   type AdminApplicationQueueResponse,
   type AdminCustomerDetail,
+  type AdminIssuerSettings,
+  type AdminIssuerSettingsResponse,
   type AdminRequestDetail,
   type AdminRequestSummary,
   type AdminSession,
   adminApplicationQueueQuerySchema,
   adminApplicationQueueResponseSchema,
   adminCustomerDetailSchema,
+  adminIssuerSettingsResponseSchema,
   adminRequestDetailSchema,
   adminRequestListSchema,
   adminSessionSchema,
@@ -39,6 +42,7 @@ import {
   invoiceReadinessSchema,
   pendingBankTransfersSchema,
   type RequestEstimate,
+  updateAdminIssuerSettingsRequestSchema,
 } from "@kobito/shared";
 
 export interface AdminApiAuthUser {
@@ -57,7 +61,8 @@ export type AdminApiErrorCode =
   | "request_conflict"
   | "estimate_conflict"
   | "insufficient_credits"
-  | "invalid_response";
+  | "invalid_response"
+  | "issuer_settings_conflict";
 
 export class AdminApiError extends Error {
   constructor(readonly code: AdminApiErrorCode) {
@@ -120,6 +125,9 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
         }
       } catch {
         responseCode = undefined;
+      }
+      if (responseCode === "settings_revision_conflict") {
+        throw new AdminApiError("issuer_settings_conflict");
       }
       if (
         responseCode === "request_conflict" ||
@@ -197,6 +205,30 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
   return {
     getSession(): Promise<AdminSession> {
       return request("/api/v1/admin/session", adminSessionSchema);
+    },
+    getIssuerSettings(): Promise<AdminIssuerSettingsResponse> {
+      return request(
+        "/api/v1/admin/settings",
+        adminIssuerSettingsResponseSchema,
+      );
+    },
+    updateIssuerSettings(
+      expectedRevision: string,
+      settings: AdminIssuerSettings,
+    ): Promise<AdminIssuerSettingsResponse> {
+      const parsed = updateAdminIssuerSettingsRequestSchema.safeParse({
+        expectedRevision,
+        settings,
+      });
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      return request(
+        "/api/v1/admin/settings",
+        adminIssuerSettingsResponseSchema,
+        {
+          method: "PUT",
+          body: JSON.stringify(parsed.data),
+        },
+      );
     },
     getApplications(
       query: Partial<AdminApplicationQueueQuery> = {},

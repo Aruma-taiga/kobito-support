@@ -499,6 +499,36 @@ button:disabled {
   min-width: 0;
 }
 
+.admin-settings-nav {
+  margin: 8px 0 16px;
+}
+
+.issuer-settings-card {
+  width: min(100%, 900px);
+}
+
+.issuer-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 16px 0;
+}
+
+.issuer-settings-field input {
+  display: block;
+  width: 100%;
+}
+
+.success-message {
+  color: #176448;
+}
+
+@media (max-width: 560px) {
+  .issuer-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .admin-toolbar {
   display: flex;
   flex-wrap: wrap;

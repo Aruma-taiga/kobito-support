@@ -100,6 +100,8 @@ function setup(
     getInvoice?: ReturnType<typeof vi.fn>;
     getInvoicePdf?: ReturnType<typeof vi.fn>;
     getInvoiceReadiness?: ReturnType<typeof vi.fn>;
+    getIssuerSettings?: ReturnType<typeof vi.fn>;
+    updateIssuerSettings?: ReturnType<typeof vi.fn>;
     getPendingBankTransfers?: ReturnType<typeof vi.fn>;
     confirmBankPayment?: ReturnType<typeof vi.fn>;
     getRequestContracts?: ReturnType<typeof vi.fn>;
@@ -226,6 +228,33 @@ function setup(
         canIssue: true,
         mode: "preview" as const,
         reason: "preview_only" as const,
+      })),
+    getIssuerSettings:
+      options.getIssuerSettings ??
+      vi.fn(async () => ({
+        settings: {
+          serviceName: "コビトサポート",
+          companyName: "",
+          companyAddress: "",
+          invoiceRegistrationNo: null,
+          invoicePrefix: "INV",
+          bankAccount: {
+            bankName: "",
+            branchName: "",
+            accountType: "",
+            accountNumber: "",
+            accountHolder: "",
+          },
+        },
+        revision: "a".repeat(64),
+        issuanceReady: false,
+      })),
+    updateIssuerSettings:
+      options.updateIssuerSettings ??
+      vi.fn(async (_expectedRevision, settings) => ({
+        settings,
+        revision: "b".repeat(64),
+        issuanceReady: false,
       })),
     getPendingBankTransfers:
       options.getPendingBankTransfers ?? vi.fn(async () => ({ items: [] })),
@@ -843,6 +872,63 @@ describe("admin MFA and review UI", () => {
     expect(await screen.findByText(queueItem.shopName)).toBeTruthy();
     expect(apiClient.getSession).toHaveBeenCalledOnce();
     expect(apiClient.getApplications).toHaveBeenCalledOnce();
+  });
+
+  it("lets an MFA-authorized admin edit issuer settings and explains readiness and invoice snapshots", async () => {
+    const { apiClient } = setup({
+      initialPath: "/admin/settings",
+      signedIn: true,
+    });
+    expect(
+      await screen.findByRole("heading", { name: "発行者・振込先設定" }),
+    ).toBeTruthy();
+    expect(
+      await screen.findByText(webMessages.adminIssuerSettingsNotReady),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "変更後に発行する請求書へ反映されます。発行済み請求書の内容は変わりません。",
+      ),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("会社名"), {
+      target: { value: "合同会社ひだまり" },
+    });
+    fireEvent.change(screen.getByLabelText("会社住所"), {
+      target: { value: "東京都杉並区1-2-3" },
+    });
+    fireEvent.change(screen.getByLabelText("銀行名"), {
+      target: { value: "みずほ銀行" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
+    await waitFor(() =>
+      expect(apiClient.updateIssuerSettings).toHaveBeenCalledWith(
+        "a".repeat(64),
+        expect.objectContaining({
+          companyName: "合同会社ひだまり",
+          bankAccount: expect.objectContaining({ bankName: "みずほ銀行" }),
+        }),
+      ),
+    );
+  });
+
+  it("surfaces stale settings and offers an explicit reload without overwriting", async () => {
+    const updateIssuerSettings = vi.fn(async () => {
+      throw new AdminApiError("issuer_settings_conflict");
+    });
+    const { apiClient } = setup({
+      initialPath: "/admin/settings",
+      signedIn: true,
+      updateIssuerSettings,
+    });
+    await screen.findByRole("heading", { name: "発行者・振込先設定" });
+    fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "別の管理者が設定を更新しました。最新の設定を読み込み直してください。",
+    );
+    expect(
+      screen.getByRole("button", { name: "最新の設定を読み込む" }),
+    ).toBeTruthy();
+    expect(apiClient.getIssuerSettings).toHaveBeenCalledOnce();
   });
 
   it("rechecks the server session on a refreshed protected route before loading the queue", async () => {

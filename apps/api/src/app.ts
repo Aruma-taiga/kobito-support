@@ -12,6 +12,8 @@ import { requireCustomerAccess } from "./modules/customer-access/guard.js";
 import { createCustomerAccessRoutes } from "./modules/customer-access/routes.js";
 import type { InvoiceModule } from "./modules/invoices/contracts.js";
 import { createInvoiceCustomerRoutes } from "./modules/invoices/routes.js";
+import type { IssuerSettingsModule } from "./modules/issuer-settings/contracts.js";
+import { createAdminIssuerSettingsRoutes } from "./modules/issuer-settings/routes.js";
 import type { RequestModule } from "./modules/requests/contracts.js";
 import { createRequestCustomerRoutes } from "./modules/requests/routes.js";
 import {
@@ -34,6 +36,7 @@ export interface AppDependencies {
   accounts: AccountLookup & AccountsDataRepository;
   applications: ApplicationsModule;
   admin: AdminModule;
+  issuerSettings?: IssuerSettingsModule;
   invoices: InvoiceModule;
   requests?: RequestModule;
   customerAccess: CustomerAccessModule;
@@ -116,6 +119,17 @@ export function createApp(dependencies: AppDependencies) {
   );
   if (dependencies.requests)
     app.route("/api/v1", createRequestCustomerRoutes(dependencies.requests));
+
+  if (dependencies.issuerSettings) {
+    app.route(
+      "/api/v1/admin/settings",
+      createAdminIssuerSettingsRoutes({
+        verifier: dependencies.verifier,
+        accounts: dependencies.accounts,
+        issuerSettings: dependencies.issuerSettings,
+      }),
+    );
+  }
 
   app.route(
     "/api/v1/admin",

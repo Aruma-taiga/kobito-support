@@ -15,6 +15,7 @@ type AppOverrides = Partial<
   admin?: Partial<AppDependencies["admin"]>;
   invoices?: Partial<AppDependencies["invoices"]>;
   customerAccess?: Partial<AppDependencies["customerAccess"]>;
+  issuerSettings?: Partial<NonNullable<AppDependencies["issuerSettings"]>>;
 };
 
 const userForToken = {
@@ -83,6 +84,29 @@ function makeApp(overrides: AppOverrides = {}) {
         replayed: false,
       })),
     },
+    issuerSettings: {
+      get: vi.fn(async () => ({
+        settings: {
+          serviceName: "Test service",
+          companyName: "",
+          companyAddress: "",
+          invoiceRegistrationNo: null,
+          invoicePrefix: "KS",
+          bankAccount: {
+            bankName: "",
+            branchName: "",
+            accountType: "",
+            accountNumber: "",
+            accountHolder: "",
+          },
+        },
+        revision: "a".repeat(64),
+        issuanceReady: false,
+      })),
+      update: vi.fn(async () => {
+        throw new Error("not used");
+      }),
+    },
     invoices: {
       getReadiness: vi.fn(async () => ({
         canIssue: false,
@@ -146,6 +170,14 @@ function makeApp(overrides: AppOverrides = {}) {
       ...defaults.customerAccess,
       ...overrides.customerAccess,
     },
+    ...(overrides.issuerSettings
+      ? {
+          issuerSettings: {
+            ...defaults.issuerSettings,
+            ...overrides.issuerSettings,
+          },
+        }
+      : {}),
   });
 }
 
@@ -353,6 +385,44 @@ describe("API routes and auth pipeline", () => {
     expect(session.status).toBe(200);
     expect(await session.json()).toEqual({ role: "admin" });
     expect(verifyIdToken).toHaveBeenCalledWith("verified-admin", true);
+  });
+
+  it("reads issuer configuration only inside the verified admin namespace", async () => {
+    const app = makeApp({
+      verifier: {
+        verifyIdToken: vi.fn(async () => ({
+          uid: "admin-uid",
+          firebase: { sign_in_second_factor: "phone" },
+        })),
+      },
+      accounts: {
+        findByAuthUserId: vi.fn(async () => ({
+          authUserId: "admin-uid",
+          role: "admin" as const,
+          customerId: null,
+        })),
+      },
+    });
+    const response = await app.request("/api/v1/admin/settings", {
+      headers: { authorization: "Bearer verified-admin" },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      settings: {
+        serviceName: "Test service",
+        invoicePrefix: "KS",
+        invoiceRegistrationNo: null,
+        bankAccount: {
+          bankName: "",
+          branchName: "",
+          accountType: "",
+          accountNumber: "",
+          accountHolder: "",
+        },
+      },
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+      issuanceReady: false,
+    });
   });
 
   it.each([
