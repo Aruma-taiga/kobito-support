@@ -912,7 +912,9 @@ describe("admin MFA and review UI", () => {
   });
 
   it("surfaces stale settings and offers an explicit reload without overwriting", async () => {
-    type SettingsResponse = Awaited<AdminApiClient["getIssuerSettings"]>;
+    type SettingsResponse = Awaited<
+      ReturnType<AdminApiClient["getIssuerSettings"]>
+    >;
     let resolveSettings!: (response: SettingsResponse) => void;
     const getIssuerSettings = vi
       .fn<() => Promise<SettingsResponse>>()
