@@ -12,6 +12,7 @@ import {
 } from "./pages/InvoicePages.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { MePage } from "./pages/MePage.js";
+import { MyRequestDetailPage, MyRequestsPage } from "./pages/RequestPages.js";
 import type { AdminApiClient } from "./platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "./platform/api-client.js";
 
@@ -123,6 +124,14 @@ export function App({
               />
               <Route element={<RequireAuth />}>
                 <Route path="/me" element={<MePage apiClient={apiClient} />} />
+                <Route
+                  path="/me/requests"
+                  element={<MyRequestsPage apiClient={apiClient} />}
+                />
+                <Route
+                  path="/me/requests/:id"
+                  element={<MyRequestDetailPage apiClient={apiClient} />}
+                />
                 <Route
                   path="/me/invoices"
                   element={<MyInvoiceListPage apiClient={apiClient} />}

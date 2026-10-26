@@ -20,6 +20,11 @@ import {
   AdminInvoiceDetailPage,
   AdminInvoiceListPage,
 } from "./InvoicePages.js";
+import {
+  AdminRequestCreatePage,
+  AdminRequestDetailPage,
+  AdminRequestListPage,
+} from "./RequestPages.js";
 
 export type { AdminApiClient } from "../platform/admin-api-client.js";
 
@@ -732,6 +737,17 @@ function AdminCustomerPage({ apiClient }: { apiClient: AdminApiClient }) {
             </>
           ) : null}
         </dl>
+        {data.contract.status === "active" ||
+        data.contract.status === "cancel_scheduled" ? (
+          <p>
+            <Link
+              className="secondary-button"
+              to={`/admin/requests/new?contractId=${encodeURIComponent(data.contract.id)}`}
+            >
+              {webMessages.adminRequestsNew}
+            </Link>
+          </p>
+        ) : null}
         <section
           className="admin-consent-list"
           aria-labelledby="admin-consent-title"
@@ -994,6 +1010,18 @@ export function AdminApp({
           <Route
             path="invoices"
             element={<AdminInvoiceListPage apiClient={apiClient} />}
+          />
+          <Route
+            path="requests"
+            element={<AdminRequestListPage apiClient={apiClient} />}
+          />
+          <Route
+            path="requests/new"
+            element={<AdminRequestCreatePage apiClient={apiClient} />}
+          />
+          <Route
+            path="requests/:id"
+            element={<AdminRequestDetailPage apiClient={apiClient} />}
           />
           <Route
             path="bank-transfers"

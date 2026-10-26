@@ -21,6 +21,7 @@ const customerId = "11111111-1111-4111-8111-111111111111";
 const applicationId = "22222222-2222-4222-8222-222222222222";
 const contractId = "33333333-3333-4333-8333-333333333333";
 const invoiceId = "44444444-4444-4444-8444-444444444444";
+const requestId = "99999999-9999-4999-8999-999999999999";
 const invoice = {
   id: invoiceId,
   invoiceNo: "INV-2026-001",
@@ -101,6 +102,11 @@ function setup(
     getInvoiceReadiness?: ReturnType<typeof vi.fn>;
     getPendingBankTransfers?: ReturnType<typeof vi.fn>;
     confirmBankPayment?: ReturnType<typeof vi.fn>;
+    getRequestContracts?: ReturnType<typeof vi.fn>;
+    getAdminRequests?: ReturnType<typeof vi.fn>;
+    getAdminRequest?: ReturnType<typeof vi.fn>;
+    createRequest?: ReturnType<typeof vi.fn>;
+    sendEstimate?: ReturnType<typeof vi.fn>;
     completeSecondFactor?: ReturnType<typeof vi.fn>;
     signOut?: ReturnType<typeof vi.fn>;
   } = {},
@@ -149,7 +155,7 @@ function setup(
         publish();
       }),
   };
-  const apiClient: AdminApiClient = {
+  const apiClient = {
     getSession:
       options.getSession ?? vi.fn(async () => ({ role: "admin" as const })),
     getApplications:
@@ -243,7 +249,17 @@ function setup(
         preview: true,
         replayed: false,
       })),
-  };
+    getRequestContracts:
+      options.getRequestContracts ?? vi.fn(async () => ({ items: [] })),
+    getAdminRequests:
+      options.getAdminRequests ?? vi.fn(async () => ({ items: [] })),
+    getAdminRequest:
+      options.getAdminRequest ?? vi.fn(async () => ({ id: requestId })),
+    createRequest:
+      options.createRequest ?? vi.fn(async () => ({ id: requestId })),
+    sendEstimate:
+      options.sendEstimate ?? vi.fn(async () => ({ id: invoiceId })),
+  } as unknown as AdminApiClient;
   render(
     <MemoryRouter initialEntries={[options.initialPath ?? "/admin/login"]}>
       <Routes>
@@ -870,5 +886,22 @@ describe("admin MFA and review UI", () => {
       await screen.findByRole("heading", { name: webMessages.adminLoginTitle }),
     ).toBeTruthy();
     expect(authClient.signOut).toHaveBeenCalledOnce();
+  });
+
+  it("offers request registration from an active customer detail with the selected contract", async () => {
+    setup({
+      initialPath: `/admin/customers/${customerId}`,
+      signedIn: true,
+      getCustomerDetail: vi.fn(async () => ({
+        ...detail,
+        contract: { id: contractId, status: "active" as const },
+      })),
+    });
+    const registration = await screen.findByRole("link", {
+      name: webMessages.adminRequestsNew,
+    });
+    expect(registration.getAttribute("href")).toBe(
+      `/admin/requests/new?contractId=${contractId}`,
+    );
   });
 });

@@ -175,6 +175,11 @@ export function MePage({ apiClient }: { apiClient: ReturnTypeApiClient }) {
         ) : null}
         <div className="profile-actions">
           {state.status === "ready" ? (
+            <Link className="secondary-button" to="/me/requests">
+              {webMessages.myRequestsTitle}
+            </Link>
+          ) : null}
+          {state.status === "ready" ? (
             <Link className="secondary-button" to="/me/invoices">
               {webMessages.invoiceListTitle}
             </Link>

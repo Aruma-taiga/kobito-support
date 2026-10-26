@@ -526,6 +526,142 @@ button:disabled {
   font-weight: 600;
 }
 
+.request-page-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.request-page-heading > h1 {
+  min-width: 0;
+}
+
+.request-page-heading > a,
+.request-list-item > a {
+  color: #2f5b85;
+  font-weight: 700;
+}
+
+.request-urgent-tag {
+  width: fit-content;
+  margin: 8px 0 0;
+  padding: 3px 9px;
+  color: #8b351d;
+  background: #fff0e8;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.request-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.request-list-item,
+.estimate-card,
+.request-confirm {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #d6dce2;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.request-list-item > a {
+  display: inline-block;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.request-summary-list {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.65fr) minmax(0, 1.35fr);
+  gap: 8px 14px;
+  margin: 16px 0 0;
+}
+
+.request-summary-list dt {
+  color: #5f6b73;
+  font-size: 14px;
+}
+
+.request-summary-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.request-summary-list ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.estimate-card {
+  margin: 16px 0;
+}
+
+.estimate-card h2,
+.request-confirm h2,
+.admin-card h2 {
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.estimate-form {
+  margin-top: 20px;
+  padding-top: 8px;
+  border-top: 1px solid #d6dce2;
+}
+
+.admin-card select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 12px;
+  color: #1f2e3a;
+  background: #fff;
+  border: 1px solid #aeb8c1;
+  border-radius: 6px;
+}
+
+.request-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  font-weight: 600;
+}
+
+.request-check input {
+  display: inline-block;
+  width: 20px;
+  min-height: 20px;
+  margin: 0;
+}
+
+.request-contact-line {
+  margin: 10px 0 0;
+  color: #2f5b85;
+  font-weight: 700;
+}
+
+.request-card {
+  width: min(100%, 760px);
+  min-width: 0;
+}
+
+.request-card .primary-button,
+.request-card .request-confirm .primary-button {
+  width: 100%;
+}
+
 .admin-toolbar .error-message {
   margin: 0;
 }
@@ -948,6 +1084,28 @@ button:disabled {
   .admin-toolbar > button {
     padding-right: 12px;
     padding-left: 12px;
+  }
+
+  .request-page-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .request-page-heading > a {
+    justify-content: center;
+    width: 100%;
+    text-align: center;
+  }
+
+  .request-list-item,
+  .estimate-card,
+  .request-confirm {
+    padding: 14px 12px;
+  }
+
+  .request-summary-list {
+    grid-template-columns: minmax(88px, 0.65fr) minmax(0, 1.35fr);
+    gap: 8px;
   }
 
   .profile-actions {

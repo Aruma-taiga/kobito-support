@@ -9,6 +9,8 @@ import type { ApplicationsModule } from "./modules/applications/contracts.js";
 import { createApplicationRoutes } from "./modules/applications/routes.js";
 import type { InvoiceModule } from "./modules/invoices/contracts.js";
 import { createInvoiceCustomerRoutes } from "./modules/invoices/routes.js";
+import type { RequestModule } from "./modules/requests/contracts.js";
+import { createRequestCustomerRoutes } from "./modules/requests/routes.js";
 import {
   type AccountLookup,
   createAuthenticate,
@@ -30,6 +32,7 @@ export interface AppDependencies {
   applications: ApplicationsModule;
   admin: AdminModule;
   invoices: InvoiceModule;
+  requests?: RequestModule;
   publicSettings: { getServiceName(): Promise<string> };
   logger: ApiLogger;
   komojuInbox: KomojuInbox;
@@ -96,6 +99,8 @@ export function createApp(dependencies: AppDependencies) {
     "/api/v1",
     createInvoiceCustomerRoutes({ invoices: dependencies.invoices }),
   );
+  if (dependencies.requests)
+    app.route("/api/v1", createRequestCustomerRoutes(dependencies.requests));
 
   app.route(
     "/api/v1/admin",
@@ -104,6 +109,7 @@ export function createApp(dependencies: AppDependencies) {
       verifier: dependencies.verifier,
       accounts: dependencies.accounts,
       invoices: dependencies.invoices,
+      ...(dependencies.requests ? { requests: dependencies.requests } : {}),
     }),
   );
 

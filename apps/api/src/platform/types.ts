@@ -27,7 +27,10 @@ export class ApiError extends Error {
       | "validation_error"
       | "internal_error"
       | "application_unavailable"
-      | "invoice_unavailable",
+      | "invoice_unavailable"
+      | "request_conflict"
+      | "estimate_conflict"
+      | "insufficient_credits",
   ) {
     super(code);
   }
