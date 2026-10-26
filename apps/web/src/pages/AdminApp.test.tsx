@@ -912,23 +912,90 @@ describe("admin MFA and review UI", () => {
   });
 
   it("surfaces stale settings and offers an explicit reload without overwriting", async () => {
+    type SettingsResponse = Awaited<AdminApiClient["getIssuerSettings"]>;
+    let resolveSettings!: (response: SettingsResponse) => void;
+    const getIssuerSettings = vi
+      .fn<() => Promise<SettingsResponse>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<SettingsResponse>((resolve) => {
+            resolveSettings = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        settings: {
+          serviceName: "コビトサポート",
+          companyName: "",
+          companyAddress: "",
+          invoiceRegistrationNo: null,
+          invoicePrefix: "INV",
+          bankAccount: {
+            bankName: "",
+            branchName: "",
+            accountType: "",
+            accountNumber: "",
+            accountHolder: "",
+          },
+        },
+        revision: "a".repeat(64),
+        issuanceReady: false,
+      });
     const updateIssuerSettings = vi.fn(async () => {
       throw new AdminApiError("issuer_settings_conflict");
     });
     const { apiClient } = setup({
       initialPath: "/admin/settings",
       signedIn: true,
+      getIssuerSettings,
       updateIssuerSettings,
     });
     await screen.findByRole("heading", { name: "発行者・振込先設定" });
-    fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
+    expect(
+      screen.getByText(webMessages.adminIssuerSettingsLoading),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "設定を保存" })).toBeNull();
+    await act(async () => {
+      resolveSettings({
+        settings: {
+          serviceName: "コビトサポート",
+          companyName: "",
+          companyAddress: "",
+          invoiceRegistrationNo: null,
+          invoicePrefix: "INV",
+          bankAccount: {
+            bankName: "",
+            branchName: "",
+            accountType: "",
+            accountNumber: "",
+            accountHolder: "",
+          },
+        },
+        revision: "a".repeat(64),
+        issuanceReady: false,
+      });
+    });
+    fireEvent.change(await screen.findByLabelText("会社名"), {
+      target: { value: "ローカル編集" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "設定を保存" }));
     expect((await screen.findByRole("alert")).textContent).toBe(
       "別の管理者が設定を更新しました。最新の設定を読み込み直してください。",
     );
     expect(
       screen.getByRole("button", { name: "最新の設定を読み込む" }),
     ).toBeTruthy();
-    expect(apiClient.getIssuerSettings).toHaveBeenCalledOnce();
+    expect((screen.getByLabelText("会社名") as HTMLInputElement).value).toBe(
+      "ローカル編集",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "最新の設定を読み込む" }),
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText("会社名") as HTMLInputElement).value).toBe(
+        "",
+      ),
+    );
+    expect(apiClient.getIssuerSettings).toHaveBeenCalledTimes(2);
   });
 
   it("rechecks the server session on a refreshed protected route before loading the queue", async () => {
