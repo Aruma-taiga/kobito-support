@@ -130,7 +130,7 @@ export function MePage({
                   {webMessages.contractLoadError}
                 </p>
               ) : null}
-              {!contractError && !contract ? (
+              {showContractAccess && !contractError && !contract ? (
                 <output>{webMessages.contractLoading}</output>
               ) : null}
               {contract?.contract ? (
@@ -143,7 +143,18 @@ export function MePage({
                     <dt>{webMessages.contractPlan}</dt>
                     <dd>
                       {contract.contract.plan
-                        ? `${contract.contract.plan.name}・${contract.contract.plan.priceInclTax.toLocaleString("ja-JP")}円（税込）・${contract.contract.plan.credits}${webMessages.contractBalanceUnit}`
+                        ? webMessages.contractPlanSummary
+                            .replace("{name}", contract.contract.plan.name)
+                            .replace(
+                              "{price}",
+                              contract.contract.plan.priceInclTax.toLocaleString(
+                                "ja-JP",
+                              ),
+                            )
+                            .replace(
+                              "{credits}",
+                              String(contract.contract.plan.credits),
+                            )
                         : webMessages.contractWaitingPayment}
                     </dd>
                   </div>
@@ -188,6 +199,11 @@ export function MePage({
           </>
         ) : null}
         <div className="profile-actions">
+          {state.status === "ready" && showAccountLinks ? (
+            <Link className="secondary-button" to="/me/contract">
+              {webMessages.contractTitle}
+            </Link>
+          ) : null}
           {state.status === "ready" && showAccountLinks ? (
             <Link className="secondary-button" to="/me/requests">
               {webMessages.myRequestsTitle}

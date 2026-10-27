@@ -6,6 +6,7 @@ import type { AuthClient } from "./auth/session.js";
 import { AuthProvider, RequireAuth } from "./auth/session.js";
 import { AdminApp } from "./pages/AdminApp.js";
 import { ApplicationPage } from "./pages/ApplicationPage.js";
+import { ContractPage } from "./pages/ContractPage.js";
 import {
   CustomerAccessGuard,
   CustomerFinishedPage,
@@ -137,6 +138,10 @@ export function App({
                   <Route
                     path="/me/welcome"
                     element={<CustomerWelcomePage apiClient={apiClient} />}
+                  />
+                  <Route
+                    path="/me/contract"
+                    element={<ContractPage apiClient={apiClient} />}
                   />
                   <Route
                     path="/me/finished"

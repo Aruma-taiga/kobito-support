@@ -5,6 +5,7 @@ import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { type AuthClient, AuthProvider, RequireAuth } from "../auth/session.js";
+import type { ReturnTypeApiClient } from "../platform/api-client.js";
 import { createApiClient } from "../platform/api-client.js";
 import { MePage } from "./MePage.js";
 
@@ -69,6 +70,44 @@ describe("expired customer session recovery", () => {
 });
 
 describe("customer contract summary", () => {
+  it("shows no contract instead of a permanent loader for a legacy account", async () => {
+    const currentUser = {
+      uid: "legacy-customer",
+      email: "legacy@example.jp",
+      getIdToken: vi.fn(async () => "customer-token"),
+    };
+    const authClient: AuthClient = {
+      currentUser: () => currentUser,
+      subscribe: (listener) => {
+        queueMicrotask(() => listener(currentUser));
+        return () => undefined;
+      },
+      signIn: async () => undefined,
+      signUp: async () => currentUser,
+      signOut: async () => undefined,
+    };
+    const apiClient = {
+      getMe: vi.fn(async () => ({
+        customer: {
+          id: "11111111-1111-4111-8111-111111111111",
+          shopName: "喫茶ひだまり",
+          contactName: "山田花子",
+        },
+      })),
+      getContract: vi.fn(async () => ({ contract: null })),
+    } as unknown as ReturnTypeApiClient;
+    render(
+      <AuthProvider client={authClient}>
+        <MemoryRouter initialEntries={["/me"]}>
+          <MePage apiClient={apiClient} showContractAccess={false} />
+        </MemoryRouter>
+      </AuthProvider>,
+    );
+    expect(await screen.findByText(webMessages.contractNone)).toBeTruthy();
+    expect(screen.queryByText(webMessages.contractLoading)).toBeNull();
+    expect(apiClient.getContract).not.toHaveBeenCalled();
+  });
+
   it("shows the agreed plan and available period details from the contract API", async () => {
     const currentUser = {
       uid: "customer-test",

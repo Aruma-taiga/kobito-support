@@ -167,6 +167,157 @@ function setup(
 }
 
 describe("application request routes", () => {
+  it("shows the accepted contract snapshot and current balance on its own page", async () => {
+    const { apiClient } = setup(
+      "/me/contract",
+      {},
+      {
+        getContract: vi.fn(async () => ({
+          contract: {
+            id: "11111111-1111-4111-8111-111111111111",
+            status: "cancel_scheduled" as const,
+            anchorDate: "2026-10-26",
+            preview: true,
+            plan: { name: "契約時のライト", priceInclTax: 5500, credits: 1 },
+            currentPeriod: {
+              id: "55555555-5555-4555-8555-555555555555",
+              seq: 2,
+              startsOn: "2026-11-26",
+              endsOn: "2026-12-25",
+              priceInclTax: 5500,
+              credits: 1,
+              balance: -1,
+            },
+          },
+        })),
+      },
+    );
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: webMessages.contractTitle,
+      }),
+    ).toBeTruthy();
+    expect(
+      await screen.findByText(/契約時のライト・5,500円（税込）・1クレジット/),
+    ).toBeTruthy();
+    expect(screen.getByText("2026-10-26")).toBeTruthy();
+    expect(screen.getByText(webMessages.contractCredits)).toBeTruthy();
+    expect(
+      screen.getByText("2026-11-26").closest("time")?.getAttribute("datetime"),
+    ).toBe("2026-11-26");
+    expect(
+      screen.getByText("2026-12-25").closest("time")?.getAttribute("datetime"),
+    ).toBe("2026-12-25");
+    expect(screen.getByText("-1 クレジット")).toBeTruthy();
+    expect(screen.getByText(webMessages.contractPreview)).toBeTruthy();
+    expect(
+      screen.getByText("次回の請求日は、請求書でご案内します。"),
+    ).toBeTruthy();
+    expect(apiClient.getContract).toHaveBeenCalledOnce();
+  });
+
+  it("keeps pending customers away from the contract API on direct navigation", async () => {
+    const { apiClient } = setup(
+      "/me/contract",
+      {},
+      {
+        getCustomerAccess: vi.fn(async () => ({
+          contractStatus: "under_review",
+          landingPath: "/me/waiting",
+          access: "pending",
+          welcomeRequired: false,
+          invoiceAccess: true,
+          invoiceAccessUntil: null,
+        })),
+      },
+    );
+    expect(
+      await screen.findByRole("heading", { name: webMessages.meWaitingTitle }),
+    ).toBeTruthy();
+    expect(apiClient.getContract).not.toHaveBeenCalled();
+  });
+
+  it("redirects ended customers away from contract details without fetching them", async () => {
+    const { apiClient } = setup(
+      "/me/contract",
+      {},
+      {
+        getCustomerAccess: vi.fn(async () => ({
+          contractStatus: "ended",
+          landingPath: "/me/invoices",
+          access: "ended",
+          welcomeRequired: false,
+          invoiceAccess: true,
+          invoiceAccessUntil: "2027-10-27",
+        })),
+      },
+    );
+    expect(
+      await screen.findByRole("heading", {
+        name: webMessages.invoiceListTitle,
+      }),
+    ).toBeTruthy();
+    expect(apiClient.getContract).not.toHaveBeenCalled();
+  });
+
+  it("shows the loading state without exposing profile data while contract details are delayed", async () => {
+    let resolveContract!: (
+      value: Awaited<ReturnType<ReturnTypeApiClient["getContract"]>>,
+    ) => void;
+    const getContract = vi.fn(
+      () =>
+        new Promise<Awaited<ReturnType<ReturnTypeApiClient["getContract"]>>>(
+          (resolve) => {
+            resolveContract = resolve;
+          },
+        ),
+    );
+    setup("/me/contract", {}, { getContract });
+    expect(await screen.findByText(webMessages.contractLoading)).toBeTruthy();
+    expect(screen.queryByText("喫茶ひだまり")).toBeNull();
+    resolveContract({ contract: null });
+    expect(await screen.findByText(webMessages.contractNone)).toBeTruthy();
+  });
+
+  it("shows an explicit empty state when the contract endpoint returns no contract", async () => {
+    const getContract = vi.fn(async () => ({ contract: null }));
+    setup("/me/contract", {}, { getContract });
+    expect(await screen.findByText(webMessages.contractNone)).toBeTruthy();
+    expect(screen.queryByText(webMessages.contractLoading)).toBeNull();
+    expect(getContract).toHaveBeenCalledOnce();
+  });
+
+  it("shows a contract fetch error and retries without leaving stale content", async () => {
+    const getContract = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("temporary failure"))
+      .mockResolvedValueOnce({
+        contract: {
+          id: "11111111-1111-4111-8111-111111111111",
+          status: "active" as const,
+          anchorDate: "2026-10-26",
+          preview: false,
+          plan: { name: "承諾済みプラン", priceInclTax: 5500, credits: 1 },
+          currentPeriod: null,
+        },
+      });
+    setup("/me/contract", {}, { getContract });
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: webMessages.retry }));
+    expect(
+      await screen.findByText(/承諾済みプラン・5,500円（税込）・1クレジット/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(webMessages.contractCurrentPeriodUnavailable),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(webMessages.contractCurrentBalanceUnavailable),
+    ).toBeTruthy();
+    expect(screen.queryByText(/0 クレジット/)).toBeNull();
+    expect(getContract).toHaveBeenCalledTimes(2);
+  });
+
   it("lets a pending customer sign out from the waiting page without loading profile data", async () => {
     const { apiClient, signOut } = setup(
       "/me",
