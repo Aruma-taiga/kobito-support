@@ -110,6 +110,7 @@ function setup(
     createRequest?: ReturnType<typeof vi.fn>;
     sendEstimate?: ReturnType<typeof vi.fn>;
     completeSecondFactor?: ReturnType<typeof vi.fn>;
+    startSecondFactor?: ReturnType<typeof vi.fn>;
     signOut?: ReturnType<typeof vi.fn>;
   } = {},
 ) {
@@ -142,7 +143,8 @@ function setup(
       }
       return result;
     }),
-    startSecondFactor: vi.fn(async () => undefined),
+    startSecondFactor:
+      options.startSecondFactor ?? vi.fn(async () => undefined),
     completeSecondFactor:
       options.completeSecondFactor ??
       vi.fn(async () => {
@@ -316,15 +318,13 @@ async function fillLogin() {
 }
 
 async function finishMfa() {
-  fireEvent.change(
-    await screen.findByLabelText(webMessages.adminMfaTotpCodeLabel),
-    {
-      target: { value: "123456" },
-    },
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: webMessages.adminMfaCodeSubmit }),
-  );
+  const input = await screen.findByLabelText(webMessages.adminMfaTotpCodeLabel);
+  const submit = screen.getByRole("button", {
+    name: webMessages.adminMfaCodeSubmit,
+  });
+  await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false));
+  fireEvent.change(input, { target: { value: "123456" } });
+  fireEvent.click(submit);
 }
 
 describe("admin MFA and review UI", () => {
@@ -349,6 +349,34 @@ describe("admin MFA and review UI", () => {
     );
     expect(apiClient.getSession).toHaveBeenCalledOnce();
     expect(apiClient.getApplications).toHaveBeenCalledOnce();
+  });
+
+  it("waits for the MFA challenge to start before enabling code submission", async () => {
+    let resolveChallenge!: () => void;
+    const startSecondFactor = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveChallenge = resolve;
+        }),
+    );
+    const completeSecondFactor = vi.fn(async () => undefined);
+    setup({ startSecondFactor, completeSecondFactor });
+    await fillLogin();
+    await screen.findByRole("heading", {
+      name: webMessages.adminMfaChallengeTitle,
+    });
+    await waitFor(() => expect(startSecondFactor).toHaveBeenCalledOnce());
+    expect(
+      screen
+        .getByRole("button", { name: webMessages.adminMfaCodeSubmit })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(completeSecondFactor).not.toHaveBeenCalled();
+
+    const finishing = finishMfa();
+    await act(async () => resolveChallenge());
+    await finishing;
+    expect(completeSecondFactor).toHaveBeenCalledWith("totp-1", "123456");
   });
 
   it("requires input, preview acknowledgement, a review step, and a final confirm", async () => {
@@ -442,15 +470,7 @@ describe("admin MFA and review UI", () => {
       }),
     });
     await fillLogin();
-    fireEvent.change(
-      await screen.findByLabelText(webMessages.adminMfaTotpCodeLabel),
-      {
-        target: { value: "123456" },
-      },
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: webMessages.adminMfaCodeSubmit }),
-    );
+    await finishMfa();
     expect((await screen.findByRole("alert")).textContent).toContain(
       webMessages.adminMfaInvalidCode,
     );
