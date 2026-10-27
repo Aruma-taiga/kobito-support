@@ -956,6 +956,7 @@ describe("admin MFA and review UI", () => {
       screen.getByText(webMessages.adminIssuerSettingsLoading),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "設定を保存" })).toBeNull();
+    await waitFor(() => expect(getIssuerSettings).toHaveBeenCalledOnce());
     await act(async () => {
       resolveSettings({
         settings: {
