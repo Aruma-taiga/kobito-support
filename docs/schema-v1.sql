@@ -6,7 +6,7 @@ create extension if not exists pgcrypto;
 
 -- ===== 設定（G-01：サービス名などを1か所で差し替え） =====
 create table settings (
-  key         text primary key,           -- service_name, company_name, invoice_registration_no, bank_account, konbini_fee_yen, ...
+  key         text primary key,           -- service_name, company_name, invoice_registration_no, bank_account, contact_email (info@singularta.com), konbini_fee_yen(見送り), ...
   value       jsonb not null,
   updated_at  timestamptz not null default now()
 );
@@ -290,6 +290,7 @@ create table partner_rewards (
 );
 
 -- ===== 通知 =====
+-- 2026-10-29：プレオープンは channel='email' のみ使う。'line'・konbini 関連の値は将来用に残す（使わない）
 create table notifications (
   id            uuid primary key default gen_random_uuid(),
   customer_id   uuid references customers(id),
