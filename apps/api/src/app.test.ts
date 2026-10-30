@@ -1,0 +1,829 @@
+import {
+  lineLinkResponseSchema,
+  lineLinkStatusResponseSchema,
+  lineSignInResponseSchema,
+} from "@kobito/shared";
+import { describe, expect, it, vi } from "vitest";
+import { type AppDependencies, createApp } from "./app.js";
+import { LineService } from "./modules/accounts/line/service.js";
+
+type TestAccount = NonNullable<
+  Awaited<ReturnType<AppDependencies["accounts"]["findByAuthUserId"]>>
+>;
+type AppOverrides = Partial<
+  Omit<
+    AppDependencies,
+    "accounts" | "applications" | "invoices" | "customerAccess"
+  >
+> & {
+  accounts?: Partial<AppDependencies["accounts"]>;
+  applications?: Partial<AppDependencies["applications"]>;
+  admin?: Partial<AppDependencies["admin"]>;
+  invoices?: Partial<AppDependencies["invoices"]>;
+  customerAccess?: Partial<AppDependencies["customerAccess"]>;
+  issuerSettings?: Partial<NonNullable<AppDependencies["issuerSettings"]>>;
+};
+
+const userForToken = {
+  uid: "auth-customer-a",
+  firebase: { sign_in_second_factor: "phone" },
+};
+
+function makeApp(overrides: AppOverrides = {}) {
+  const defaults: AppDependencies = {
+    config: {
+      nodeEnv: "test",
+      databaseUrl: "postgres://test",
+      firebaseProjectId: "demo-kobito-support",
+      webOrigin: "http://localhost:5173",
+      port: 3000,
+      invoicePrefix: "KS",
+    },
+    verifier: { verifyIdToken: vi.fn(async () => userForToken) },
+    accounts: {
+      findByAuthUserId: vi.fn(async (uid: string) =>
+        uid === userForToken.uid
+          ? {
+              authUserId: uid,
+              role: "customer" as const,
+              customerId: "customer-a",
+            }
+          : undefined,
+      ),
+      findCustomer: vi.fn(async () => ({
+        id: "customer-a",
+        shopName: "A store",
+        contactName: "A user",
+      })),
+    },
+    applications: {
+      getPublicCatalog: vi.fn(async () => ({
+        plans: [],
+        displayVersion: "a".repeat(64),
+        application: null,
+      })),
+      getPublicPartner: vi.fn(async (code: string) => ({
+        code,
+        name: "Referral partner",
+      })),
+      submit: vi.fn(async () => ({
+        applicationId: "00000000-0000-4000-8000-000000000001",
+        contractId: "00000000-0000-4000-8000-000000000002",
+        status: "under_review" as const,
+        replayed: false,
+      })),
+    },
+    admin: {
+      listApplications: vi.fn(async () => ({
+        items: [],
+        page: 1,
+        pageSize: 25,
+        total: 0,
+      })),
+      getCustomerDetail: vi.fn(async () => {
+        throw new Error("not found in test admin detail");
+      }),
+      declineApplication: vi.fn(async () => ({
+        applicationId: "00000000-0000-4000-8000-000000000001",
+        contractId: "00000000-0000-4000-8000-000000000002",
+        status: "declined" as const,
+        replayed: false,
+      })),
+    },
+    issuerSettings: {
+      get: vi.fn(async () => ({
+        settings: {
+          serviceName: "Test service",
+          companyName: "",
+          companyAddress: "",
+          invoiceRegistrationNo: null,
+          invoicePrefix: "KS",
+          bankAccount: {
+            bankName: "",
+            branchName: "",
+            accountType: "",
+            accountNumber: "",
+            accountHolder: "",
+          },
+        },
+        revision: "a".repeat(64),
+        issuanceReady: false,
+      })),
+      update: vi.fn(async () => {
+        throw new Error("not used");
+      }),
+    },
+    invoices: {
+      getReadiness: vi.fn(async () => ({
+        canIssue: false,
+        mode: "unavailable" as const,
+        reason: "issuer_not_configured" as const,
+      })),
+      approveApplication: vi.fn(async () => ({
+        applicationId: "00000000-0000-4000-8000-000000000001",
+        contractId: "00000000-0000-4000-8000-000000000002",
+        status: "awaiting_payment" as const,
+        invoice: null,
+        replayed: false,
+      })),
+      listCustomer: vi.fn(async () => ({ invoices: [] })),
+      getCustomer: vi.fn(async () => {
+        throw new Error("not found");
+      }),
+      getCustomerPdf: vi.fn(async () => ({
+        invoiceNo: "KS-2026-00001",
+        content: Buffer.from("%PDF-1.7 test"),
+      })),
+      listAdmin: vi.fn(async () => ({ invoices: [] })),
+      getAdmin: vi.fn(async () => {
+        throw new Error("not found");
+      }),
+      getAdminPdf: vi.fn(async () => ({
+        invoiceNo: "KS-2026-00001",
+        content: Buffer.from("%PDF-1.7 test"),
+      })),
+      listPendingBankTransfers: vi.fn(async () => ({ items: [] })),
+      confirmBankPayment: vi.fn(async () => {
+        throw new Error("not used");
+      }),
+      getCustomerContract: vi.fn(async () => ({ contract: null })),
+    },
+    customerAccess: {
+      getAccess: vi.fn(async () => ({
+        contractStatus: null,
+        landingPath: "/me" as const,
+        access: "none" as const,
+        welcomeRequired: false,
+        invoiceAccess: false,
+        invoiceAccessUntil: null,
+      })),
+      markWelcomeSeen: vi.fn(async () => ({
+        seenAt: "2026-01-01T00:00:00.000Z",
+      })),
+    },
+    publicSettings: { getServiceName: vi.fn(async () => "コビトサポート") },
+    komojuInbox: { receive: vi.fn(async () => "accepted" as const) },
+    logger: { info: vi.fn(), error: vi.fn() },
+  };
+  return createApp({
+    ...defaults,
+    ...overrides,
+    accounts: { ...defaults.accounts, ...overrides.accounts },
+    applications: { ...defaults.applications, ...overrides.applications },
+    admin: { ...defaults.admin, ...overrides.admin },
+    invoices: { ...defaults.invoices, ...overrides.invoices },
+    customerAccess: {
+      ...defaults.customerAccess,
+      ...overrides.customerAccess,
+    },
+    ...(overrides.issuerSettings
+      ? {
+          issuerSettings: {
+            ...defaults.issuerSettings,
+            ...overrides.issuerSettings,
+          },
+        }
+      : {}),
+  });
+}
+
+describe("API routes and auth pipeline", () => {
+  it("exposes LINE login publicly and scopes linking/status to the verified customer", async () => {
+    const line = {
+      signIn: vi.fn(async () => ({
+        customToken: "firebase-custom",
+        authUserId: "auth-customer-a",
+      })),
+      link: vi.fn(async (scope: { customerId: string }) => {
+        expect(scope.customerId).toBe("customer-a");
+        return { linked: true as const };
+      }),
+      status: vi.fn(async () => ({ linked: false })),
+    };
+    const app = makeApp({ line });
+    const signIn = await app.request("/api/v1/auth/line", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: "line-id-token" }),
+    });
+    expect(signIn.status).toBe(200);
+    expect(lineSignInResponseSchema.parse(await signIn.json())).toEqual({
+      customToken: "firebase-custom",
+      authUserId: "auth-customer-a",
+    });
+    for (const extra of [{ uid: "admin" }, { customerId: "customer-other" }]) {
+      const rejected = await app.request("/api/v1/auth/line", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: "line-id-token", ...extra }),
+      });
+      expect(rejected.status).toBe(400);
+    }
+
+    const anonymous = await app.request("/api/v1/me/line");
+    expect(anonymous.status).toBe(401);
+    const status = await app.request("/api/v1/me/line", {
+      headers: { authorization: "Bearer valid" },
+    });
+    expect(status.status).toBe(200);
+    expect(lineLinkStatusResponseSchema.parse(await status.json())).toEqual({
+      linked: false,
+    });
+    const linked = await app.request("/api/v1/me/line/link", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ idToken: "line-id-token" }),
+    });
+    expect(linked.status).toBe(200);
+    expect(lineLinkResponseSchema.parse(await linked.json())).toEqual({
+      linked: true,
+    });
+  });
+
+  it("rejects oversized LINE token requests before parsing or invoking sign-in", async () => {
+    const line = {
+      signIn: vi.fn(async () => ({
+        customToken: "must-not-mint",
+        authUserId: "uid",
+      })),
+      link: vi.fn(async () => ({ linked: true as const })),
+      status: vi.fn(async () => ({ linked: false })),
+    };
+    const response = await makeApp({ line }).request("/api/v1/auth/line", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: "x".repeat(40_000) }),
+    });
+    expect(response.status).toBe(413);
+    expect(line.signIn).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes an invalid LINE token from Firebase session authentication", async () => {
+    const line = new LineService(
+      {
+        findLinkedAccount: vi.fn(async () => undefined),
+        link: vi.fn(async () => undefined),
+        status: vi.fn(async () => false),
+      },
+      {
+        verify: vi.fn(async () => {
+          throw new Error("invalid LINE ID token");
+        }),
+      },
+      { createCustomToken: vi.fn(async () => "unused") },
+    );
+    const app = makeApp({ line });
+    const link = await app.request("/api/v1/me/line/link", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ idToken: "expired-line-token" }),
+    });
+    expect(link.status).toBe(400);
+    expect(await link.json()).toEqual({
+      error: { code: "invalid_line_token" },
+    });
+
+    const unauthenticated = await app.request("/api/v1/me/line/link", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: "expired-line-token" }),
+    });
+    expect(unauthenticated.status).toBe(401);
+    expect(await unauthenticated.json()).toEqual({
+      error: { code: "unauthorized" },
+    });
+
+    const publicLogin = await app.request("/api/v1/auth/line", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: "expired-line-token" }),
+    });
+    expect(publicLogin.status).toBe(401);
+    expect(await publicLogin.json()).toEqual({
+      error: { code: "unauthorized" },
+    });
+  });
+
+  it("serves health and only the settings-backed public service name", async () => {
+    const app = makeApp();
+    const health = await app.request("/healthz");
+    expect(health.status).toBe(200);
+    expect(await health.json()).toEqual({ status: "ok" });
+
+    const config = await app.request("/api/v1/public/config");
+    expect(config.status).toBe(200);
+    expect(await config.json()).toEqual({
+      serviceName: "コビトサポート",
+      application: null,
+    });
+
+    const plans = await app.request("/api/v1/public/plans");
+    expect(plans.status).toBe(200);
+    expect(await plans.json()).toEqual({
+      plans: [],
+      displayVersion: "a".repeat(64),
+    });
+  });
+
+  it.each([
+    undefined,
+    "Basic abc",
+    "Bearer ",
+    "Bearer invalid",
+  ])("rejects missing, malformed, and invalid bearer credentials (%s)", async (authorization) => {
+    const app = makeApp({
+      verifier: {
+        verifyIdToken: vi.fn(async () => {
+          throw new Error("private verifier detail");
+        }),
+      },
+    });
+    const response = await app.request("/api/v1/me", {
+      ...(authorization ? { headers: { authorization } } : {}),
+    });
+    expect(response.status).toBe(401);
+    const body = await response.json();
+    expect(body).toEqual({ error: { code: "unauthorized" } });
+    expect(JSON.stringify(body)).not.toContain("private verifier detail");
+  });
+
+  it("requires authentication for the entire /api/v1/me namespace", async () => {
+    const response = await makeApp().request("/api/v1/me/future-resource");
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: { code: "unauthorized" } });
+    const access = await makeApp().request("/api/v1/me/access");
+    expect(access.status).toBe(401);
+  });
+
+  it("loads only the authenticated customer and returns the minimal profile", async () => {
+    const app = makeApp();
+    const response = await app.request("/api/v1/me", {
+      headers: { authorization: "Bearer good-token" },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      customer: {
+        id: "customer-a",
+        shopName: "A store",
+        contactName: "A user",
+      },
+    });
+  });
+
+  it("returns role-mismatch as not found and rejects an unscoped account", async () => {
+    const app = makeApp({
+      accounts: {
+        findByAuthUserId: vi.fn(async () => ({
+          authUserId: "admin",
+          role: "admin" as const,
+          customerId: null,
+        })),
+        findCustomer: vi.fn(),
+      },
+    });
+    const response = await app.request("/api/v1/me", {
+      headers: { authorization: "Bearer good-token" },
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: { code: "not_found" } });
+  });
+
+  it("rejects unknown UIDs and customer accounts without a database customer ID", async () => {
+    for (const account of [
+      undefined,
+      {
+        authUserId: "auth-customer-a",
+        role: "customer" as const,
+        customerId: null,
+      },
+    ]) {
+      const app = makeApp({
+        accounts: {
+          findByAuthUserId: vi.fn(
+            async (): Promise<TestAccount | undefined> => account,
+          ),
+        },
+      });
+      const response = await app.request("/api/v1/me", {
+        headers: { authorization: "Bearer good-token" },
+      });
+      expect(response.status).toBe(401);
+    }
+  });
+
+  it("applies exact configured CORS origin and logs only route templates", async () => {
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const app = makeApp({ logger });
+    const response = await app.request(
+      "/api/v1/public/config?secret=query-secret",
+      {
+        headers: {
+          origin: "http://localhost:5173",
+          "x-request-id": "user-value",
+        },
+      },
+    );
+    expect(response.headers.get("access-control-allow-origin")).toBe(
+      "http://localhost:5173",
+    );
+    const preflight = await app.request("/api/v1/applications", {
+      method: "OPTIONS",
+      headers: {
+        origin: "http://localhost:5173",
+        "access-control-request-method": "POST",
+        "access-control-request-headers":
+          "Authorization,Content-Type,Idempotency-Key",
+      },
+    });
+    expect(preflight.headers.get("access-control-allow-headers")).toContain(
+      "Idempotency-Key",
+    );
+    const logged = JSON.stringify(logger.info.mock.calls);
+    expect(logged).not.toContain("query-secret");
+    expect(logged).not.toContain("user-value");
+    expect(logged).not.toContain("/api/v1/public/config?");
+
+    const hostileOrigin = await app.request("/api/v1/public/config", {
+      headers: { origin: "https://attacker.example" },
+    });
+    expect(hostileOrigin.headers.get("access-control-allow-origin")).not.toBe(
+      "https://attacker.example",
+    );
+
+    await app.request("/private/path?token=query-secret");
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(
+      "/private/path",
+    );
+  });
+
+  it("applies admin MFA gates on the real API namespace", async () => {
+    const app = makeApp({
+      verifier: { verifyIdToken: vi.fn(async () => ({ uid: "admin-uid" })) },
+      accounts: {
+        findByAuthUserId: vi.fn(async () => ({
+          authUserId: "admin-uid",
+          role: "admin" as const,
+          customerId: null,
+        })),
+      },
+    });
+    const response = await app.request("/api/v1/admin/private-operation", {
+      headers: { authorization: "Bearer valid" },
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: { code: "forbidden" } });
+
+    const customerApp = makeApp();
+    const hidden = await customerApp.request(
+      "/api/v1/admin/private-operation",
+      { headers: { authorization: "Bearer good-token" } },
+    );
+    expect(hidden.status).toBe(404);
+    expect(await hidden.json()).toEqual({ error: { code: "not_found" } });
+  });
+
+  it("exposes the admin session only to a database admin with a verified factor", async () => {
+    const verifyIdToken = vi.fn(async () => ({
+      uid: "admin-uid",
+      firebase: { sign_in_second_factor: "phone" },
+    }));
+    const adminApp = makeApp({
+      verifier: { verifyIdToken },
+      accounts: {
+        findByAuthUserId: vi.fn(async () => ({
+          authUserId: "admin-uid",
+          role: "admin" as const,
+          customerId: null,
+        })),
+      },
+    });
+
+    const noToken = await adminApp.request("/api/v1/admin/session");
+    expect(noToken.status).toBe(401);
+
+    const session = await adminApp.request("/api/v1/admin/session", {
+      headers: { authorization: "Bearer verified-admin" },
+    });
+    expect(session.status).toBe(200);
+    expect(await session.json()).toEqual({ role: "admin" });
+    expect(verifyIdToken).toHaveBeenCalledWith("verified-admin", true);
+  });
+
+  it("reads issuer configuration only inside the verified admin namespace", async () => {
+    const app = makeApp({
+      verifier: {
+        verifyIdToken: vi.fn(async () => ({
+          uid: "admin-uid",
+          firebase: { sign_in_second_factor: "phone" },
+        })),
+      },
+      accounts: {
+        findByAuthUserId: vi.fn(async () => ({
+          authUserId: "admin-uid",
+          role: "admin" as const,
+          customerId: null,
+        })),
+      },
+    });
+    const response = await app.request("/api/v1/admin/settings", {
+      headers: { authorization: "Bearer verified-admin" },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      settings: {
+        serviceName: "Test service",
+        invoicePrefix: "KS",
+        invoiceRegistrationNo: null,
+        bankAccount: {
+          bankName: "",
+          branchName: "",
+          accountType: "",
+          accountNumber: "",
+          accountHolder: "",
+        },
+      },
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/),
+      issuanceReady: false,
+    });
+  });
+
+  it.each([
+    "auth/id-token-revoked",
+    "auth/user-disabled",
+  ])("checks revocation before exposing the admin namespace (%s)", async (providerCode) => {
+    const findByAuthUserId = vi.fn();
+    const verifyIdToken = vi.fn(
+      async (_token: string, _checkRevoked?: boolean) => {
+        throw new Error(providerCode);
+      },
+    );
+    const app = makeApp({
+      verifier: { verifyIdToken },
+      accounts: { findByAuthUserId },
+    });
+    const response = await app.request("/api/v1/admin/session", {
+      headers: { authorization: "Bearer revoked-admin" },
+    });
+    expect(response.status).toBe(401);
+    expect(verifyIdToken).toHaveBeenCalledWith("revoked-admin", true);
+    expect(findByAuthUserId).not.toHaveBeenCalled();
+  });
+
+  it("requires MFA on all admin routes while returning an obscured not-found for customers", async () => {
+    const adminWithoutMfa = makeApp({
+      verifier: { verifyIdToken: vi.fn(async () => ({ uid: "admin-uid" })) },
+      accounts: {
+        findByAuthUserId: vi.fn(async () => ({
+          authUserId: "admin-uid",
+          role: "admin" as const,
+          customerId: null,
+        })),
+      },
+    });
+    expect(
+      (
+        await adminWithoutMfa.request("/api/v1/admin/customers", {
+          headers: { authorization: "Bearer first-factor-only" },
+        })
+      ).status,
+    ).toBe(403);
+
+    const customerApp = makeApp();
+    expect(
+      (
+        await customerApp.request("/api/v1/admin/customers", {
+          headers: { authorization: "Bearer customer-token" },
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it("returns generic 500 and never logs body, header, query, or DB error secrets", async () => {
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const app = makeApp({
+      accounts: {
+        findByAuthUserId: vi.fn(async () => {
+          throw new Error(
+            "DB password=pg-secret email=private@example.test token=db-token-secret",
+          );
+        }),
+      },
+      logger,
+    });
+    const response = await app.request("/api/v1/me?private=query-secret", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer bearer-secret",
+        "x-private-header": "header-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ note: "body-secret" }),
+    });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: { code: "internal_error" },
+    });
+    const logs = JSON.stringify({
+      info: logger.info.mock.calls,
+      error: logger.error.mock.calls,
+    });
+    for (const sentinel of [
+      "pg-secret",
+      "private@example.test",
+      "db-token-secret",
+      "query-secret",
+      "bearer-secret",
+      "header-secret",
+      "body-secret",
+    ]) {
+      expect(logs).not.toContain(sentinel);
+    }
+  });
+
+  it("verifies an unlinked Firebase identity and passes only the password-free submission to the module", async () => {
+    const identity = { uid: "new-firebase-uid", email: "new@example.test" };
+    const verifier = { verifyIdToken: vi.fn(async () => identity) };
+    const submit = vi.fn(async () => ({
+      applicationId: "00000000-0000-4000-8000-000000000001",
+      contractId: "00000000-0000-4000-8000-000000000002",
+      status: "under_review" as const,
+      replayed: false,
+    }));
+    const app = makeApp({ verifier, applications: { submit } });
+    const response = await app.request("/api/v1/applications", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer verified-token",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-4000-8000-000000000003",
+      },
+      body: JSON.stringify({
+        shopName: "店舗",
+        contactName: "担当者",
+        email: "new@example.test",
+        planCode: "light",
+        billingName: "請求先",
+        billingAddress: "住所",
+        paymentMethod: "bank_transfer",
+        consentBusinessUse: true,
+        consentTerms: true,
+        displayVersion: "a".repeat(64),
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      applicationId: "00000000-0000-4000-8000-000000000001",
+      contractId: "00000000-0000-4000-8000-000000000002",
+      status: "under_review",
+      replayed: false,
+    });
+    expect(submit).toHaveBeenCalledWith({
+      identity,
+      idempotencyKey: "00000000-0000-4000-8000-000000000003",
+      submission: expect.objectContaining({ email: "new@example.test" }),
+      requestContext: {},
+    });
+  });
+
+  it("exposes a minimal access landing decision for an authenticated customer", async () => {
+    const response = await makeApp().request("/api/v1/me/access", {
+      headers: { authorization: "Bearer good-token" },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      contractStatus: null,
+      landingPath: "/me",
+      access: "none",
+      welcomeRequired: false,
+      invoiceAccess: false,
+      invoiceAccessUntil: null,
+    });
+  });
+
+  it("records first welcome acknowledgement and returns the stable replay result", async () => {
+    const markWelcomeSeen = vi.fn(async () => ({
+      seenAt: "2026-01-01T00:00:00.000Z",
+    }));
+    const first = await makeApp({
+      customerAccess: { markWelcomeSeen },
+    }).request("/api/v1/me/welcome-seen", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer good-token",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(markWelcomeSeen).toHaveBeenCalledOnce();
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ seenAt: expect.any(String) });
+  });
+
+  it("rejects password-bearing and identity-mismatched application submissions without calling the module", async () => {
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const submit = vi.fn();
+    const app = makeApp({
+      verifier: {
+        verifyIdToken: vi.fn(async () => ({
+          uid: "uid",
+          email: "person@example.test",
+        })),
+      },
+      applications: { submit },
+      logger,
+    });
+    const submission = {
+      shopName: "店舗",
+      contactName: "担当者",
+      email: "person@example.test",
+      planCode: "light",
+      billingName: "請求先",
+      billingAddress: "住所",
+      paymentMethod: "bank_transfer",
+      consentBusinessUse: true,
+      consentTerms: true,
+      displayVersion: "a".repeat(64),
+    };
+    const sentPassword = "password-must-not-be-logged-or-stored";
+    const passwordResponse = await app.request("/api/v1/applications", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer verified-token",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-4000-8000-000000000004",
+      },
+      body: JSON.stringify({ ...submission, password: sentPassword }),
+    });
+    expect(passwordResponse.status).toBe(422);
+    expect(submit).not.toHaveBeenCalled();
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(sentPassword);
+
+    const mismatchResponse = await app.request("/api/v1/applications", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer verified-token",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-4000-8000-000000000005",
+      },
+      body: JSON.stringify({ ...submission, email: "other@example.test" }),
+    });
+    expect(mismatchResponse.status).toBe(401);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "auth/id-token-revoked",
+    "auth/user-disabled",
+  ])("checks revoked and disabled Firebase account state before public application writes (%s)", async (providerCode) => {
+    const verifyIdToken = vi.fn(
+      async (_token: string, _checkRevoked?: boolean) => {
+        throw new Error(`${providerCode}:private-provider-detail`);
+      },
+    );
+    const submit = vi.fn();
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const app = makeApp({
+      verifier: { verifyIdToken },
+      applications: { submit },
+      logger,
+    });
+    const response = await app.request("/api/v1/applications", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer revoked-token",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-4000-8000-000000000006",
+      },
+      body: JSON.stringify({
+        shopName: "店舗",
+        contactName: "担当者",
+        email: "person@example.test",
+        planCode: "light",
+        billingName: "請求先",
+        billingAddress: "住所",
+        paymentMethod: "bank_transfer",
+        consentBusinessUse: true,
+        consentTerms: true,
+        displayVersion: "a".repeat(64),
+      }),
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: { code: "unauthorized" },
+    });
+    expect(verifyIdToken).toHaveBeenCalledWith("revoked-token", true);
+    expect(submit).not.toHaveBeenCalled();
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(
+      "private-provider-detail",
+    );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(
+      "private-provider-detail",
+    );
+  });
+});

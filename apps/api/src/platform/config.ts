@@ -6,6 +6,18 @@ const optionalText = z.preprocess(
   z.string().trim().min(1).optional(),
 );
 
+const optionalSecret = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().min(1).optional(),
+);
+
+const optionalEmail = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().email().optional(),
+);
+
 const environmentSchema = z
   .object({
     NODE_ENV: z
@@ -23,6 +35,7 @@ const environmentSchema = z
       ),
     FIREBASE_PROJECT_ID: z.string().trim().min(1),
     WEB_ORIGIN: z.string().trim().min(1).url(),
+    OPERATIONS_EMAIL: optionalEmail,
     FIREBASE_AUTH_EMULATOR_HOST: optionalText,
     PORT: z.preprocess(
       (value) => (value === undefined || value === "" ? 3000 : Number(value)),
@@ -36,6 +49,9 @@ const environmentSchema = z
     BANK_ACCOUNT_BRANCH: optionalText,
     BANK_ACCOUNT_TYPE: optionalText,
     BANK_ACCOUNT_NUMBER: optionalText,
+    DEV_INVOICE_PREVIEW: z.enum(["0", "1"]).default("0"),
+    KOMOJU_WEBHOOK_SECRET: optionalSecret,
+    LINE_LOGIN_CHANNEL_ID: optionalText,
   })
   .superRefine((environment, context) => {
     if (
@@ -48,6 +64,16 @@ const environmentSchema = z
         message: "must not be configured in production",
       });
     }
+    if (
+      environment.NODE_ENV === "production" &&
+      environment.DEV_INVOICE_PREVIEW === "1"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["DEV_INVOICE_PREVIEW"],
+        message: "must not be enabled in production",
+      });
+    }
   });
 
 export interface RuntimeConfig {
@@ -55,6 +81,7 @@ export interface RuntimeConfig {
   databaseUrl: string;
   firebaseProjectId: string;
   webOrigin: string;
+  operationsEmail?: string;
   authEmulatorHost?: string;
   port: number;
   serviceName?: string;
@@ -65,6 +92,9 @@ export interface RuntimeConfig {
   bankAccountBranch?: string;
   bankAccountType?: string;
   bankAccountNumber?: string;
+  devInvoicePreview?: boolean;
+  komojuWebhookSecret?: string;
+  lineLoginChannelId?: string;
 }
 
 export function loadConfig(
@@ -91,6 +121,9 @@ export function loadConfig(
     databaseUrl: value.DATABASE_URL,
     firebaseProjectId: value.FIREBASE_PROJECT_ID,
     webOrigin: value.WEB_ORIGIN,
+    ...(value.OPERATIONS_EMAIL === undefined
+      ? {}
+      : { operationsEmail: value.OPERATIONS_EMAIL }),
     ...(value.FIREBASE_AUTH_EMULATOR_HOST === undefined
       ? {}
       : { authEmulatorHost: value.FIREBASE_AUTH_EMULATOR_HOST }),
@@ -117,5 +150,12 @@ export function loadConfig(
     ...(value.BANK_ACCOUNT_NUMBER === undefined
       ? {}
       : { bankAccountNumber: value.BANK_ACCOUNT_NUMBER }),
+    devInvoicePreview: value.DEV_INVOICE_PREVIEW === "1",
+    ...(value.KOMOJU_WEBHOOK_SECRET === undefined
+      ? {}
+      : { komojuWebhookSecret: value.KOMOJU_WEBHOOK_SECRET }),
+    ...(value.LINE_LOGIN_CHANNEL_ID === undefined
+      ? {}
+      : { lineLoginChannelId: value.LINE_LOGIN_CHANNEL_ID }),
   };
 }

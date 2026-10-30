@@ -42,6 +42,41 @@ describe("loadConfig", () => {
     );
   });
 
+  it("preserves the configured KOMOJU secret bytes and treats blank as unset", () => {
+    expect(
+      loadConfig({ ...validEnvironment, KOMOJU_WEBHOOK_SECRET: " secret " })
+        .komojuWebhookSecret,
+    ).toBe(" secret ");
+    expect(
+      loadConfig({ ...validEnvironment, KOMOJU_WEBHOOK_SECRET: "" })
+        .komojuWebhookSecret,
+    ).toBeUndefined();
+    expect(
+      loadConfig({ ...validEnvironment, KOMOJU_WEBHOOK_SECRET: "   " })
+        .komojuWebhookSecret,
+    ).toBeUndefined();
+  });
+
+  it("does not echo an invalid KOMOJU secret value", () => {
+    const secret = "SECRET_SENTINEL";
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        KOMOJU_WEBHOOK_SECRET: secret,
+        PORT: "bad",
+      }),
+    ).toThrow();
+    try {
+      loadConfig({
+        ...validEnvironment,
+        KOMOJU_WEBHOOK_SECRET: secret,
+        PORT: "bad",
+      });
+    } catch (error) {
+      expect(String(error)).not.toContain(secret);
+    }
+  });
+
   it("rejects an auth emulator in production", () => {
     expect(() =>
       loadConfig({ ...validEnvironment, NODE_ENV: "production" }),
@@ -68,5 +103,45 @@ describe("loadConfig", () => {
     expect(
       loadConfig({ ...validEnvironment, INVOICE_PREFIX: "" }).invoicePrefix,
     ).toBe("KS");
+  });
+
+  it("allows invoice previews only as an explicit local-development setting", () => {
+    expect(loadConfig(validEnvironment).devInvoicePreview).toBe(false);
+    expect(
+      loadConfig({ ...validEnvironment, DEV_INVOICE_PREVIEW: "1" })
+        .devInvoicePreview,
+    ).toBe(true);
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        NODE_ENV: "production",
+        FIREBASE_AUTH_EMULATOR_HOST: "",
+        DEV_INVOICE_PREVIEW: "1",
+      }),
+    ).toThrow();
+  });
+
+  it("accepts an optional valid operations notification recipient", () => {
+    expect(loadConfig(validEnvironment).operationsEmail).toBeUndefined();
+    expect(
+      loadConfig({
+        ...validEnvironment,
+        OPERATIONS_EMAIL: "ops@example.test",
+      }).operationsEmail,
+    ).toBe("ops@example.test");
+  });
+
+  it("rejects malformed operations recipient values without echoing them", () => {
+    const invalidAddress = "ops-private-sentinel";
+    try {
+      loadConfig({
+        ...validEnvironment,
+        OPERATIONS_EMAIL: invalidAddress,
+      });
+      throw new Error("expected configuration error");
+    } catch (error) {
+      expect(String(error)).toContain("OPERATIONS_EMAIL");
+      expect(String(error)).not.toContain(invalidAddress);
+    }
   });
 });

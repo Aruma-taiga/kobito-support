@@ -32,13 +32,40 @@ jobs:
         run: corepack enable
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Build shared package
+        run: pnpm build:shared
+      - name: Build API package
+        run: pnpm build:api
+      - name: Build web package
+        env:
+          VITE_FIREBASE_API_KEY: web-build-public-key
+          VITE_FIREBASE_AUTH_DOMAIN: web-build-check.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: web-build-check
+          VITE_FIREBASE_APP_ID: 1:000000000000:web:build-check
+          VITE_API_BASE_URL: https://api.example.invalid
+          VITE_FIREBASE_AUTH_EMULATOR_URL: ""
+        run: pnpm build:web
       - name: Lint
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
       - name: Test
         run: pnpm test
-      - name: Validate schema against PostgreSQL 16
+      - name: Apply migrations twice
         env:
-          PGPASSWORD: kobito
-        run: psql -h 127.0.0.1 -U kobito -d kobito_support -v ON_ERROR_STOP=1 -f docs/schema-v1.sql
+          DATABASE_URL: postgres://kobito:kobito@127.0.0.1:5432/kobito_support
+          NODE_ENV: development
+        run: |
+          pnpm db:migrate
+          pnpm db:migrate
+      - name: Seed development defaults
+        env:
+          DATABASE_URL: postgres://kobito:kobito@127.0.0.1:5432/kobito_support
+          NODE_ENV: development
+        run: pnpm db:seed
+      - name: Test migrations and seeds against PostgreSQL 16
+        env:
+          TZ: Asia/Tokyo
+          DATABASE_URL: postgres://kobito:kobito@127.0.0.1:5432/kobito_support
+          NODE_ENV: test
+        run: pnpm test:db
