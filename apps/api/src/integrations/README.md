@@ -1,6 +1,10 @@
 # Integrations
 
-Provider adapters are added in later stages. This directory has no payment, email, or other external-service calls yet.
+## KOMOJU
+
+The KOMOJU adapter currently verifies webhook signatures against exact raw request bytes with HMAC-SHA256. It makes no outbound provider HTTP calls and does not process financial events. See `../webhooks/README.md` for the durable inbox and its storage allowlist.
+
+Payment API and other external-service calls are not implemented yet.
 
 ## Initial invoice PDF
 

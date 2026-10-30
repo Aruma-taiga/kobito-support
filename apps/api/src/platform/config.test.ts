@@ -42,6 +42,41 @@ describe("loadConfig", () => {
     );
   });
 
+  it("preserves the configured KOMOJU secret bytes and treats blank as unset", () => {
+    expect(
+      loadConfig({ ...validEnvironment, KOMOJU_WEBHOOK_SECRET: " secret " })
+        .komojuWebhookSecret,
+    ).toBe(" secret ");
+    expect(
+      loadConfig({ ...validEnvironment, KOMOJU_WEBHOOK_SECRET: "" })
+        .komojuWebhookSecret,
+    ).toBeUndefined();
+    expect(
+      loadConfig({ ...validEnvironment, KOMOJU_WEBHOOK_SECRET: "   " })
+        .komojuWebhookSecret,
+    ).toBeUndefined();
+  });
+
+  it("does not echo an invalid KOMOJU secret value", () => {
+    const secret = "SECRET_SENTINEL";
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        KOMOJU_WEBHOOK_SECRET: secret,
+        PORT: "bad",
+      }),
+    ).toThrow();
+    try {
+      loadConfig({
+        ...validEnvironment,
+        KOMOJU_WEBHOOK_SECRET: secret,
+        PORT: "bad",
+      });
+    } catch (error) {
+      expect(String(error)).not.toContain(secret);
+    }
+  });
+
   it("rejects an auth emulator in production", () => {
     expect(() =>
       loadConfig({ ...validEnvironment, NODE_ENV: "production" }),

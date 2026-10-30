@@ -84,6 +84,7 @@ function makeApp(): ReturnType<typeof createApp> {
       getCustomerContract: async () => ({ contract: null }),
     },
     publicSettings: { getServiceName: async () => "Test service" },
+    komojuInbox: { receive: async () => "accepted" as const },
     logger: { info: () => {}, error: () => {} },
   };
   return createApp(dependencies);

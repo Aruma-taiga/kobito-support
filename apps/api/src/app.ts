@@ -20,6 +20,8 @@ import { toApiDatabaseError } from "./platform/db/errors.js";
 import type { ApiLogger } from "./platform/logger.js";
 import { requestLogger } from "./platform/logger.js";
 import { ApiError, type ApiVariables } from "./platform/types.js";
+import type { KomojuInbox } from "./webhooks/komoju-contracts.js";
+import { createKomojuWebhookRoutes } from "./webhooks/komoju-routes.js";
 
 export interface AppDependencies {
   config: RuntimeConfig;
@@ -30,6 +32,7 @@ export interface AppDependencies {
   invoices: InvoiceModule;
   publicSettings: { getServiceName(): Promise<string> };
   logger: ApiLogger;
+  komojuInbox: KomojuInbox;
 }
 
 export function createApp(dependencies: AppDependencies) {
@@ -60,6 +63,13 @@ export function createApp(dependencies: AppDependencies) {
   );
 
   app.get("/healthz", (context) => context.json({ status: "ok" }));
+  app.route(
+    "/",
+    createKomojuWebhookRoutes({
+      secret: dependencies.config.komojuWebhookSecret,
+      inbox: dependencies.komojuInbox,
+    }),
+  );
   app.get("/api/v1/public/config", async (context) => {
     const [serviceName, catalog] = await Promise.all([
       dependencies.publicSettings.getServiceName(),

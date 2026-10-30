@@ -99,6 +99,7 @@ function makeApp(
     admin: new AdminService(new AdminRepository(pool)),
     invoices: new InvoiceService(invoiceRepository),
     publicSettings: { getServiceName: async () => "Test service" },
+    komojuInbox: { receive: async () => "accepted" as const },
     logger: { info: () => {}, error: () => {} },
   };
   return createApp(dependencies);
