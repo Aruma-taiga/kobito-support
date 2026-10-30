@@ -17,6 +17,14 @@ export const contractStatusLabels = {
   lapsed: "失効",
 } as const;
 
+export const invoiceStatusLabels = {
+  issued: "未払い",
+  paid: "支払い済み",
+  failed: "支払い失敗",
+  overdue: "期限超過",
+  void: "取消済み",
+} as const;
+
 export const validationMessages = {
   required: "入力してください。",
   maxLength: "入力文字数が上限を超えています。",
@@ -239,4 +247,83 @@ export const webMessages = {
   adminRequestError: "申込み詳細を読み込めませんでした。",
   adminDeclineConfirmButton: "承諾しない",
   adminStatusLabel: "契約状態",
+  adminApprove: "審査を完了して初月の請求書を発行",
+  adminApproveConfirm:
+    "審査を完了し、初月分の請求書を発行しますか？通知は送信待ちになります。",
+  adminApproveConfirmButton: "審査を完了する",
+  adminApproveCancel: "戻る",
+  adminQuoteSuccess: "審査を完了し、見積り作成待ちにしました。",
+  adminApproveCustom: "審査を完了して個別見積りの作成に進む",
+  adminQuoteConfirm:
+    "審査を完了し、個別見積りの作成待ちにします。請求書は発行されません。",
+  adminQuoteConfirmButton: "見積り作成に進む",
+  adminApprovePreviewConfirm:
+    "開発用サンプル請求書を作成します。メール通知や支払いは行いません。",
+  adminInvoicePaymentUnsupported:
+    "初月請求書の発行は銀行振込に限って利用できます。現在のお支払い方法は対応準備中です。",
+  adminReviewSnapshotIncomplete:
+    "申込時の料金・プラン情報が不足しているため、審査を完了できません。",
+  adminApproveWorking: "請求書を準備しています…",
+  adminQuoteWorking: "見積り作成に進んでいます…",
+  adminApproveSuccess:
+    "審査を完了し、初月の請求書を発行しました。通知は送信待ちです。",
+  adminApprovePreviewSuccess:
+    "開発用のサンプル請求書を作成しました。メール通知や支払いは行われません。",
+  adminApproveError: "審査または請求書の発行を完了できませんでした。",
+  invoiceUnavailable:
+    "請求書を発行できません。会社情報と振込先の設定を確認してください。",
+  invoiceListTitle: "請求書とお支払い",
+  invoiceListLoading: "請求書を読み込んでいます。",
+  invoiceListError: "請求書を読み込めませんでした。",
+  invoiceListEmpty: "請求書はありません。",
+  invoiceDetailTitle: "請求書の内容",
+  invoiceDownload: "請求書PDFをダウンロード",
+  invoiceDownloadError: "請求書PDFをダウンロードできませんでした。",
+  invoiceRetry: "再読み込み",
+  invoicePreviewWarning:
+    "開発用サンプル・お支払い不要。正式な請求書ではありません。",
+  invoiceNotSet: "未設定",
+  invoiceStatusIssued: invoiceStatusLabels.issued,
+  invoiceStatusPaid: invoiceStatusLabels.paid,
+  invoiceStatusFailed: invoiceStatusLabels.failed,
+  invoiceStatusOverdue: invoiceStatusLabels.overdue,
+  invoiceStatusVoid: invoiceStatusLabels.void,
+  invoicePreviewShort:
+    "開発用サンプル・お支払い不要（正式な請求書ではありません）",
+  invoiceDetailError: "請求書の内容を読み込めませんでした。",
+  invoiceStatusLabel: "お支払い状況",
+  invoiceIssuedOn: "発行日",
+  invoiceDueOn: "お支払期限",
+  invoiceBillingName: "請求先名",
+  invoiceBillingAddress: "請求先住所",
+  invoiceIssuerHeading: "発行者",
+  invoiceServiceName: "サービス名",
+  invoiceCompanyName: "会社名",
+  invoiceCompanyAddress: "会社住所",
+  invoiceLinesHeading: "請求内容",
+  invoiceLineDescription: "内容",
+  invoiceLineQuantity: "数量",
+  invoiceLineUnitPrice: "単価（税込）",
+  invoiceLineAmount: "金額（税込）",
+  invoiceTaxRate: "税率",
+  invoiceTotalExclTax: "税抜金額",
+  invoiceTaxAmount: "消費税",
+  invoiceTotalInclTax: "合計（税込）",
+  invoiceBankHeading: "銀行振込先",
+  invoiceBankName: "銀行・名義",
+  invoiceBankBranch: "支店",
+  invoiceBankAccountType: "口座種別",
+  invoiceBankAccountNumber: "口座番号",
+  invoiceBankInPdf: "振込先はダウンロードした請求書PDFにも記載しています。",
+  invoiceDownloadWorking: "PDFを準備しています…",
+  invoiceReadinessLoading: "請求書の発行可否を確認しています。",
+  invoiceReadinessError:
+    "請求書を発行できるか確認できないため、審査を完了できません。",
+  invoicePlanHeading: "申込時に合意したプラン",
+  invoicePlanName: "プラン名",
+  invoicePlanMonthlyPrice: "月額料金（税込）",
+  invoicePlanCredits: "月間クレジット",
+  invoiceAcceptedPlan: "申込時に合意したプラン",
+  invoiceAcceptedMonthlyPrice: "申込時の月額料金（税込）",
+  invoiceAcceptedCredits: "申込時の月間クレジット",
 } as const;

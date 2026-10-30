@@ -108,6 +108,30 @@ function makeApp(
     accounts,
     applications,
     admin: new AdminService(new AdminRepository(pool)),
+    invoices: {
+      getReadiness: async () => ({
+        canIssue: false,
+        mode: "unavailable",
+        reason: "issuer_not_configured",
+      }),
+      approveApplication: async () => {
+        throw new Error("not used by application tests");
+      },
+      listCustomer: async () => ({ invoices: [] }),
+      getCustomer: async () => {
+        throw new Error("not used");
+      },
+      getCustomerPdf: async () => {
+        throw new Error("not used");
+      },
+      listAdmin: async () => ({ invoices: [] }),
+      getAdmin: async () => {
+        throw new Error("not used");
+      },
+      getAdminPdf: async () => {
+        throw new Error("not used");
+      },
+    },
     publicSettings: new PublicSettingsRepository(pool),
     logger,
   };

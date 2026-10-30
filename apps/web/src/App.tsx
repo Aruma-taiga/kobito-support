@@ -6,6 +6,10 @@ import type { AuthClient } from "./auth/session.js";
 import { AuthProvider, RequireAuth } from "./auth/session.js";
 import { AdminApp } from "./pages/AdminApp.js";
 import { ApplicationPage } from "./pages/ApplicationPage.js";
+import {
+  MyInvoiceDetailPage,
+  MyInvoiceListPage,
+} from "./pages/InvoicePages.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { MePage } from "./pages/MePage.js";
 import type { AdminApiClient } from "./platform/admin-api-client.js";
@@ -119,6 +123,14 @@ export function App({
               />
               <Route element={<RequireAuth />}>
                 <Route path="/me" element={<MePage apiClient={apiClient} />} />
+                <Route
+                  path="/me/invoices"
+                  element={<MyInvoiceListPage apiClient={apiClient} />}
+                />
+                <Route
+                  path="/me/invoices/:id"
+                  element={<MyInvoiceDetailPage apiClient={apiClient} />}
+                />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

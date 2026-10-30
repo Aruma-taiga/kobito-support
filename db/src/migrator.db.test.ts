@@ -37,6 +37,9 @@ describe("PostgreSQL migrations and seed", () => {
     const secondMigration = await readFile(
       new URL("../migrations/002_application_submissions.sql", import.meta.url),
     );
+    const thirdMigration = await readFile(
+      new URL("../migrations/003_initial_invoices.sql", import.meta.url),
+    );
 
     const recorded = await pool.query<{ version: string; checksum: string }>(
       "select version, checksum from schema_migrations order by version",
@@ -49,6 +52,10 @@ describe("PostgreSQL migrations and seed", () => {
       {
         version: "002",
         checksum: createHash("sha256").update(secondMigration).digest("hex"),
+      },
+      {
+        version: "003",
+        checksum: createHash("sha256").update(thirdMigration).digest("hex"),
       },
     ]);
   });
@@ -165,25 +172,10 @@ describe("PostgreSQL migrations and seed", () => {
     const directory = await mkdtemp(
       join(tmpdir(), "kobito-migration-rollback-"),
     );
-    const initial = await readFile(
-      new URL("../migrations/001_initial.sql", import.meta.url),
-      "utf8",
-    );
     try {
-      await writeFile(join(directory, "001_initial.sql"), initial);
-      const secondMigration = await readFile(
-        new URL(
-          "../migrations/002_application_submissions.sql",
-          import.meta.url,
-        ),
-        "utf8",
-      );
+      await copyAppliedMigrations(directory);
       await writeFile(
-        join(directory, "002_application_submissions.sql"),
-        secondMigration,
-      );
-      await writeFile(
-        join(directory, "003_partial_failure.sql"),
+        join(directory, "004_partial_failure.sql"),
         "create table migration_partial_failure (id integer); select 1 / 0;",
       );
 
@@ -192,7 +184,7 @@ describe("PostgreSQL migrations and seed", () => {
         "select to_regclass('migration_partial_failure')::text as relation",
       );
       const history = await pool.query<{ count: string }>(
-        "select count(*)::text as count from schema_migrations where version = '003'",
+        "select count(*)::text as count from schema_migrations where version = '004'",
       );
       expect(marker.rows[0]?.relation).toBeNull();
       expect(history.rows[0]?.count).toBe("0");
@@ -205,11 +197,12 @@ describe("PostgreSQL migrations and seed", () => {
     const directory = await mkdtemp(
       join(tmpdir(), "kobito-migration-checksum-"),
     );
-    const initial = await readFile(
-      new URL("../migrations/001_initial.sql", import.meta.url),
-      "utf8",
-    );
     try {
+      await copyAppliedMigrations(directory);
+      const initial = await readFile(
+        new URL("../migrations/001_initial.sql", import.meta.url),
+        "utf8",
+      );
       await writeFile(
         join(directory, "001_initial.sql"),
         `${initial}\n-- changed after applying\n`,
@@ -222,21 +215,9 @@ describe("PostgreSQL migrations and seed", () => {
 
   it("serializes concurrent runners with a PostgreSQL advisory lock", async () => {
     const directory = await mkdtemp(join(tmpdir(), "kobito-migration-lock-"));
-    const initial = await readFile(
-      new URL("../migrations/001_initial.sql", import.meta.url),
-      "utf8",
-    );
-    const secondMigration = await readFile(
-      new URL("../migrations/002_application_submissions.sql", import.meta.url),
-      "utf8",
-    );
     const marker = `migration_lock_${process.pid}`;
     try {
-      await writeFile(join(directory, "001_initial.sql"), initial);
-      await writeFile(
-        join(directory, "002_application_submissions.sql"),
-        secondMigration,
-      );
+      await copyAppliedMigrations(directory);
       await writeFile(
         join(directory, `999_lock_${process.pid}.sql`),
         `select pg_sleep(0.15); create table ${marker} (id integer primary key); insert into ${marker} values (1);`,
@@ -257,3 +238,18 @@ describe("PostgreSQL migrations and seed", () => {
     }
   });
 });
+
+async function copyAppliedMigrations(directory: string): Promise<void> {
+  for (const [version, name] of [
+    ["001", "initial"],
+    ["002", "application_submissions"],
+    ["003", "initial_invoices"],
+  ]) {
+    const filename = `${version}_${name}.sql`;
+    const sql = await readFile(
+      new URL(`../migrations/${filename}`, import.meta.url),
+      "utf8",
+    );
+    await writeFile(join(directory, filename), sql);
+  }
+}

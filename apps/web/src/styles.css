@@ -670,6 +670,125 @@ button:disabled {
   color: #2f5b85;
 }
 
+.invoice-card {
+  width: min(100%, 820px);
+}
+
+.invoice-card h1 {
+  margin-bottom: 20px;
+}
+
+.invoice-card h2 {
+  margin: 24px 0 12px;
+  font-size: 17px;
+}
+
+.invoice-number {
+  overflow-wrap: anywhere;
+}
+
+.invoice-preview-warning {
+  margin: 16px 0;
+  padding: 14px 16px;
+  color: #533e00;
+  background: #fff4cc;
+  border: 1px solid #dfbd54;
+  border-radius: 8px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.invoice-preview-label {
+  color: #765900;
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.invoice-list {
+  display: grid;
+  gap: 12px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.invoice-list li {
+  min-width: 0;
+  border: 1px solid #d6dce2;
+  border-radius: 8px;
+}
+
+.invoice-list a {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+  color: #2f5b85;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.invoice-data,
+.invoice-totals {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1.3fr);
+  min-width: 0;
+  margin: 0;
+}
+
+.invoice-data dt,
+.invoice-data dd,
+.invoice-totals dt,
+.invoice-totals dd {
+  min-width: 0;
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid #e3e7eb;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.invoice-data dt,
+.invoice-totals dt {
+  color: #5f6b73;
+}
+
+.invoice-table-wrap {
+  width: 100%;
+  min-width: 0;
+}
+
+.invoice-lines {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.invoice-lines th,
+.invoice-lines td {
+  padding: 8px 5px;
+  border-bottom: 1px solid #d6dce2;
+  text-align: left;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.invoice-lines th:nth-child(n + 2),
+.invoice-lines td:nth-child(n + 2) {
+  text-align: right;
+}
+
+.invoice-totals {
+  margin: 14px 0 24px auto;
+  max-width: 440px;
+}
+
+.invoice-back-button {
+  width: 100%;
+  margin-top: 12px;
+}
+
 @media (max-width: 520px) {
   .admin-card {
     padding: 24px 18px;
@@ -685,8 +804,20 @@ button:disabled {
   }
 
   .admin-actions button,
-  .admin-pagination button {
+  .admin-pagination button,
+  .invoice-card > button {
     width: 100%;
+  }
+
+  .invoice-data,
+  .invoice-totals {
+    grid-template-columns: minmax(100px, 0.7fr) minmax(0, 1.3fr);
+  }
+
+  .invoice-lines th,
+  .invoice-lines td {
+    padding: 7px 3px;
+    font-size: 12px;
   }
 
   .admin-card .admin-pagination span {

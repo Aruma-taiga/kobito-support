@@ -4,6 +4,7 @@ import {
   adminApplicationQueueResponseSchema,
   adminCustomerDetailSchema,
   adminSessionSchema,
+  approveApplicationResponseSchema,
   declineApplicationRequestSchema,
   declineApplicationResponseSchema,
 } from "./admin.js";
@@ -35,6 +36,7 @@ const customerDetail = {
   application: {
     id: "22222222-2222-4222-8222-222222222222",
     submittedAt: "2026-10-26T00:00:00.000Z",
+    paymentMethod: "bank_transfer",
     termsVersion: "terms-v1",
     privacyVersion: "privacy-v1",
     disclosureVersion: "disclosure-v1",
@@ -55,6 +57,56 @@ const customerDetail = {
 };
 
 describe("admin DTO validation", () => {
+  it("keeps approval status and invoice presence consistent", () => {
+    const base = {
+      applicationId: "22222222-2222-4222-8222-222222222222",
+      contractId: "33333333-3333-4333-8333-333333333333",
+      replayed: false,
+    };
+    const invoice = {
+      id: "44444444-4444-4444-8444-444444444444",
+      invoiceNo: "KS-2026-00001",
+      kind: "initial",
+      status: "issued",
+      issuedOn: "2026-10-26",
+      dueOn: "2026-11-02",
+      totalInclTax: 5000,
+      totalExclTax: 4546,
+      taxAmount: 454,
+      paymentMethod: "bank_transfer",
+      preview: false,
+    };
+
+    expect(
+      approveApplicationResponseSchema.safeParse({
+        ...base,
+        status: "awaiting_payment",
+        invoice,
+      }).success,
+    ).toBe(true);
+    expect(
+      approveApplicationResponseSchema.safeParse({
+        ...base,
+        status: "quoting",
+        invoice: null,
+      }).success,
+    ).toBe(true);
+    expect(
+      approveApplicationResponseSchema.safeParse({
+        ...base,
+        status: "awaiting_payment",
+        invoice: null,
+      }).success,
+    ).toBe(false);
+    expect(
+      approveApplicationResponseSchema.safeParse({
+        ...base,
+        status: "quoting",
+        invoice,
+      }).success,
+    ).toBe(false);
+  });
+
   it("bounds queue filters and pagination", () => {
     expect(
       adminApplicationQueueQuerySchema.parse({

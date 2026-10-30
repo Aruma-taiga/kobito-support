@@ -1,5 +1,6 @@
 import { type MeResponse, webMessages } from "@kobito/shared";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuthSession } from "../auth/session.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
 import { ApiClientError } from "../platform/api-client.js";
@@ -76,16 +77,21 @@ export function MePage({ apiClient }: { apiClient: ReturnTypeApiClient }) {
           </div>
         ) : null}
         {state.status === "ready" ? (
-          <dl className="profile-list">
-            <div>
-              <dt>{webMessages.shopNameLabel}</dt>
-              <dd>{state.data.customer.shopName}</dd>
-            </div>
-            <div>
-              <dt>{webMessages.contactNameLabel}</dt>
-              <dd>{state.data.customer.contactName}</dd>
-            </div>
-          </dl>
+          <>
+            <dl className="profile-list">
+              <div>
+                <dt>{webMessages.shopNameLabel}</dt>
+                <dd>{state.data.customer.shopName}</dd>
+              </div>
+              <div>
+                <dt>{webMessages.contactNameLabel}</dt>
+                <dd>{state.data.customer.contactName}</dd>
+              </div>
+            </dl>
+            <Link className="secondary-button" to="/me/invoices">
+              {webMessages.invoiceListTitle}
+            </Link>
+          </>
         ) : null}
         {logoutError ? (
           <p className="error-message" role="alert">

@@ -156,6 +156,7 @@ export class AdminRepository implements AdminModule {
       consent_marketing: boolean;
       consent_partner_share: boolean | null;
       shown_terms: unknown;
+      payment_method: AdminCustomerDetail["application"]["paymentMethod"];
       referral_code: string | null;
       free_text: string | null;
       review_result: "approved" | "declined" | null;
@@ -169,7 +170,7 @@ export class AdminRepository implements AdminModule {
               a.id as application_id, a.submitted_at, a.terms_version,
               a.privacy_version, a.disclosure_version, a.consent_business_use,
               a.consent_terms, a.consent_marketing, a.consent_partner_share,
-              a.shown_terms, a.referral_code, a.free_text, a.review_result,
+              a.shown_terms, a.payment_method, a.referral_code, a.free_text, a.review_result,
               a.rejection_note, c.id as contract_id, c.status
          from customers customer
          join lateral (
@@ -198,6 +199,7 @@ export class AdminRepository implements AdminModule {
       application: {
         id: row.application_id,
         submittedAt: isoDate(row.submitted_at),
+        paymentMethod: row.payment_method,
         termsVersion: row.terms_version,
         privacyVersion: row.privacy_version,
         disclosureVersion: row.disclosure_version,

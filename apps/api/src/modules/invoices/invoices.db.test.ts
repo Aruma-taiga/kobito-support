@@ -1,0 +1,643 @@
+import { randomUUID } from "node:crypto";
+import { Pool } from "pg";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { type AppDependencies, createApp } from "../../app.js";
+import type { VerifiedIdentity } from "../../platform/auth.js";
+import type { RuntimeConfig } from "../../platform/config.js";
+import { customerScopeFor } from "../../platform/scope.js";
+import { AccountsRepository } from "../accounts/repository.js";
+import { AdminRepository } from "../admin/repository.js";
+import { AdminService } from "../admin/service.js";
+import { InvoiceRepository } from "./repository.js";
+import { InvoiceService } from "./service.js";
+
+const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
+const prefix = `invoice-${randomUUID()}`;
+const adminUid = `${prefix}-admin`;
+const adminToken = `${prefix}-admin-token`;
+const customerTokens = new Map<string, string>();
+const identities = new Map<string, VerifiedIdentity>([
+  [adminToken, { uid: adminUid, firebase: { sign_in_second_factor: "phone" } }],
+]);
+const customerIds: string[] = [];
+const applicationIds: string[] = [];
+const contractIds: string[] = [];
+const planIds: string[] = [];
+const userIds: string[] = [adminUid];
+const pdf = Buffer.from("%PDF-1.7\ninvoice fixture\n");
+let renderFailure = false;
+let renderCount = 0;
+
+const config: RuntimeConfig = {
+  nodeEnv: "test",
+  databaseUrl:
+    process.env.TEST_DATABASE_URL ??
+    "postgres://kobito:kobito@127.0.0.1:5432/kobito_support_test",
+  firebaseProjectId: "demo-kobito-support",
+  webOrigin: "http://localhost:5173",
+  port: 3000,
+  invoicePrefix: "KS",
+  authEmulatorHost: "127.0.0.1:9099",
+};
+const settings: ReadonlyArray<readonly [string, unknown]> = [
+  ["service_name", "テストサービス"],
+  ["company_name", "テスト発行会社"],
+  ["company_address", "東京都テスト区1-2-3"],
+  ["invoice_registration_no", "T1234567890123"],
+  ["invoice_prefix", "KS"],
+  [
+    "bank_account",
+    {
+      bank_name: "テスト銀行",
+      branch_name: "テスト支店",
+      account_type: "普通",
+      account_number: "1234567",
+      account_holder: "テストカイシャ",
+    },
+  ],
+];
+const settingsBackup = new Map<string, unknown>();
+
+function makeApp(): ReturnType<typeof createApp> {
+  const accounts = new AccountsRepository(pool);
+  const invoiceRepository = new InvoiceRepository(
+    pool,
+    config,
+    {
+      render: async () => {
+        renderCount += 1;
+        if (renderFailure) throw new Error("render failed");
+        return pdf;
+      },
+    },
+    () => new Date("2026-01-30T15:30:00.000Z"),
+  );
+  const dependencies: AppDependencies = {
+    config,
+    verifier: {
+      verifyIdToken: async (token) => {
+        const identity = identities.get(token);
+        if (!identity) throw new Error("invalid test token");
+        return identity;
+      },
+    },
+    accounts,
+    applications: {
+      getPublicCatalog: async () => ({
+        plans: [],
+        displayVersion: "a".repeat(64),
+        application: null,
+      }),
+      getPublicPartner: async (code) => ({ code, name: "partner" }),
+      submit: async () => {
+        throw new Error("not used");
+      },
+    },
+    admin: new AdminService(new AdminRepository(pool)),
+    invoices: new InvoiceService(invoiceRepository),
+    publicSettings: { getServiceName: async () => "Test service" },
+    logger: { info: () => {}, error: () => {} },
+  };
+  return createApp(dependencies);
+}
+
+async function makeApplication(
+  options: { paymentMethod?: string; custom?: boolean; price?: number } = {},
+) {
+  const suffix = randomUUID();
+  const customer = await pool.query<{ id: string }>(
+    `insert into customers (shop_name, contact_name, billing_name, billing_address, email)
+     values ($1,'Test contact','Billing snapshot','Billing address snapshot',$2) returning id`,
+    [`${prefix}-${suffix}`, `${suffix}@example.test`],
+  );
+  const customerId = customer.rows[0]?.id;
+  if (!customerId) throw new Error("Invoice test customer insert failed");
+  customerIds.push(customerId);
+  const plan = await pool.query<{ id: string }>(
+    `insert into plans (code,name,price_incl_tax,credits,is_custom,valid_from)
+     values ($1,$2,$3,$4,$5,current_date) returning id`,
+    [
+      `${prefix}-${suffix}`,
+      options.custom ? "個別見積り" : "申込時プラン",
+      options.custom ? null : (options.price ?? 5000),
+      options.custom ? null : 1,
+      options.custom ?? false,
+    ],
+  );
+  const planId = plan.rows[0]?.id;
+  if (!planId) throw new Error("Invoice test plan insert failed");
+  planIds.push(planId);
+  const shownTerms = {
+    planId,
+    planCode: options.custom ? "custom" : "light",
+    planName: options.custom ? "個別見積り" : "申込時プラン",
+    priceInclTax: options.custom ? null : (options.price ?? 5000),
+    credits: options.custom ? null : 1,
+    paymentMethod: options.paymentMethod ?? "bank_transfer",
+  };
+  const application = await pool.query<{ id: string }>(
+    `insert into applications (customer_id,plan_id,payment_method,terms_version,privacy_version,disclosure_version,
+      consent_business_use,consent_terms,consent_marketing,shown_terms)
+     values ($1,$2,$3,'terms','privacy','disclosure',true,true,false,$4::jsonb) returning id`,
+    [
+      customerId,
+      planId,
+      options.paymentMethod ?? "bank_transfer",
+      JSON.stringify(shownTerms),
+    ],
+  );
+  const applicationId = application.rows[0]?.id;
+  if (!applicationId) throw new Error("Invoice test application insert failed");
+  applicationIds.push(applicationId);
+  const contract = await pool.query<{ id: string }>(
+    `insert into contracts (customer_id,application_id,plan_id,payment_method,status)
+     values ($1,$2,$3,$4,'under_review') returning id`,
+    [
+      customerId,
+      applicationId,
+      planId,
+      options.paymentMethod ?? "bank_transfer",
+    ],
+  );
+  const contractId = contract.rows[0]?.id;
+  if (!contractId) throw new Error("Invoice test contract insert failed");
+  contractIds.push(contractId);
+  const uid = `${prefix}-${suffix}-customer`;
+  const token = `${uid}-token`;
+  userIds.push(uid);
+  customerTokens.set(uid, token);
+  identities.set(token, { uid });
+  await pool.query(
+    "insert into user_accounts(auth_user_id,customer_id,role) values ($1,$2,'customer')",
+    [uid, customerId],
+  );
+  return { customerId, applicationId, contractId, uid, token };
+}
+
+function approve(app: ReturnType<typeof createApp>, id: string) {
+  return app.request(`/api/v1/admin/applications/${id}/approve`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${adminToken}`,
+      "content-type": "application/json",
+    },
+    body: "{}",
+  });
+}
+
+beforeAll(async () => {
+  const previous = await pool.query<{ key: string; value: unknown }>(
+    "select key,value from settings where key=any($1::text[])",
+    [settings.map(([key]) => key)],
+  );
+  for (const row of previous.rows) settingsBackup.set(row.key, row.value);
+  for (const [key, value] of settings)
+    await pool.query(
+      `insert into settings(key,value) values ($1,$2::jsonb) on conflict (key) do update set value=excluded.value`,
+      [key, JSON.stringify(value)],
+    );
+  await pool.query(
+    "insert into user_accounts(auth_user_id,customer_id,role) values ($1,null,'admin')",
+    [adminUid],
+  );
+});
+
+afterAll(async () => {
+  await pool.query("delete from audit_logs where target_id = any($1::text[])", [
+    applicationIds,
+  ]);
+  await pool.query(
+    "delete from notifications where customer_id = any($1::uuid[])",
+    [customerIds],
+  );
+  await pool.query(
+    "delete from invoice_documents where invoice_id in (select id from invoices where contract_id = any($1::uuid[]))",
+    [contractIds],
+  );
+  await pool.query(
+    "delete from invoice_lines where invoice_id in (select id from invoices where contract_id = any($1::uuid[]))",
+    [contractIds],
+  );
+  await pool.query("delete from invoices where contract_id = any($1::uuid[])", [
+    contractIds,
+  ]);
+  await pool.query("delete from contracts where id = any($1::uuid[])", [
+    contractIds,
+  ]);
+  await pool.query("delete from applications where id = any($1::uuid[])", [
+    applicationIds,
+  ]);
+  await pool.query(
+    "delete from user_accounts where auth_user_id = any($1::text[])",
+    [userIds],
+  );
+  await pool.query("delete from customers where id = any($1::uuid[])", [
+    customerIds,
+  ]);
+  await pool.query("delete from plans where id = any($1::uuid[])", [planIds]);
+  for (const [key] of settings) {
+    const prior = settingsBackup.get(key);
+    if (prior === undefined)
+      await pool.query("delete from settings where key=$1", [key]);
+    else
+      await pool.query("update settings set value=$2::jsonb where key=$1", [
+        key,
+        JSON.stringify(prior),
+      ]);
+  }
+  if (!settingsBackup.has("invoice_preview_enabled"))
+    await pool.query(
+      "delete from settings where key='invoice_preview_enabled'",
+    );
+  await pool.end();
+});
+
+describe("initial invoice approval and customer access", () => {
+  it("creates a frozen, dated bank-transfer invoice from the application offer and replays it without re-rendering", async () => {
+    const fixture = await makeApplication({ price: 5432 });
+    await pool.query(
+      "update plans set price_incl_tax=9999,name='後日変更' where id=(select plan_id from applications where id=$1)",
+      [fixture.applicationId],
+    );
+    const app = makeApp();
+    const first = await approve(app, fixture.applicationId);
+    expect(first.status).toBe(200);
+    const body = (await first.json()) as {
+      invoice: {
+        id: string;
+        invoiceNo: string;
+        totalInclTax: number;
+        totalExclTax: number;
+        taxAmount: number;
+        issuedOn: string;
+        dueOn: string;
+        preview: boolean;
+      };
+    };
+    expect(body.invoice).toMatchObject({
+      totalInclTax: 5432,
+      totalExclTax: 4939,
+      taxAmount: 493,
+      issuedOn: "2026-01-31",
+      dueOn: "2026-02-07",
+      preview: false,
+    });
+    const renderCalls = renderCount;
+    await pool.query(
+      "update settings set value='\"設定変更後\"'::jsonb where key='company_name'",
+    );
+    await pool.query(
+      "update customers set billing_address='現住所変更後' where id=$1",
+      [fixture.customerId],
+    );
+    const retry = await approve(app, fixture.applicationId);
+    expect(await retry.json()).toMatchObject({
+      replayed: true,
+      invoice: {
+        id: body.invoice.id,
+        invoiceNo: body.invoice.invoiceNo,
+        issuedOn: "2026-01-31",
+        dueOn: "2026-02-07",
+      },
+    });
+    expect(renderCount).toBe(renderCalls);
+    const customerPdf = await app.request(
+      `/api/v1/me/invoices/${body.invoice.id}/pdf`,
+      { headers: { authorization: `Bearer ${fixture.token}` } },
+    );
+    expect(customerPdf.status).toBe(200);
+    expect(customerPdf.headers.get("content-type")).toBe("application/pdf");
+    expect(Buffer.from(await customerPdf.arrayBuffer())).toEqual(pdf);
+    const customerList = await app.request("/api/v1/me/invoices", {
+      headers: { authorization: `Bearer ${fixture.token}` },
+    });
+    expect(await customerList.json()).toMatchObject({
+      invoices: [
+        expect.objectContaining({
+          id: body.invoice.id,
+          invoiceNo: body.invoice.invoiceNo,
+          issuedOn: "2026-01-31",
+          dueOn: "2026-02-07",
+        }),
+      ],
+    });
+    const detail = await app.request(`/api/v1/me/invoices/${body.invoice.id}`, {
+      headers: { authorization: `Bearer ${fixture.token}` },
+    });
+    expect(await detail.json()).toMatchObject({
+      invoiceNo: body.invoice.invoiceNo,
+      issuedOn: "2026-01-31",
+      dueOn: "2026-02-07",
+      billingAddress: "Billing address snapshot",
+      issuer: { companyName: "テスト発行会社" },
+      acceptedPlan: {
+        planName: "申込時プラン",
+        monthlyPriceInclTax: 5432,
+        credits: 1,
+      },
+    });
+    const adminList = await app.request("/api/v1/admin/invoices", {
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(await adminList.json()).toMatchObject({
+      invoices: [
+        expect.objectContaining({
+          id: body.invoice.id,
+          invoiceNo: body.invoice.invoiceNo,
+        }),
+      ],
+    });
+    const adminDetail = await app.request(
+      `/api/v1/admin/invoices/${body.invoice.id}`,
+      { headers: { authorization: `Bearer ${adminToken}` } },
+    );
+    expect(await adminDetail.json()).toMatchObject({
+      invoiceNo: body.invoice.invoiceNo,
+      acceptedPlan: { monthlyPriceInclTax: 5432 },
+    });
+    const adminPdf = await app.request(
+      `/api/v1/admin/invoices/${body.invoice.id}/pdf`,
+      { headers: { authorization: `Bearer ${adminToken}` } },
+    );
+    expect(adminPdf.status).toBe(200);
+    expect(adminPdf.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(Buffer.from(await adminPdf.arrayBuffer())).toEqual(pdf);
+    await pool.query(
+      "update invoices set issuer_snapshot=jsonb_set(issuer_snapshot,'{preview}','true'::jsonb) where id=$1",
+      [body.invoice.id],
+    );
+    const productionRepo = new InvoiceRepository(
+      pool,
+      { ...config, nodeEnv: "production" },
+      { render: async () => pdf },
+    );
+    await expect(
+      productionRepo.getCustomerPdf(
+        customerScopeFor({
+          authUserId: fixture.uid,
+          role: "customer",
+          customerId: fixture.customerId,
+          secondFactor: null,
+        }),
+        body.invoice.id,
+      ),
+    ).rejects.toMatchObject({ status: 503, code: "invoice_unavailable" });
+    await pool.query(
+      "update invoices set issuer_snapshot=jsonb_set(issuer_snapshot,'{preview}','false'::jsonb) where id=$1",
+      [body.invoice.id],
+    );
+    const stored = await pool.query<{
+      contract_status: string;
+      notification_count: string;
+      sent_at: Date | null;
+      pdf_count: string;
+    }>(
+      `select c.status as contract_status,
+       (select count(*)::text from notifications where dedupe_key=$2) as notification_count,
+       (select sent_at from notifications where dedupe_key=$2) as sent_at,
+       (select count(*)::text from invoice_documents where invoice_id=$3) as pdf_count
+       from contracts c where c.id=$1`,
+      [
+        fixture.contractId,
+        `NT-02:invoice:${body.invoice.id}:customer`,
+        body.invoice.id,
+      ],
+    );
+    expect(stored.rows[0]).toMatchObject({
+      contract_status: "awaiting_payment",
+      notification_count: "1",
+      sent_at: null,
+      pdf_count: "1",
+    });
+  });
+
+  it("serializes simultaneous approvals into one invoice, one document, one pending notice, and one counter increment", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    const before = await pool.query<{ last_no: number | null }>(
+      "select last_no from invoice_number_counters where year=2026",
+    );
+    const previous = before.rows[0]?.last_no ?? 0;
+    const responses = await Promise.all([
+      approve(app, fixture.applicationId),
+      approve(app, fixture.applicationId),
+    ]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    const results = (await Promise.all(
+      responses.map((response) => response.json()),
+    )) as Array<{ replayed: boolean; invoice: { id: string } }>;
+    expect(results.filter((result) => result.replayed)).toHaveLength(1);
+    expect(results[0]?.invoice.id).toBe(results[1]?.invoice.id);
+    const invoiceId = results[0]?.invoice.id;
+    if (!invoiceId) throw new Error("Concurrent invoice result was missing");
+    const state = await pool.query<{
+      invoice_count: string;
+      document_count: string;
+      notice_count: string;
+      counter: number;
+    }>(
+      `select (select count(*)::text from invoices where contract_id=$1 and kind='initial') invoice_count,
+       (select count(*)::text from invoice_documents d join invoices i on i.id=d.invoice_id where i.contract_id=$1) document_count,
+       (select count(*)::text from notifications where dedupe_key=$2) notice_count,
+       (select last_no from invoice_number_counters where year=2026) counter`,
+      [fixture.contractId, `NT-02:invoice:${invoiceId}:customer`],
+    );
+    expect(state.rows[0]).toMatchObject({
+      invoice_count: "1",
+      document_count: "1",
+      notice_count: "1",
+      counter: previous + 1,
+    });
+  });
+
+  it("leaves no invoice, sequence, review, or contract changes when rendering fails", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    renderFailure = true;
+    const response = await approve(app, fixture.applicationId);
+    renderFailure = false;
+    expect(response.status).toBe(500);
+    const state = await pool.query<{
+      status: string;
+      review_result: string | null;
+      invoice_count: string;
+      last_no: number | null;
+    }>(
+      `select c.status, a.review_result, (select count(*)::text from invoices where contract_id=c.id) invoice_count,
+       (select last_no from invoice_number_counters where year=2026) last_no from contracts c join applications a on a.id=c.application_id where c.id=$1`,
+      [fixture.contractId],
+    );
+    expect(state.rows[0]).toMatchObject({
+      status: "under_review",
+      review_result: null,
+      invoice_count: "0",
+    });
+  });
+
+  it("rolls all issued data back if the audit write fails", async () => {
+    const fixture = await makeApplication();
+    const name = `fail_invoice_audit_${randomUUID().replaceAll("-", "")}`;
+    const fn = `${name}_fn`;
+    await pool.query(
+      `create function ${fn}() returns trigger language plpgsql as $$ begin if new.target_id='${fixture.applicationId}' then raise exception 'forced'; end if; return new; end $$`,
+    );
+    await pool.query(
+      `create trigger ${name} before insert on audit_logs for each row execute function ${fn}()`,
+    );
+    const response = await approve(makeApp(), fixture.applicationId);
+    await pool.query(`drop trigger ${name} on audit_logs`);
+    await pool.query(`drop function ${fn}()`);
+    expect(response.status).toBe(500);
+    const result = await pool.query<{
+      status: string;
+      review_result: string | null;
+      invoice_count: string;
+    }>(
+      `select c.status,a.review_result,(select count(*)::text from invoices where contract_id=c.id) invoice_count from contracts c join applications a on a.id=c.application_id where c.id=$1`,
+      [fixture.contractId],
+    );
+    expect(result.rows[0]).toEqual({
+      status: "under_review",
+      review_result: null,
+      invoice_count: "0",
+    });
+  });
+
+  it("rejects incomplete production issuer setup before any business state changes", async () => {
+    const fixture = await makeApplication();
+    await pool.query(
+      "update settings set value='\"\"'::jsonb where key='invoice_registration_no'",
+    );
+    const response = await approve(makeApp(), fixture.applicationId);
+    expect(response.status).toBe(503);
+    await pool.query(
+      "update settings set value=$1::jsonb where key='invoice_registration_no'",
+      [JSON.stringify("T1234567890123")],
+    );
+    const state = await pool.query<{
+      status: string;
+      review_result: string | null;
+      invoice_count: string;
+    }>(
+      `select c.status,a.review_result,(select count(*)::text from invoices where contract_id=c.id) invoice_count from contracts c join applications a on a.id=c.application_id where c.id=$1`,
+      [fixture.contractId],
+    );
+    expect(state.rows[0]).toEqual({
+      status: "under_review",
+      review_result: null,
+      invoice_count: "0",
+    });
+  });
+
+  it("moves custom applications to quoting without issuing or assigning an invoice", async () => {
+    const fixture = await makeApplication({ custom: true });
+    const response = await approve(makeApp(), fixture.applicationId);
+    expect(await response.json()).toMatchObject({
+      status: "quoting",
+      invoice: null,
+      replayed: false,
+    });
+    const state = await pool.query<{ status: string; invoice_count: string }>(
+      `select c.status,(select count(*)::text from invoices where contract_id=c.id) invoice_count from contracts c where c.id=$1`,
+      [fixture.contractId],
+    );
+    expect(state.rows[0]).toEqual({ status: "quoting", invoice_count: "0" });
+  });
+
+  it("rejects an incomplete fixed-plan offer instead of reclassifying it as a custom quote", async () => {
+    const fixture = await makeApplication();
+    await pool.query(
+      "update applications set shown_terms=jsonb_set(shown_terms,'{priceInclTax}','null'::jsonb) where id=$1",
+      [fixture.applicationId],
+    );
+    expect((await approve(makeApp(), fixture.applicationId)).status).toBe(409);
+    const state = await pool.query<{
+      status: string;
+      review_result: string | null;
+    }>(
+      "select c.status,a.review_result from contracts c join applications a on a.id=c.application_id where c.id=$1",
+      [fixture.contractId],
+    );
+    expect(state.rows[0]).toEqual({
+      status: "under_review",
+      review_result: null,
+    });
+  });
+
+  it.each([
+    "card",
+    "konbini",
+  ])("rejects unimplemented %s payment and does not mark it approved", async (paymentMethod) => {
+    const fixture = await makeApplication({ paymentMethod });
+    expect((await approve(makeApp(), fixture.applicationId)).status).toBe(409);
+    const state = await pool.query<{
+      status: string;
+      review_result: string | null;
+    }>(
+      "select c.status,a.review_result from contracts c join applications a on a.id=c.application_id where c.id=$1",
+      [fixture.contractId],
+    );
+    expect(state.rows[0]).toEqual({
+      status: "under_review",
+      review_result: null,
+    });
+  });
+
+  it("returns 404 for another customer's invoice details and PDF, and requires admin MFA", async () => {
+    const owner = await makeApplication();
+    const other = await makeApplication();
+    const app = makeApp();
+    const created = await approve(app, owner.applicationId);
+    const invoiceId = ((await created.json()) as { invoice: { id: string } })
+      .invoice.id;
+    const detail = await app.request(`/api/v1/me/invoices/${invoiceId}`, {
+      headers: { authorization: `Bearer ${other.token}` },
+    });
+    const otherPdf = await app.request(`/api/v1/me/invoices/${invoiceId}/pdf`, {
+      headers: { authorization: `Bearer ${other.token}` },
+    });
+    expect(detail.status).toBe(404);
+    expect(otherPdf.status).toBe(404);
+    identities.set(`${prefix}-no-mfa-token`, { uid: adminUid });
+    expect(
+      (
+        await app.request(`/api/v1/admin/invoices/${invoiceId}`, {
+          headers: { authorization: `Bearer ${prefix}-no-mfa-token` },
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it("returns safe issuer-readiness status without exposing issuer settings", async () => {
+    const response = await makeApp().request(
+      "/api/v1/admin/invoices/readiness",
+      { headers: { authorization: `Bearer ${adminToken}` } },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      canIssue: true,
+      mode: "live",
+      reason: "ready",
+    });
+  });
+
+  it("formats invoice counters without truncation after 99,999", async () => {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await client.query(
+        "insert into invoice_number_counters(year,last_no) values (9997,99999) on conflict(year) do update set last_no=99999",
+      );
+      const result = await client.query<{ invoice_no: string }>(
+        "select next_invoice_no(9997,'ZZ') as invoice_no",
+      );
+      expect(result.rows[0]?.invoice_no).toBe("ZZ-9997-100000");
+      await client.query("rollback");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+});

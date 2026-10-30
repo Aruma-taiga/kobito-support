@@ -1,0 +1,653 @@
+import { createHash, randomUUID } from "node:crypto";
+import type {
+  ApproveApplicationResponse,
+  InvoiceDetail,
+  InvoiceList,
+  InvoiceListItem,
+  InvoiceReadiness,
+} from "@kobito/shared";
+import {
+  addCalendarDays,
+  invoiceDetailSchema,
+  invoiceTotals,
+  planCodes,
+} from "@kobito/shared";
+import type { Pool, PoolClient } from "pg";
+import { withAdminAudit } from "../../platform/audit.js";
+import type { RuntimeConfig } from "../../platform/config.js";
+import type { CustomerScope } from "../../platform/scope.js";
+import { ApiError, type Principal } from "../../platform/types.js";
+import type { InvoiceModule } from "./contracts.js";
+import type { InvoicePdfRenderer } from "./renderer.js";
+
+const maxPdfBytes = 5 * 1024 * 1024;
+
+interface InvoiceRow {
+  id: string;
+  invoice_no: string;
+  status: InvoiceListItem["status"];
+  payment_method: InvoiceListItem["paymentMethod"];
+  issued_on: string;
+  due_on: string;
+  total_incl_tax: number;
+  total_excl_tax: number;
+  tax_amount: number;
+  billing_name: string;
+  billing_address: string;
+  issuer_snapshot: unknown;
+  lines: unknown;
+}
+
+type IssuerSnapshot = InvoiceDetail["issuer"];
+
+function safeObject(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function stringSetting(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+export function isLocalInvoicePreviewEnvironment(
+  config: RuntimeConfig,
+): boolean {
+  if (!config.devInvoicePreview || config.nodeEnv !== "development")
+    return false;
+  if (!config.firebaseProjectId.startsWith("demo-")) return false;
+  if (
+    !config.authEmulatorHost ||
+    !/^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(config.authEmulatorHost)
+  )
+    return false;
+  try {
+    const database = new URL(config.databaseUrl);
+    return (
+      ["localhost", "127.0.0.1", "[::1]"].includes(database.hostname) &&
+      database.pathname === "/kobito_support" &&
+      !database.search &&
+      !database.hash
+    );
+  } catch {
+    return false;
+  }
+}
+
+function localPreviewPermitted(
+  config: RuntimeConfig,
+  settingsEnabled: boolean,
+): boolean {
+  return settingsEnabled && isLocalInvoicePreviewEnvironment(config);
+}
+
+function todayInTokyo(now: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value;
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  if (!year || !month || !day)
+    throw new Error("Unable to resolve invoice issue date");
+  return `${year}-${month}-${day}`;
+}
+
+export class InvoiceRepository implements InvoiceModule {
+  constructor(
+    private readonly pool: Pool,
+    private readonly config: RuntimeConfig,
+    private readonly renderer: InvoicePdfRenderer,
+    private readonly clock: () => Date = () => new Date(),
+  ) {}
+
+  approveApplication(
+    principal: Principal,
+    applicationId: string,
+  ): Promise<ApproveApplicationResponse> {
+    if (this.config.nodeEnv === "production")
+      throw new ApiError(503, "invoice_unavailable");
+    return withAdminAudit(
+      this.pool,
+      principal,
+      {
+        action: "application.approved",
+        targetType: "application",
+        targetId: applicationId,
+        detail: { fromStatus: "under_review" },
+      },
+      (client) => this.approveInTransaction(client, applicationId),
+    );
+  }
+
+  async getReadiness(principal: Principal): Promise<InvoiceReadiness> {
+    this.assertAdmin(principal);
+    if (this.config.nodeEnv === "production")
+      return {
+        canIssue: false,
+        mode: "unavailable",
+        reason: "document_store_unavailable",
+      };
+    const client = await this.pool.connect();
+    try {
+      const settings = await this.readIssuerSettings(client);
+      if (localPreviewPermitted(this.config, settings.previewEnabled))
+        return { canIssue: true, mode: "preview", reason: "preview_only" };
+      if (this.isLiveIssuerReady(settings))
+        return { canIssue: true, mode: "live", reason: "ready" };
+      return {
+        canIssue: false,
+        mode: "unavailable",
+        reason: "issuer_not_configured",
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  private async approveInTransaction(
+    client: PoolClient,
+    applicationId: string,
+  ): Promise<ApproveApplicationResponse> {
+    await client.query("set local lock_timeout = '5s'");
+    await client.query("set local statement_timeout = '60s'");
+    const result = await client.query<{
+      application_id: string;
+      contract_id: string;
+      customer_id: string;
+      plan_id: string;
+      status: string;
+      review_result: string | null;
+      payment_method: string;
+      shown_terms: unknown;
+      billing_name: string;
+      billing_address: string;
+    }>(
+      `select a.id as application_id, c.id as contract_id, c.customer_id, c.plan_id,
+              c.status, a.review_result, a.payment_method, a.shown_terms,
+              customer.billing_name, customer.billing_address
+         from applications a join contracts c on c.application_id = a.id
+         join customers customer on customer.id = c.customer_id
+        where a.id = $1 for update of a, c, customer`,
+      [applicationId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApiError(404, "not_found");
+
+    if (row.review_result === "approved" && row.status === "quoting") {
+      return {
+        applicationId: row.application_id,
+        contractId: row.contract_id,
+        status: "quoting",
+        invoice: null,
+        replayed: true,
+      };
+    }
+    if (row.review_result === "approved" && row.status === "awaiting_payment") {
+      const existing = await this.getByContract(client, row.contract_id);
+      if (!existing)
+        throw new Error("Approved payment-waiting contract has no invoice");
+      return {
+        applicationId: row.application_id,
+        contractId: row.contract_id,
+        status: "awaiting_payment",
+        invoice: this.listItem(existing),
+        replayed: true,
+      };
+    }
+    if (row.status !== "under_review" || row.review_result !== null)
+      throw new ApiError(409, "application_conflict");
+
+    const terms = safeObject(row.shown_terms);
+    if (
+      terms.paymentMethod !== row.payment_method ||
+      row.payment_method !== "bank_transfer"
+    )
+      throw new ApiError(409, "application_conflict");
+    if (
+      typeof terms.planCode !== "string" ||
+      !planCodes.includes(terms.planCode as (typeof planCodes)[number])
+    )
+      throw new ApiError(409, "application_conflict");
+    if (terms.planCode === "custom") {
+      if (terms.priceInclTax !== null || terms.credits !== null)
+        throw new ApiError(409, "application_conflict");
+      await client.query(
+        `update applications set reviewed_at = now(), review_result = 'approved' where id = $1`,
+        [row.application_id],
+      );
+      await client.query(
+        `update contracts set status = 'quoting' where id = $1`,
+        [row.contract_id],
+      );
+      return {
+        applicationId: row.application_id,
+        contractId: row.contract_id,
+        status: "quoting",
+        invoice: null,
+        replayed: false,
+      };
+    }
+    if (terms.priceInclTax === null)
+      throw new ApiError(409, "application_conflict");
+    const gross = terms.priceInclTax;
+    const planName = terms.planName;
+    const planId = terms.planId;
+    const planCode = terms.planCode;
+    const credits = terms.credits;
+    if (
+      !Number.isSafeInteger(gross) ||
+      (gross as number) <= 0 ||
+      typeof planName !== "string" ||
+      !planName.trim() ||
+      typeof planId !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(planId) ||
+      typeof planCode !== "string" ||
+      !Number.isSafeInteger(credits) ||
+      (credits as number) <= 0
+    )
+      throw new ApiError(409, "application_conflict");
+    const currentSettings = await this.readIssuerSettings(client);
+    const preview = localPreviewPermitted(
+      this.config,
+      currentSettings.previewEnabled,
+    );
+    const issuer = this.makeIssuer(currentSettings, preview);
+    if (!preview && !this.isLiveIssuerReady(currentSettings))
+      throw new ApiError(503, "invoice_unavailable");
+
+    const issuedOn = todayInTokyo(this.clock());
+    const dueOn = addCalendarDays(issuedOn, 7);
+    const total = invoiceTotals([gross as number]);
+    const invoiceId = randomUUID();
+    const year = Number(issuedOn.slice(0, 4));
+    const prefix = currentSettings.prefix;
+    if (
+      !prefix ||
+      !/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(prefix) ||
+      prefix.length > 20
+    ) {
+      if (!preview) throw new ApiError(503, "invoice_unavailable");
+    }
+    const actualPrefix =
+      prefix && /^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(prefix)
+        ? prefix
+        : "DEV";
+    const numberResult = await client.query<{ invoice_no: string }>(
+      "select next_invoice_no($1, $2) as invoice_no",
+      [year, actualPrefix],
+    );
+    const invoiceNo = numberResult.rows[0]?.invoice_no;
+    if (!invoiceNo)
+      throw new Error("Invoice number function returned no value");
+    const details = invoiceDetailSchema.parse({
+      id: invoiceId,
+      invoiceNo,
+      kind: "initial",
+      status: "issued",
+      issuedOn,
+      dueOn,
+      totalInclTax: total.grossYen,
+      totalExclTax: total.netYen,
+      taxAmount: total.taxYen,
+      paymentMethod: "bank_transfer",
+      preview,
+      billingName: row.billing_name,
+      billingAddress: row.billing_address,
+      acceptedPlan: {
+        planId,
+        planCode,
+        planName: planName.trim(),
+        monthlyPriceInclTax: gross,
+        credits,
+      },
+      issuer,
+      lines: [
+        {
+          description: `${planName.trim()} 初月利用料`,
+          quantity: 1,
+          unitPriceInclTax: gross,
+          amountInclTax: gross,
+          taxRate: 0.1,
+        },
+      ],
+    });
+    const firstLine = details.lines[0];
+    if (!firstLine) throw new Error("Invoice has no lines");
+    const pdf = await this.renderer.render(details);
+    if (
+      !pdf.byteLength ||
+      pdf.byteLength > maxPdfBytes ||
+      !Buffer.from(pdf).subarray(0, 5).equals(Buffer.from("%PDF-"))
+    )
+      throw new Error("Invoice PDF renderer output invalid");
+    const issuerSnapshot = {
+      ...issuer,
+      acceptedPlan: details.acceptedPlan,
+      preview,
+    };
+    await client.query(
+      `insert into invoices (id, invoice_no, contract_id, kind, status, payment_method,
+         issued_on, due_on, total_incl_tax, total_excl_tax, tax_amount, billing_name,
+         billing_address_snapshot, issuer_snapshot, pdf_path)
+       values ($1,$2,$3,'initial','issued','bank_transfer',$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+      [
+        invoiceId,
+        invoiceNo,
+        row.contract_id,
+        issuedOn,
+        dueOn,
+        total.grossYen,
+        total.netYen,
+        total.taxYen,
+        row.billing_name,
+        row.billing_address,
+        JSON.stringify(issuerSnapshot),
+        `invoice_documents:${invoiceId}`,
+      ],
+    );
+    await client.query(
+      `insert into invoice_lines (invoice_id, line_kind, description, quantity, unit_price_incl_tax, amount_incl_tax, tax_rate)
+       values ($1,'monthly_fee',$2,1,$3,$3,0.100)`,
+      [invoiceId, firstLine.description, gross],
+    );
+    await client.query(
+      "insert into invoice_documents (invoice_id, mime_type, sha256, content) values ($1,'application/pdf',$2,$3)",
+      [
+        invoiceId,
+        createHash("sha256").update(pdf).digest("hex"),
+        Buffer.from(pdf),
+      ],
+    );
+    await client.query(
+      "update applications set reviewed_at = now(), review_result = 'approved' where id = $1",
+      [row.application_id],
+    );
+    await client.query(
+      "update contracts set status = 'awaiting_payment', first_invoice_due_on = $2 where id = $1",
+      [row.contract_id, dueOn],
+    );
+    if (!preview) {
+      await client.query(
+        `insert into notifications (customer_id, kind, channel, dedupe_key, scheduled_at, payload)
+         values ($1,'NT-02','email',$2,now(),$3::jsonb)`,
+        [
+          row.customer_id,
+          `NT-02:invoice:${invoiceId}:customer`,
+          JSON.stringify({ invoiceId }),
+        ],
+      );
+    }
+    return {
+      applicationId: row.application_id,
+      contractId: row.contract_id,
+      status: "awaiting_payment",
+      invoice: this.listItem(details),
+      replayed: false,
+    };
+  }
+
+  private async readIssuerSettings(client: PoolClient): Promise<{
+    serviceName: string | undefined;
+    companyName: string | undefined;
+    companyAddress: string | undefined;
+    registrationNo: string | undefined;
+    prefix: string | undefined;
+    bank: Record<string, unknown>;
+    previewEnabled: boolean;
+  }> {
+    const result = await client.query<{ key: string; value: unknown }>(
+      `select key, value from settings where key = any($1::text[])`,
+      [
+        [
+          "service_name",
+          "company_name",
+          "company_address",
+          "invoice_registration_no",
+          "invoice_prefix",
+          "bank_account",
+          "invoice_preview_enabled",
+        ],
+      ],
+    );
+    const values = new Map(result.rows.map(({ key, value }) => [key, value]));
+    const get = (key: string) => stringSetting(values.get(key));
+    return {
+      serviceName: get("service_name"),
+      companyName: get("company_name"),
+      companyAddress: get("company_address"),
+      registrationNo: get("invoice_registration_no"),
+      prefix: get("invoice_prefix"),
+      bank: safeObject(values.get("bank_account")),
+      previewEnabled: values.get("invoice_preview_enabled") === true,
+    };
+  }
+
+  private isLiveIssuerReady(
+    settings: Awaited<ReturnType<InvoiceRepository["readIssuerSettings"]>>,
+  ): boolean {
+    const bank = settings.bank;
+    return Boolean(
+      settings.serviceName &&
+        settings.companyName &&
+        settings.companyAddress &&
+        settings.registrationNo &&
+        /^T\d{13}$/.test(settings.registrationNo) &&
+        settings.prefix &&
+        stringSetting(bank.bank_name) &&
+        stringSetting(bank.branch_name) &&
+        stringSetting(bank.account_type) &&
+        stringSetting(bank.account_number) &&
+        stringSetting(bank.account_holder),
+    );
+  }
+
+  private makeIssuer(
+    settings: Awaited<ReturnType<InvoiceRepository["readIssuerSettings"]>>,
+    preview: boolean,
+  ): IssuerSnapshot {
+    const missing = (value: string | undefined) =>
+      value ?? (preview ? "未設定" : "");
+    const account = (key: string) => stringSetting(settings.bank[key]) ?? null;
+    return {
+      serviceName: missing(settings.serviceName),
+      companyName: missing(settings.companyName),
+      companyAddress: missing(settings.companyAddress),
+      invoiceRegistrationNo:
+        settings.registrationNo && /^T\d{13}$/.test(settings.registrationNo)
+          ? settings.registrationNo
+          : null,
+      bankAccountName: account("bank_name")
+        ? `${account("bank_name")} / ${account("account_holder") ?? "未設定"}`
+        : null,
+      bankAccountBranch: account("branch_name"),
+      bankAccountType: account("account_type"),
+      bankAccountNumber: account("account_number"),
+    };
+  }
+
+  private async getByContract(
+    client: PoolClient,
+    contractId: string,
+  ): Promise<InvoiceDetail | undefined> {
+    const result = await client.query<InvoiceRow>(
+      `${detailQuery} where i.contract_id = $1 and i.kind = 'initial' and i.status <> 'void' order by i.created_at limit 1`,
+      [contractId],
+    );
+    return result.rows[0] ? this.toDetail(result.rows[0]) : undefined;
+  }
+
+  async listCustomer(scope: CustomerScope): Promise<InvoiceList> {
+    const result = await this.pool.query<InvoiceRow>(
+      `${detailQuery} where c.customer_id = $1 and i.kind = 'initial' order by i.issued_on desc, i.invoice_no desc`,
+      [scope.customerId],
+    );
+    return {
+      invoices: result.rows.map((row) => this.listItem(this.toDetail(row))),
+    };
+  }
+  async getCustomer(
+    scope: CustomerScope,
+    invoiceId: string,
+  ): Promise<InvoiceDetail> {
+    const result = await this.pool.query<InvoiceRow>(
+      `${detailQuery} where c.customer_id = $1 and i.id = $2 and i.kind = 'initial'`,
+      [scope.customerId, invoiceId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApiError(404, "not_found");
+    return this.toDetail(row);
+  }
+  getCustomerPdf(scope: CustomerScope, invoiceId: string) {
+    return this.getPdf("customer", scope, invoiceId);
+  }
+  async listAdmin(principal: Principal): Promise<InvoiceList> {
+    this.assertAdmin(principal);
+    const result = await this.pool.query<InvoiceRow>(
+      `${detailQuery} where i.kind = 'initial' order by i.issued_on desc, i.invoice_no desc limit 100`,
+      [],
+    );
+    return {
+      invoices: result.rows.map((row) => this.listItem(this.toDetail(row))),
+    };
+  }
+  async getAdmin(
+    principal: Principal,
+    invoiceId: string,
+  ): Promise<InvoiceDetail> {
+    this.assertAdmin(principal);
+    const result = await this.pool.query<InvoiceRow>(
+      `${detailQuery} where i.id = $1 and i.kind = 'initial'`,
+      [invoiceId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApiError(404, "not_found");
+    return this.toDetail(row);
+  }
+  getAdminPdf(principal: Principal, invoiceId: string) {
+    this.assertAdmin(principal);
+    return this.getPdf("admin", undefined, invoiceId);
+  }
+
+  private assertAdmin(principal: Principal) {
+    if (principal.role !== "admin") throw new ApiError(404, "not_found");
+    if (!principal.secondFactor) throw new ApiError(403, "forbidden");
+  }
+  private async getPdf(
+    kind: "admin" | "customer",
+    scope: CustomerScope | undefined,
+    invoiceId: string,
+  ): Promise<{ invoiceNo: string; content: Uint8Array }> {
+    if (kind === "customer" && !scope) throw new ApiError(404, "not_found");
+    if (this.config.nodeEnv === "production")
+      throw new ApiError(503, "invoice_unavailable");
+    const result = await this.pool.query<{
+      invoice_no: string;
+      content: Buffer;
+    }>(
+      `select i.invoice_no, d.content from invoices i join invoice_documents d on d.invoice_id = i.id
+       join contracts c on c.id = i.contract_id where i.id = $1 and i.kind = 'initial'
+       and ($2::text is null or c.customer_id::text = $2)`,
+      [invoiceId, kind === "customer" ? (scope?.customerId ?? null) : null],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApiError(404, "not_found");
+    if (!/^[A-Za-z0-9-]{1,64}$/.test(row.invoice_no))
+      throw new Error("Invalid persisted invoice number");
+    return { invoiceNo: row.invoice_no, content: row.content };
+  }
+
+  private listItem(detail: InvoiceDetail): InvoiceListItem {
+    const {
+      id,
+      invoiceNo,
+      kind,
+      status,
+      issuedOn,
+      dueOn,
+      totalInclTax,
+      totalExclTax,
+      taxAmount,
+      paymentMethod,
+      preview,
+    } = detail;
+    return {
+      id,
+      invoiceNo,
+      kind,
+      status,
+      issuedOn,
+      dueOn,
+      totalInclTax,
+      totalExclTax,
+      taxAmount,
+      paymentMethod,
+      preview,
+    };
+  }
+
+  private toDetail(row: InvoiceRow): InvoiceDetail {
+    const snapshot = safeObject(row.issuer_snapshot);
+    const preview = snapshot.preview === true;
+    const acceptedPlan = safeObject(snapshot.acceptedPlan);
+    const issuer = {
+      serviceName: snapshot.serviceName,
+      companyName: snapshot.companyName,
+      companyAddress: snapshot.companyAddress,
+      invoiceRegistrationNo: snapshot.invoiceRegistrationNo ?? null,
+      bankAccountName: snapshot.bankAccountName ?? null,
+      bankAccountBranch: snapshot.bankAccountBranch ?? null,
+      bankAccountType: snapshot.bankAccountType ?? null,
+      bankAccountNumber: snapshot.bankAccountNumber ?? null,
+    };
+    const lines = Array.isArray(row.lines)
+      ? row.lines.map((line) => safeObject(line))
+      : [];
+    return invoiceDetailSchema.parse({
+      id: row.id,
+      invoiceNo: row.invoice_no,
+      kind: "initial",
+      status: row.status,
+      issuedOn: row.issued_on,
+      dueOn: row.due_on,
+      totalInclTax: row.total_incl_tax,
+      totalExclTax: row.total_excl_tax,
+      taxAmount: row.tax_amount,
+      paymentMethod: row.payment_method,
+      preview,
+      billingName: row.billing_name,
+      billingAddress: row.billing_address,
+      acceptedPlan,
+      issuer,
+      lines: lines.map((line) => ({
+        description: line.description,
+        quantity: line.quantity,
+        unitPriceInclTax: line.unit_price_incl_tax,
+        amountInclTax: line.amount_incl_tax,
+        taxRate: Number(line.tax_rate),
+      })),
+    });
+  }
+}
+
+const detailQuery = `select i.id, i.invoice_no, i.status, i.payment_method,
+       i.issued_on::text as issued_on, i.due_on::text as due_on,
+       i.total_incl_tax, i.total_excl_tax, i.tax_amount, i.billing_name,
+       coalesce(i.billing_address_snapshot, cst.billing_address) as billing_address,
+       i.issuer_snapshot,
+       coalesce(l.lines,
+         '[]'::jsonb) as lines
+  from invoices i join contracts c on c.id = i.contract_id join customers cst on cst.id = c.customer_id
+  left join lateral (
+    select jsonb_agg(jsonb_build_object('description', line.description, 'quantity', line.quantity,
+      'unit_price_incl_tax', line.unit_price_incl_tax, 'amount_incl_tax', line.amount_incl_tax,
+      'tax_rate', line.tax_rate) order by line.id) as lines
+      from invoice_lines line where line.invoice_id = i.id
+  ) l on true`;

@@ -9,3 +9,6 @@ node_modules
 !.env.example
 coverage
 firebase-debug.log
+
+output/
+tmp/

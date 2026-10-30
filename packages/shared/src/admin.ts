@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { invoiceListItemSchema } from "./invoice.js";
 import { contractStatuses } from "./states.js";
 
 const contractStatusSchema = z.enum(contractStatuses);
@@ -78,6 +79,7 @@ export const adminCustomerDetailSchema = z
       .object({
         id: z.string().uuid(),
         submittedAt: z.iso.datetime(),
+        paymentMethod: paymentMethodSchema,
         termsVersion: z.string(),
         privacyVersion: z.string(),
         disclosureVersion: z.string(),
@@ -123,3 +125,30 @@ export const declineApplicationResponseSchema = z
 export type DeclineApplicationResponse = z.infer<
   typeof declineApplicationResponseSchema
 >;
+
+export const approveApplicationResponseSchema = z
+  .object({
+    applicationId: z.string().uuid(),
+    contractId: z.string().uuid(),
+    status: z.enum(["awaiting_payment", "quoting"]),
+    invoice: invoiceListItemSchema.nullable(),
+    replayed: z.boolean(),
+  })
+  .strict()
+  .superRefine((response, context) => {
+    if (
+      (response.status === "awaiting_payment" && response.invoice === null) ||
+      (response.status === "quoting" && response.invoice !== null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["invoice"],
+        message: "Invoice presence must match the application status",
+      });
+    }
+  });
+export type ApproveApplicationResponse = z.infer<
+  typeof approveApplicationResponseSchema
+>;
+
+export const approveApplicationRequestSchema = z.object({}).strict();

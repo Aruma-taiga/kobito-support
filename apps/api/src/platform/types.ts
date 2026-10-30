@@ -26,7 +26,8 @@ export class ApiError extends Error {
       | "offer_changed"
       | "validation_error"
       | "internal_error"
-      | "application_unavailable",
+      | "application_unavailable"
+      | "invoice_unavailable",
   ) {
     super(code);
   }
