@@ -8,6 +8,7 @@ import { createAdminApiClient } from "./platform/admin-api-client.js";
 import { createApiClient } from "./platform/api-client.js";
 import { loadWebConfig } from "./platform/config.js";
 import "./styles.css";
+import "./ui/ui.css";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Application root is missing");
