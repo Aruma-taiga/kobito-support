@@ -4,7 +4,7 @@ TypeScript の基幹システムです。設計と作業順は `docs/` を参照
 
 ## 現在の段階
 
-PR1 と PR2 で、pnpm workspace、環境設定の検証、PostgreSQL 16 と Firebase Auth Emulator のローカル環境、DB migration runner・初期 seed、lint・型検査・unit / PostgreSQL integration tests を用意しています。まだ申込画面、API routes、ログインフローなどの業務アプリはありません。`pnpm dev` はありません。
+PR1〜PR3 で、pnpm workspace、環境設定の検証、PostgreSQL 16 と Firebase Auth Emulator のローカル環境、migration runner・初期 seed、共通 domain package（料金・税額、請求期間、クレジット、状態遷移、申込入力 validation）と lint・型検査・unit / PostgreSQL integration tests を用意しています。まだ申込画面、API routes、ログインフローなどの業務アプリはありません。`pnpm dev` はありません。
 
 ## 必要なもの
 
@@ -82,3 +82,13 @@ pnpm test:db
 ```
 
 Pull Request CI は PostgreSQL 16 に対して migration を2回実行し、seed と DB integration tests を確認します。
+
+## 共通 domain package
+
+`@kobito/shared` は Node と web で共有する純粋な計算・型・validation です。DB やネットワークへ接続せず、利用側で料金表示や申込 API validation に使います。package をビルドするには:
+
+```sh
+pnpm build:shared
+```
+
+主な API は `splitTax(grossYen)` / `invoiceTotals(lineGrossYen[])`、`periodFor(anchor, zeroBasedSeq)`、`balanceOf(entries)` / `canApprove(estimateCredits, balance)`、`formatInvoiceNo(prefix, year, sequence)` と申込フォーム schema です。請求期間の `zeroBasedSeq` は開始を 0 とし、DB の `billing_periods.seq` に保存するときは 1 を加えます。請求書の税額は明細ごとではなく、請求書の税込合計に対して一度だけ計算します。

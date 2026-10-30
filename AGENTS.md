@@ -23,6 +23,7 @@
 - Every customer API read and write must be scoped by the authenticated customer's ID. Admin access requires the designed second factor.
 - Keep service/company identity, invoice registration, and bank details configurable. The later runtime public settings source is the `settings` table; do not hardcode business identity in application logic.
 - Add focused tests for financial arithmetic, periods, credits, invoice numbering, duplicate webhook delivery, and customer data scoping in the stages that implement those behaviors.
+- Keep `packages/shared` deterministic and free of database/network access. Web and API consumers must use its shared calculation, status, type, and validation APIs instead of reimplementing them. Keep Japanese validation messages and plan labels centralized there, and cover domain boundaries with tests.
 
 ## Local development
 
