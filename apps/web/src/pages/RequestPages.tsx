@@ -1,12 +1,15 @@
 import {
   type AdminRequestDetail,
   type AdminRequestSummary,
+  type CompleteRequest,
   type CreateEstimate,
   type CreateRequest,
   type CustomerRequestDetail,
   type CustomerRequestSummary,
+  completeRequestSchema,
   createEstimateSchema,
   createRequestSchema,
+  type RequestCompletion,
   type RequestEstimate,
   type RequestStatus,
   webMessages,
@@ -40,6 +43,18 @@ function requestStatusLabel(status: RequestStatus): string {
     case "withdrawn":
       return webMessages.requestStatusWithdrawn;
   }
+}
+
+function tokyoToday(): string {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 export function AdminRequestListPage({
@@ -119,7 +134,17 @@ export function AdminRequestListPage({
                   <dd>{item.receivedOn}</dd>
                   <dt>{webMessages.adminRequestStatus}</dt>
                   <dd>{requestStatusLabel(item.status)}</dd>
-                  {item.latestEstimate ? (
+                  {item.completion ? (
+                    <>
+                      <dt>{webMessages.adminRequestCompletedOn}</dt>
+                      <dd>{item.completion.completedOn}</dd>
+                      <dt>{webMessages.adminRequestActualCredits}</dt>
+                      <dd>
+                        {item.completion.actualCredits}{" "}
+                        {webMessages.requestCreditUnit}
+                      </dd>
+                    </>
+                  ) : item.latestEstimate ? (
                     <>
                       <dt>{webMessages.adminEstimateCredits}</dt>
                       <dd>
@@ -519,6 +544,64 @@ function EstimateDisplay({
   );
 }
 
+function CompletionDisplay({
+  completion,
+  customer = false,
+}: {
+  completion: RequestCompletion;
+  customer?: boolean;
+}) {
+  return (
+    <section
+      className="estimate-card"
+      aria-label={webMessages.requestStatusDone}
+    >
+      <h2>{webMessages.requestStatusDone}</h2>
+      <dl className="request-summary-list">
+        <dt>
+          {customer
+            ? webMessages.myRequestCompletionDate
+            : webMessages.adminRequestCompletedOn}
+        </dt>
+        <dd>{completion.completedOn}</dd>
+        <dt>
+          {customer
+            ? webMessages.myRequestCompletionActualMinutes
+            : webMessages.adminRequestActualMinutes}
+        </dt>
+        <dd>
+          {completion.actualMinutes} {webMessages.requestMinuteUnit}
+        </dd>
+        <dt>
+          {customer
+            ? webMessages.myRequestCompletionActualCredits
+            : webMessages.adminRequestActualCredits}
+        </dt>
+        <dd>
+          {completion.actualCredits} {webMessages.requestCreditUnit}
+        </dd>
+        <dt>
+          {customer
+            ? webMessages.myRequestCompletionPeriod
+            : webMessages.adminRequestReservedPeriod}
+        </dt>
+        <dd>
+          {completion.reservedPeriod.startsOn}〜
+          {completion.reservedPeriod.endsOn}
+        </dd>
+        <dt>
+          {customer
+            ? webMessages.myRequestCompletionReservedCredits
+            : webMessages.adminRequestReservedCredits}
+        </dt>
+        <dd>
+          {completion.reservedCredits} {webMessages.requestCreditUnit}
+        </dd>
+      </dl>
+    </section>
+  );
+}
+
 export function AdminRequestDetailPage({
   apiClient,
 }: {
@@ -531,6 +614,18 @@ export function AdminRequestDetailPage({
   const [refreshError, setRefreshError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [revise, setRevise] = useState(false);
+  const [completedOn, setCompletedOn] = useState(() => tokyoToday());
+  const [actualMinutes, setActualMinutes] = useState("");
+  const [actualCredits, setActualCredits] = useState("");
+  const [completionDraft, setCompletionDraft] =
+    useState<CompleteRequest | null>(null);
+  const [confirmingCompletion, setConfirmingCompletion] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const [completionError, setCompletionError] = useState<
+    "validation" | "conflict" | "action" | null
+  >(null);
+  const [completionSucceeded, setCompletionSucceeded] = useState(false);
+  const [completionRefreshError, setCompletionRefreshError] = useState(false);
   const load = async () => {
     const result = await apiClient.getAdminRequest(id);
     setDetail(result);
@@ -586,6 +681,74 @@ export function AdminRequestDetailPage({
     );
   const canSend =
     detail.status === "received" || detail.status === "awaiting_approval";
+  const canComplete =
+    detail.status === "in_progress" &&
+    detail.completion === null &&
+    completionError !== "conflict";
+  const completionExceedsEstimate =
+    detail.completion !== null &&
+    detail.latestEstimate !== null &&
+    detail.completion.actualCredits > detail.latestEstimate.credits;
+
+  function prepareCompletion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (completing || !detail) return;
+    const parsed = completeRequestSchema.safeParse({
+      completedOn,
+      actualMinutes: actualMinutes === "" ? Number.NaN : Number(actualMinutes),
+      actualCredits: actualCredits === "" ? Number.NaN : Number(actualCredits),
+    });
+    if (
+      !parsed.success ||
+      parsed.data.completedOn < detail.receivedOn ||
+      parsed.data.completedOn > tokyoToday()
+    ) {
+      setCompletionError("validation");
+      return;
+    }
+    setCompletionError(null);
+    setCompletionDraft(parsed.data);
+    setConfirmingCompletion(true);
+  }
+
+  async function complete() {
+    if (completing || !completionDraft || !detail) return;
+    setCompleting(true);
+    setCompletionError(null);
+    setCompletionRefreshError(false);
+    try {
+      const result = await apiClient.completeRequest(id, completionDraft);
+      setConfirmingCompletion(false);
+      setCompletionDraft(null);
+      setCompletionSucceeded(true);
+      setDetail({ ...detail, status: result.status, completion: result });
+    } catch (caught) {
+      setCompletionSucceeded(false);
+      if (
+        caught instanceof AdminApiError &&
+        caught.code === "request_conflict"
+      ) {
+        setCompletionError("conflict");
+        setConfirmingCompletion(false);
+        try {
+          await load();
+        } catch {
+          setCompletionRefreshError(true);
+        }
+      } else if (
+        caught instanceof AdminApiError &&
+        caught.code === "validation_error"
+      ) {
+        setCompletionError("validation");
+        setConfirmingCompletion(false);
+      } else {
+        // Keep the reviewed values in the dialog so an identical retry is safe.
+        setCompletionError("action");
+      }
+    } finally {
+      setCompleting(false);
+    }
+  }
   return (
     <main className="page-main">
       <section
@@ -613,6 +776,52 @@ export function AdminRequestDetailPage({
         {detail.estimates.map((item) => (
           <EstimateDisplay key={item.id} estimate={item} />
         ))}
+        {detail.completion ? (
+          <CompletionDisplay completion={detail.completion} />
+        ) : null}
+        {completionSucceeded ? (
+          <output className="notice info">
+            {webMessages.adminRequestCompletionSuccess}
+          </output>
+        ) : null}
+        {completionExceedsEstimate ? (
+          <p className="notice info" role="note">
+            {webMessages.adminRequestActualExceedsEstimate}
+          </p>
+        ) : null}
+        {completionError === "conflict" ? (
+          <p className="error-message" role="alert">
+            {webMessages.adminRequestCompletionConflict}
+          </p>
+        ) : null}
+        {completionError === "validation" ? (
+          <p className="error-message" role="alert">
+            {webMessages.adminRequestCompletionValidation}
+          </p>
+        ) : null}
+        {completionError === "action" ? (
+          <p className="error-message" role="alert">
+            {webMessages.requestActionError}
+          </p>
+        ) : null}
+        {completionRefreshError ? (
+          <p className="error-message" role="alert">
+            {webMessages.requestsLoadError}
+          </p>
+        ) : null}
+        {completionError === "conflict" || completionRefreshError ? (
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setCompletionError(null);
+              setCompletionRefreshError(false);
+              setAttempt((value) => value + 1);
+            }}
+            type="button"
+          >
+            {webMessages.retry}
+          </button>
+        ) : null}
         {refreshError ? (
           <>
             <p className="error-message" role="alert">
@@ -667,6 +876,141 @@ export function AdminRequestDetailPage({
           >
             {webMessages.adminEstimateRevise}
           </button>
+        ) : null}
+        {canComplete ? (
+          <form
+            className="estimate-form request-completion-form"
+            noValidate
+            onSubmit={prepareCompletion}
+          >
+            <h2>{webMessages.adminRequestComplete}</h2>
+            <label className="field-label" htmlFor="request-completed-on">
+              {webMessages.adminRequestCompletedOn}
+            </label>
+            <input
+              id="request-completed-on"
+              type="date"
+              required
+              min={detail.receivedOn}
+              max={tokyoToday()}
+              value={completedOn}
+              disabled={confirmingCompletion || completing}
+              onChange={(event) => setCompletedOn(event.currentTarget.value)}
+            />
+            <label className="field-label" htmlFor="request-actual-minutes">
+              {webMessages.adminRequestActualMinutes}
+            </label>
+            <input
+              id="request-actual-minutes"
+              type="number"
+              min="0"
+              max="2147483647"
+              step="1"
+              required
+              value={actualMinutes}
+              disabled={confirmingCompletion || completing}
+              onChange={(event) => setActualMinutes(event.currentTarget.value)}
+            />
+            <label className="field-label" htmlFor="request-actual-credits">
+              {webMessages.adminRequestActualCredits}
+            </label>
+            <input
+              id="request-actual-credits"
+              type="number"
+              min="0"
+              max="2147483647"
+              step="1"
+              required
+              value={actualCredits}
+              disabled={confirmingCompletion || completing}
+              onChange={(event) => setActualCredits(event.currentTarget.value)}
+            />
+            {completionError === "validation" ? (
+              <p className="error-message" role="alert">
+                {webMessages.adminRequestCompletionValidation}
+              </p>
+            ) : null}
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={confirmingCompletion || completing}
+            >
+              {webMessages.adminRequestComplete}
+            </button>
+          </form>
+        ) : null}
+        {confirmingCompletion && completionDraft ? (
+          <section
+            className="request-confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="request-completion-confirm-title"
+          >
+            <h2 id="request-completion-confirm-title">
+              {webMessages.adminRequestCompletionConfirm}
+            </h2>
+            <dl className="request-summary-list">
+              <dt>{webMessages.adminRequestSummary}</dt>
+              <dd>{detail.summary}</dd>
+              <dt>{webMessages.adminRequestCustomer}</dt>
+              <dd>
+                {detail.customer.shopName}（{detail.customer.contactName}）
+              </dd>
+              {detail.latestEstimate ? (
+                <>
+                  <dt>{webMessages.adminEstimateCredits}</dt>
+                  <dd>
+                    {detail.latestEstimate.credits}{" "}
+                    {webMessages.requestCreditUnit}
+                  </dd>
+                </>
+              ) : null}
+              <dt>{webMessages.adminRequestCompletedOn}</dt>
+              <dd>{completionDraft.completedOn}</dd>
+              <dt>{webMessages.adminRequestActualMinutes}</dt>
+              <dd>
+                {completionDraft.actualMinutes} {webMessages.requestMinuteUnit}
+              </dd>
+              <dt>{webMessages.adminRequestActualCredits}</dt>
+              <dd>
+                {completionDraft.actualCredits} {webMessages.requestCreditUnit}
+              </dd>
+            </dl>
+            {detail.latestEstimate &&
+            completionDraft.actualCredits > detail.latestEstimate.credits ? (
+              <p className="notice info" role="note">
+                {webMessages.adminRequestActualExceedsEstimate}
+              </p>
+            ) : null}
+            {completionError === "action" ? (
+              <p className="error-message" role="alert">
+                {webMessages.requestActionError}
+              </p>
+            ) : null}
+            <div className="admin-actions">
+              <button
+                className="primary-button"
+                disabled={completing}
+                onClick={() => void complete()}
+                type="button"
+              >
+                {completing
+                  ? webMessages.requestSendBusy
+                  : webMessages.adminRequestComplete}
+              </button>
+              <button
+                className="secondary-button"
+                disabled={completing}
+                onClick={() => {
+                  setConfirmingCompletion(false);
+                  setCompletionError(null);
+                }}
+                type="button"
+              >
+                {webMessages.myRequestCancel}
+              </button>
+            </div>
+          </section>
         ) : null}
       </section>
     </main>
@@ -743,7 +1087,17 @@ export function MyRequestsPage({
                   <dd>{requestStatusLabel(item.status)}</dd>
                   <dt>{webMessages.adminRequestReceivedOn}</dt>
                   <dd>{item.receivedOn}</dd>
-                  {item.latestEstimate ? (
+                  {item.completion ? (
+                    <>
+                      <dt>{webMessages.myRequestCompletionDate}</dt>
+                      <dd>{item.completion.completedOn}</dd>
+                      <dt>{webMessages.myRequestCompletionActualCredits}</dt>
+                      <dd>
+                        {item.completion.actualCredits}{" "}
+                        {webMessages.requestCreditUnit}
+                      </dd>
+                    </>
+                  ) : item.latestEstimate ? (
                     <>
                       <dt>{webMessages.estimateCredits}</dt>
                       <dd>
@@ -915,6 +1269,20 @@ export function MyRequestDetailPage({
           </p>
         ) : null}
         {estimate ? <EstimateDisplay estimate={estimate} /> : null}
+        {detail.request.completion ? (
+          <>
+            <CompletionDisplay
+              completion={detail.request.completion}
+              customer
+            />
+            {estimate &&
+            detail.request.completion.actualCredits > estimate.credits ? (
+              <p className="notice info" role="note">
+                {webMessages.adminRequestActualExceedsEstimate}
+              </p>
+            ) : null}
+          </>
+        ) : null}
         {awaitingApproval && !detail.canApprove && !insufficient ? (
           <p className="notice info" role="note">
             {webMessages.myRequestConflict}

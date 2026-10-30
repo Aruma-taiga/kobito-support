@@ -46,6 +46,9 @@ describe("PostgreSQL migrations and seed", () => {
     const fifthMigration = await readFile(
       new URL("../migrations/005_requests_estimates.sql", import.meta.url),
     );
+    const sixthMigration = await readFile(
+      new URL("../migrations/006_request_completion.sql", import.meta.url),
+    );
 
     const recorded = await pool.query<{ version: string; checksum: string }>(
       "select version, checksum from schema_migrations order by version",
@@ -70,6 +73,10 @@ describe("PostgreSQL migrations and seed", () => {
       {
         version: "005",
         checksum: createHash("sha256").update(fifthMigration).digest("hex"),
+      },
+      {
+        version: "006",
+        checksum: createHash("sha256").update(sixthMigration).digest("hex"),
       },
     ]);
   });
@@ -189,7 +196,7 @@ describe("PostgreSQL migrations and seed", () => {
     try {
       await copyAppliedMigrations(directory);
       await writeFile(
-        join(directory, "006_partial_failure.sql"),
+        join(directory, "007_partial_failure.sql"),
         "create table migration_partial_failure (id integer); select 1 / 0;",
       );
 
@@ -198,7 +205,7 @@ describe("PostgreSQL migrations and seed", () => {
         "select to_regclass('migration_partial_failure')::text as relation",
       );
       const history = await pool.query<{ count: string }>(
-        "select count(*)::text as count from schema_migrations where version = '006'",
+        "select count(*)::text as count from schema_migrations where version = '007'",
       );
       expect(marker.rows[0]?.relation).toBeNull();
       expect(history.rows[0]?.count).toBe("0");
@@ -260,6 +267,7 @@ async function copyAppliedMigrations(directory: string): Promise<void> {
     ["003", "initial_invoices"],
     ["004", "komoju_webhook_inbox"],
     ["005", "requests_estimates"],
+    ["006", "request_completion"],
   ]) {
     const filename = `${version}_${name}.sql`;
     const sql = await readFile(

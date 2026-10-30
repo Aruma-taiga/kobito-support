@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
   adminRequestDetailSchema,
+  completeRequestResponseSchema,
   createRequestResponseSchema,
+  customerRequestDetailSchema,
   toTokyoDate,
 } from "@kobito/shared";
 import { Pool } from "pg";
@@ -54,14 +56,19 @@ function requireRow<T>(row: T | undefined): T {
 }
 
 function makeApp(
-  now?: () => Date,
+  now: () => Date = () => new Date("2026-10-26T15:30:00.000Z"),
   appPool: Pool = pool,
 ): ReturnType<typeof createApp> {
   const accounts = new AccountsRepository(appPool);
   const invoices = new InvoiceService(
-    new InvoiceRepository(appPool, config, {
-      render: async () => Buffer.from("%PDF"),
-    }),
+    new InvoiceRepository(
+      appPool,
+      config,
+      {
+        render: async () => Buffer.from("%PDF"),
+      },
+      now,
+    ),
   );
   const dependencies: AppDependencies = {
     config,
@@ -86,14 +93,7 @@ function makeApp(
     },
     admin: new AdminService(new AdminRepository(appPool)),
     invoices,
-    requests: new RequestService(
-      new (
-        RequestRepository as unknown as new (
-          pool: Pool,
-          now: () => Date,
-        ) => RequestRepository
-      )(appPool, now ?? (() => new Date())),
-    ),
+    requests: new RequestService(new RequestRepository(appPool, now)),
     publicSettings: { getServiceName: async () => "Test" },
     logger: { info: () => {}, error: () => {} },
     komojuInbox: { receive: async () => "accepted" },
@@ -153,6 +153,74 @@ async function makeContract(
     [uid, customerId],
   );
   return { customerId, contractId, token };
+}
+
+async function makeInProgressRequest(
+  label: string,
+  estimateCredits: number,
+  fundedCredits = 5,
+  now: () => Date = () => new Date("2026-10-26T15:30:00.000Z"),
+) {
+  const customer = await makeContract(label, "active", fundedCredits);
+  const app = makeApp(now);
+  const adminHeaders = {
+    authorization: `Bearer ${adminToken}`,
+    "content-type": "application/json",
+  };
+  const created = await app.request("/api/v1/admin/requests", {
+    method: "POST",
+    headers: { ...adminHeaders, "idempotency-key": randomUUID() },
+    body: JSON.stringify({
+      contractId: customer.contractId,
+      receivedOn: "2026-10-26",
+      summary: `完了テスト ${label}`,
+      urgent: false,
+    }),
+  });
+  if (created.status !== 201)
+    throw new Error("Failed to create request fixture");
+  const requestId = ((await created.json()) as { id: string }).id;
+  requestIds.push(requestId);
+  const sent = await app.request(
+    `/api/v1/admin/requests/${requestId}/estimates`,
+    {
+      method: "POST",
+      headers: { ...adminHeaders, "idempotency-key": randomUUID() },
+      body: JSON.stringify({
+        credits: estimateCredits,
+        dueOn: "2026-10-30",
+        workItems: ["対応"],
+        doneCriteria: "対応完了",
+      }),
+    },
+  );
+  if (sent.status !== 201) throw new Error("Failed to send estimate fixture");
+  const estimateId = ((await sent.json()) as { id: string }).id;
+  estimateIds.push(estimateId);
+  const approved = await app.request(
+    `/api/v1/me/estimates/${estimateId}/approve`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${customer.token}`,
+        "content-type": "application/json",
+      },
+      body: "{}",
+    },
+  );
+  if (approved.status !== 200)
+    throw new Error("Failed to approve estimate fixture");
+  const reservation = await pool.query<{ period_id: string }>(
+    "select period_id from credit_entries where request_id=$1 and kind='reserve'",
+    [requestId],
+  );
+  return {
+    customer,
+    app,
+    requestId,
+    estimateId,
+    periodId: requireRow(reservation.rows[0]).period_id,
+  };
 }
 
 beforeAll(async () => {
@@ -323,7 +391,7 @@ describe("request estimate API integration", () => {
 
   it("creates and sends immutable estimate versions, reserves once, and scopes customer access", async () => {
     const customer = await makeContract("a");
-    const app = makeApp();
+    const app = makeApp(() => new Date("2026-10-27T02:00:00.000Z"));
     const adminHeaders = {
       authorization: `Bearer ${adminToken}`,
       "content-type": "application/json",
@@ -537,7 +605,7 @@ describe("request estimate API integration", () => {
   });
 
   it("requires verified second factor for the nested admin request API", async () => {
-    const app = makeApp();
+    const app = makeApp(() => new Date("2026-10-27T02:00:00.000Z"));
     const response = await app.request("/api/v1/admin/requests", {
       headers: { authorization: `Bearer ${noMfaToken}` },
     });
@@ -678,7 +746,7 @@ describe("request estimate API integration", () => {
        values($1,$2,'initial','bank_transfer','2026-10-01',5000,5000,0,'請求先','{"preview":true}'::jsonb)`,
       [`KS-REQ-${randomUUID()}`, customer.contractId],
     );
-    const app = makeApp();
+    const app = makeApp(() => new Date("2026-10-27T02:00:00.000Z"));
     const adminHeaders = {
       authorization: `Bearer ${adminToken}`,
       "content-type": "application/json",
@@ -724,11 +792,726 @@ describe("request estimate API integration", () => {
       },
     );
     expect(approved.status).toBe(200);
+    const completed = await app.request(
+      `/api/v1/admin/requests/${requestId}/complete`,
+      {
+        method: "POST",
+        headers: adminHeaders,
+        body: JSON.stringify({
+          completedOn: "2026-10-27",
+          actualMinutes: 20,
+          actualCredits: 1,
+        }),
+      },
+    );
+    expect(completed.status).toBe(200);
     const notices = await pool.query<{ count: number }>(
       "select count(*)::int count from notifications where customer_id=$1 and kind in ('NT-06','NT-07')",
       [customer.customerId],
     );
     expect(notices.rows[0]?.count).toBe(0);
+  });
+
+  it("completes an approved request and settles its original credit reservation", async () => {
+    const customer = await makeContract("completion-red");
+    const app = makeApp(() => new Date("2026-10-27T02:00:00.000Z"));
+    const adminHeaders = {
+      authorization: `Bearer ${adminToken}`,
+      "content-type": "application/json",
+    };
+    const created = await app.request("/api/v1/admin/requests", {
+      method: "POST",
+      headers: { ...adminHeaders, "idempotency-key": randomUUID() },
+      body: JSON.stringify({
+        contractId: customer.contractId,
+        receivedOn: "2026-10-26",
+        summary: "完了APIのTDD確認",
+        urgent: false,
+      }),
+    });
+    expect(created.status).toBe(201);
+    const requestId = ((await created.json()) as { id: string }).id;
+    requestIds.push(requestId);
+    const sent = await app.request(
+      `/api/v1/admin/requests/${requestId}/estimates`,
+      {
+        method: "POST",
+        headers: { ...adminHeaders, "idempotency-key": randomUUID() },
+        body: JSON.stringify({
+          credits: 1,
+          dueOn: "2026-10-30",
+          workItems: ["対応"],
+          doneCriteria: "対応完了",
+        }),
+      },
+    );
+    expect(sent.status).toBe(201);
+    const estimateId = ((await sent.json()) as { id: string }).id;
+    estimateIds.push(estimateId);
+    const approved = await app.request(
+      `/api/v1/me/estimates/${estimateId}/approve`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${customer.token}`,
+          "content-type": "application/json",
+        },
+        body: "{}",
+      },
+    );
+    expect(approved.status).toBe(200);
+    const reservation = await pool.query<{
+      period_id: string;
+      amount: number;
+    }>(
+      "select period_id,amount from credit_entries where request_id=$1 and kind='reserve'",
+      [requestId],
+    );
+    expect(reservation.rows).toHaveLength(1);
+    const periodId = requireRow(reservation.rows[0]).period_id;
+
+    const completed = await app.request(
+      `/api/v1/admin/requests/${requestId}/complete`,
+      {
+        method: "POST",
+        headers: adminHeaders,
+        body: JSON.stringify({
+          completedOn: "2026-10-27",
+          actualMinutes: 35,
+          actualCredits: 1,
+        }),
+      },
+    );
+    expect(completed.status).toBe(200);
+    const completedBody = await completed.json();
+    expect(completeRequestResponseSchema.safeParse(completedBody).success).toBe(
+      true,
+    );
+    expect(completedBody).toMatchObject({
+      requestId,
+      status: "done",
+      completedOn: "2026-10-27",
+      actualMinutes: 35,
+      actualCredits: 1,
+      reservedCredits: 1,
+      periodId,
+      replayed: false,
+    });
+    const replayedCompletion = await app.request(
+      `/api/v1/admin/requests/${requestId}/complete`,
+      {
+        method: "POST",
+        headers: adminHeaders,
+        body: JSON.stringify({
+          completedOn: "2026-10-27",
+          actualMinutes: 35,
+          actualCredits: 1,
+        }),
+      },
+    );
+    expect(replayedCompletion.status).toBe(200);
+    expect(await replayedCompletion.json()).toMatchObject({ replayed: true });
+    const settled = await pool.query<{
+      status: string;
+      completed_on: string;
+      actual_minutes: number;
+      kind: string;
+      period_id: string;
+      amount: number;
+    }>(
+      `select r.status,r.completed_on::text,r.actual_minutes,e.kind,e.period_id,e.amount
+       from service_requests r join credit_entries e on e.request_id=r.id
+       where r.id=$1 order by e.kind`,
+      [requestId],
+    );
+    expect(settled.rows).toEqual([
+      {
+        status: "done",
+        completed_on: "2026-10-27",
+        actual_minutes: 35,
+        kind: "consume",
+        period_id: periodId,
+        amount: -1,
+      },
+      {
+        status: "done",
+        completed_on: "2026-10-27",
+        actual_minutes: 35,
+        kind: "release",
+        period_id: periodId,
+        amount: 1,
+      },
+      {
+        status: "done",
+        completed_on: "2026-10-27",
+        actual_minutes: 35,
+        kind: "reserve",
+        period_id: periodId,
+        amount: -1,
+      },
+    ]);
+    const adminDetail = await app.request(
+      `/api/v1/admin/requests/${requestId}`,
+      { headers: { authorization: `Bearer ${adminToken}` } },
+    );
+    const adminDetailBody = await adminDetail.json();
+    expect(adminRequestDetailSchema.safeParse(adminDetailBody).success).toBe(
+      true,
+    );
+    expect(adminDetailBody).toMatchObject({
+      status: "done",
+      completion: {
+        actualCredits: 1,
+        actualMinutes: 35,
+        periodId,
+        reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
+      },
+    });
+  });
+
+  it("replays identical completion, rejects a changed replay, and releases zero actual credits", async () => {
+    const fixture = await makeInProgressRequest("completion-zero-replay", 2, 3);
+    const completionBody = {
+      completedOn: "2026-10-27",
+      actualMinutes: 0,
+      actualCredits: 0,
+    };
+    const complete = () =>
+      fixture.app.request(
+        `/api/v1/admin/requests/${fixture.requestId}/complete`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(completionBody),
+        },
+      );
+    const concurrent = await Promise.all([complete(), complete()]);
+    expect(concurrent.map((response) => response.status)).toEqual([200, 200]);
+    const concurrentBodies = await Promise.all(
+      concurrent.map((response) => response.json()),
+    );
+    expect(concurrentBodies.map((body) => body.replayed).sort()).toEqual([
+      false,
+      true,
+    ]);
+    expect(concurrentBodies[0]).toMatchObject({
+      status: "done",
+      actualCredits: 0,
+      reservedCredits: 2,
+    });
+    const approvalReplay = await fixture.app.request(
+      `/api/v1/me/estimates/${fixture.estimateId}/approve`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${fixture.customer.token}`,
+          "content-type": "application/json",
+        },
+        body: "{}",
+      },
+    );
+    expect(approvalReplay.status).toBe(200);
+    expect(await approvalReplay.json()).toMatchObject({
+      status: "in_progress",
+      replayed: true,
+    });
+    const changedReplay = await fixture.app.request(
+      `/api/v1/admin/requests/${fixture.requestId}/complete`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ ...completionBody, actualMinutes: 1 }),
+      },
+    );
+    expect(changedReplay.status).toBe(409);
+    const entries = await pool.query<{ kind: string; amount: number }>(
+      "select kind,amount from credit_entries where request_id=$1 order by kind",
+      [fixture.requestId],
+    );
+    expect(entries.rows).toEqual([
+      { kind: "consume", amount: 0 },
+      { kind: "release", amount: 2 },
+      { kind: "reserve", amount: -2 },
+    ]);
+    const completedNotices = await pool.query<{ count: number }>(
+      "select count(*)::int count from notifications where dedupe_key=$1",
+      [`NT-07:${fixture.requestId}:completed`],
+    );
+    expect(completedNotices.rows[0]?.count).toBe(1);
+    const noticeSnapshots = await pool.query<{
+      dedupe_key: string;
+      payload: { requestId: string; status: string };
+    }>(
+      "select dedupe_key,payload from notifications where dedupe_key=any($1::text[]) order by dedupe_key",
+      [
+        [
+          `NT-07:${fixture.requestId}:approved`,
+          `NT-07:${fixture.requestId}:completed`,
+        ],
+      ],
+    );
+    expect(noticeSnapshots.rows).toEqual([
+      {
+        dedupe_key: `NT-07:${fixture.requestId}:approved`,
+        payload: { requestId: fixture.requestId, status: "in_progress" },
+      },
+      {
+        dedupe_key: `NT-07:${fixture.requestId}:completed`,
+        payload: { requestId: fixture.requestId, status: "done" },
+      },
+    ]);
+    const customerDetail = await fixture.app.request(
+      `/api/v1/me/requests/${fixture.requestId}`,
+      { headers: { authorization: `Bearer ${fixture.customer.token}` } },
+    );
+    const customerDetailBody = await customerDetail.json();
+    expect(
+      customerRequestDetailSchema.safeParse(customerDetailBody).success,
+    ).toBe(true);
+    expect(customerDetailBody).toMatchObject({
+      request: {
+        status: "done",
+        completion: {
+          completedOn: "2026-10-27",
+          actualMinutes: 0,
+          actualCredits: 0,
+          reservedCredits: 2,
+          periodId: fixture.periodId,
+        },
+      },
+    });
+  });
+
+  it("expires unused released credits in the expired reservation period without carrying them forward", async () => {
+    const fixture = await makeInProgressRequest(
+      "completion-expired-period",
+      3,
+      5,
+    );
+    await pool.query(
+      "update billing_periods set ends_on='2026-10-31' where id=$1",
+      [fixture.periodId],
+    );
+    const nextPeriod = await pool.query<{ id: string }>(
+      `insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_incl_tax,credits)
+       select contract_id,2,'2026-11-01','2026-11-30',plan_id,5000,5
+       from billing_periods where id=$1 returning id`,
+      [fixture.periodId],
+    );
+    const nextPeriodId = requireRow(nextPeriod.rows[0]).id;
+    await pool.query(
+      "insert into credit_entries(contract_id,period_id,kind,amount) values($1,$2,'grant',5)",
+      [fixture.customer.contractId, nextPeriodId],
+    );
+    await pool.query("update contracts set status='ended' where id=$1", [
+      fixture.customer.contractId,
+    ]);
+    const completionApp = makeApp(() => new Date("2026-11-01T00:30:00.000Z"));
+    const response = await completionApp.request(
+      `/api/v1/admin/requests/${fixture.requestId}/complete`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          completedOn: "2026-11-01",
+          actualMinutes: 45,
+          actualCredits: 1,
+        }),
+      },
+    );
+    expect(response.status).toBe(200);
+    const oldEntries = await pool.query<{ kind: string; amount: number }>(
+      "select kind,amount from credit_entries where request_id=$1 order by kind",
+      [fixture.requestId],
+    );
+    expect(oldEntries.rows).toEqual([
+      { kind: "consume", amount: -1 },
+      { kind: "expire", amount: -2 },
+      { kind: "release", amount: 3 },
+      { kind: "reserve", amount: -3 },
+    ]);
+    const balances = await pool.query<{ period_id: string; balance: number }>(
+      "select period_id,coalesce(sum(amount),0)::int balance from credit_entries where contract_id=$1 and period_id=any($2::uuid[]) group by period_id order by period_id",
+      [fixture.customer.contractId, [fixture.periodId, nextPeriodId]],
+    );
+    expect(balances.rows).toHaveLength(2);
+    expect(
+      balances.rows.find((row) => row.period_id === nextPeriodId)?.balance,
+    ).toBe(5);
+    // screen-flow-spec-v1 §2 exposes invoice history, not request history, after contract end.
+    const customerList = await completionApp.request("/api/v1/me/requests", {
+      headers: { authorization: `Bearer ${fixture.customer.token}` },
+    });
+    expect.soft(customerList.status).toBe(200);
+    expect.soft(await customerList.json()).toEqual({ items: [] });
+    const customerDetail = await completionApp.request(
+      `/api/v1/me/requests/${fixture.requestId}`,
+      { headers: { authorization: `Bearer ${fixture.customer.token}` } },
+    );
+    expect.soft(customerDetail.status).toBe(404);
+    const adminDetail = await completionApp.request(
+      `/api/v1/admin/requests/${fixture.requestId}`,
+      { headers: { authorization: `Bearer ${adminToken}` } },
+    );
+    expect(adminDetail.status).toBe(200);
+    expect(await adminDetail.json()).toMatchObject({
+      status: "done",
+      completion: {
+        periodId: fixture.periodId,
+        reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
+      },
+    });
+  });
+
+  it("replays completion based on stored settlement after the reservation period expires", async () => {
+    let instant = new Date("2026-10-30T12:00:00.000Z");
+    const fixture = await makeInProgressRequest(
+      "completion-replay-after-expiry",
+      2,
+      5,
+      () => instant,
+    );
+    const body = {
+      completedOn: "2026-10-30",
+      actualMinutes: 30,
+      actualCredits: 1,
+    };
+    const complete = () =>
+      fixture.app.request(
+        `/api/v1/admin/requests/${fixture.requestId}/complete`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(body),
+        },
+      );
+    const first = await complete();
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ replayed: false });
+    instant = new Date("2026-11-01T00:30:00.000Z");
+    const replay = await complete();
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toMatchObject({
+      status: "done",
+      actualCredits: 1,
+      replayed: true,
+    });
+    const settlement = await pool.query<{ kind: string; amount: number }>(
+      "select kind,amount from credit_entries where request_id=$1 and kind in ('release','consume','expire') order by kind",
+      [fixture.requestId],
+    );
+    expect(settlement.rows).toEqual([
+      { kind: "consume", amount: -1 },
+      { kind: "release", amount: 2 },
+    ]);
+  });
+
+  it("returns safe signed balances after valid maximum-int overrun completions", async () => {
+    const customer = await makeContract("completion-balance-int8", "active", 2);
+    const today = toTokyoDate(new Date());
+    const year = Number(today.slice(0, 4));
+    const month = Number(today.slice(5, 7));
+    const periodStart = `${year}-${String(month).padStart(2, "0")}-01`;
+    const periodEnd = new Date(Date.UTC(year, month, 0))
+      .toISOString()
+      .slice(0, 10);
+    const grant = await pool.query<{ period_id: string }>(
+      "select period_id from credit_entries where contract_id=$1 and kind='grant'",
+      [customer.contractId],
+    );
+    const periodId = requireRow(grant.rows[0]).period_id;
+    await pool.query(
+      "update billing_periods set starts_on=$2,ends_on=$3 where id=$1",
+      [periodId, periodStart, periodEnd],
+    );
+    const app = makeApp(() => new Date(`${today}T03:00:00.000Z`));
+    const adminHeaders = {
+      authorization: `Bearer ${adminToken}`,
+      "content-type": "application/json",
+    };
+    const createAndApprove = async (summaryText: string) => {
+      const created = await app.request("/api/v1/admin/requests", {
+        method: "POST",
+        headers: { ...adminHeaders, "idempotency-key": randomUUID() },
+        body: JSON.stringify({
+          contractId: customer.contractId,
+          receivedOn: today,
+          summary: summaryText,
+          urgent: false,
+        }),
+      });
+      expect(created.status).toBe(201);
+      const requestId = ((await created.json()) as { id: string }).id;
+      requestIds.push(requestId);
+      const sent = await app.request(
+        `/api/v1/admin/requests/${requestId}/estimates`,
+        {
+          method: "POST",
+          headers: { ...adminHeaders, "idempotency-key": randomUUID() },
+          body: JSON.stringify({
+            credits: 1,
+            dueOn: today,
+            workItems: ["作業"],
+            doneCriteria: "反映済み",
+          }),
+        },
+      );
+      expect(sent.status).toBe(201);
+      const estimateId = ((await sent.json()) as { id: string }).id;
+      estimateIds.push(estimateId);
+      const approved = await app.request(
+        `/api/v1/me/estimates/${estimateId}/approve`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${customer.token}`,
+            "content-type": "application/json",
+          },
+          body: "{}",
+        },
+      );
+      expect(approved.status).toBe(200);
+      return requestId;
+    };
+    const requestIdsWithLargeActuals = await Promise.all([
+      createAndApprove("最大整数の実績A"),
+      createAndApprove("最大整数の実績B"),
+    ]);
+    for (const requestId of requestIdsWithLargeActuals) {
+      const completed = await app.request(
+        `/api/v1/admin/requests/${requestId}/complete`,
+        {
+          method: "POST",
+          headers: adminHeaders,
+          body: JSON.stringify({
+            completedOn: today,
+            actualMinutes: 1,
+            actualCredits: 2_147_483_647,
+          }),
+        },
+      );
+      expect(completed.status).toBe(200);
+    }
+    const requestRead = await app.request(
+      `/api/v1/me/requests/${requestIdsWithLargeActuals[0]}`,
+      { headers: { authorization: `Bearer ${customer.token}` } },
+    );
+    expect(requestRead.status).toBe(200);
+    expect(await requestRead.json()).toMatchObject({
+      availableCredits: -4_294_967_292,
+    });
+    const homeRead = await app.request("/api/v1/me/contract", {
+      headers: { authorization: `Bearer ${customer.token}` },
+    });
+    expect(homeRead.status).toBe(200);
+    expect(await homeRead.json()).toMatchObject({
+      contract: { currentPeriod: { balance: -4_294_967_292 } },
+    });
+  });
+
+  it("records overrun above the reservation without capping it or creating a charge", async () => {
+    const fixture = await makeInProgressRequest("completion-overrun", 2, 5);
+    const response = await fixture.app.request(
+      `/api/v1/admin/requests/${fixture.requestId}/complete`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${adminToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          completedOn: "2026-10-27",
+          actualMinutes: 70,
+          actualCredits: 4,
+        }),
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      actualCredits: 4,
+      reservedCredits: 2,
+    });
+    const accounting = await pool.query<{
+      entries: number;
+      balance: number;
+      periodBalance: number;
+      invoices: number;
+    }>(
+      `select
+         (select count(*)::int from credit_entries where request_id=$1 and kind in ('reserve','release','consume')) entries,
+         (select coalesce(sum(amount),0)::int from credit_entries where request_id=$1) balance,
+         (select coalesce(sum(amount),0)::int from credit_entries where contract_id=$2 and period_id=$3) "periodBalance",
+         (select count(*)::int from invoices where contract_id=$2 and kind='extra_credit') invoices`,
+      [fixture.requestId, fixture.customer.contractId, fixture.periodId],
+    );
+    expect(accounting.rows[0]).toEqual({
+      entries: 3,
+      balance: -4,
+      periodBalance: 1,
+      invoices: 0,
+    });
+  });
+
+  it("rolls back completion settlement when its audit insert fails", async () => {
+    const fixture = await makeInProgressRequest(
+      "completion-audit-rollback",
+      2,
+      3,
+    );
+    await pool.query(
+      "alter table audit_logs add constraint test_reject_request_completed check (action <> 'request.completed') not valid",
+    );
+    let response: Response | undefined;
+    try {
+      response = await fixture.app.request(
+        `/api/v1/admin/requests/${fixture.requestId}/complete`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            completedOn: "2026-10-27",
+            actualMinutes: 20,
+            actualCredits: 1,
+          }),
+        },
+      );
+    } finally {
+      await pool.query(
+        "alter table audit_logs drop constraint test_reject_request_completed",
+      );
+    }
+    expect(response?.status).toBe(500);
+    const state = await pool.query<{
+      status: string;
+      completed_on: string | null;
+      actual_minutes: number | null;
+      settlements: number;
+      completionNotices: number;
+    }>(
+      `select r.status,r.completed_on::text,r.actual_minutes,
+         (select count(*)::int from credit_entries where request_id=r.id and kind in ('release','consume','expire')) settlements,
+         (select count(*)::int from notifications where dedupe_key=$2) "completionNotices"
+       from service_requests r where r.id=$1`,
+      [fixture.requestId, `NT-07:${fixture.requestId}:completed`],
+    );
+    expect(requireRow(state.rows[0])).toEqual({
+      status: "in_progress",
+      completed_on: null,
+      actual_minutes: null,
+      settlements: 0,
+      completionNotices: 0,
+    });
+  });
+
+  it("rejects completion dates outside Tokyo today and malformed or unreserved work", async () => {
+    const fixture = await makeInProgressRequest("completion-validation", 1, 2);
+    const headers = {
+      authorization: `Bearer ${adminToken}`,
+      "content-type": "application/json",
+    };
+    const invalidResponses = await Promise.all([
+      fixture.app.request(
+        `/api/v1/admin/requests/${fixture.requestId}/complete`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            completedOn: "2026-10-28",
+            actualMinutes: 1,
+            actualCredits: 1,
+          }),
+        },
+      ),
+      fixture.app.request(
+        `/api/v1/admin/requests/${fixture.requestId}/complete`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            completedOn: "2026-10-27",
+            actualMinutes: -1,
+            actualCredits: 1,
+          }),
+        },
+      ),
+      fixture.app.request(
+        `/api/v1/admin/requests/${fixture.requestId}/complete`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            completedOn: "2026-10-25",
+            actualMinutes: 1,
+            actualCredits: 1,
+          }),
+        },
+      ),
+      fixture.app.request(
+        `/api/v1/admin/requests/${fixture.requestId}/complete`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${noMfaToken}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            completedOn: "2026-10-27",
+            actualMinutes: 1,
+            actualCredits: 1,
+          }),
+        },
+      ),
+    ]);
+    expect(invalidResponses.map((response) => response.status)).toEqual([
+      422, 422, 409, 403,
+    ]);
+    await pool.query(
+      "delete from credit_entries where request_id=$1 and kind='reserve'",
+      [fixture.requestId],
+    );
+    const missingReservation = await fixture.app.request(
+      `/api/v1/admin/requests/${fixture.requestId}/complete`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          completedOn: "2026-10-27",
+          actualMinutes: 1,
+          actualCredits: 1,
+        }),
+      },
+    );
+    expect(missingReservation.status).toBe(409);
+    const unchanged = await pool.query<{
+      status: string;
+      completed_on: string | null;
+      settlements: number;
+    }>(
+      `select status,completed_on::text,
+        (select count(*)::int from credit_entries where request_id=$1 and kind in ('release','consume','expire')) settlements
+       from service_requests where id=$1`,
+      [fixture.requestId],
+    );
+    expect(unchanged.rows[0]).toEqual({
+      status: "in_progress",
+      completed_on: null,
+      settlements: 0,
+    });
   });
 
   it("allows registration and estimating with no credit balance but rejects approval", async () => {

@@ -33,6 +33,32 @@ export const createEstimateSchema = z
 export type CreateEstimate = z.infer<typeof createEstimateSchema>;
 export const approveEstimateSchema = z.object({}).strict();
 
+export const completeRequestSchema = z
+  .object({
+    completedOn: date,
+    actualMinutes: z
+      .number({ error: validationMessages.nonnegativeInteger })
+      .int({ error: validationMessages.nonnegativeInteger })
+      .min(0, { error: validationMessages.nonnegativeInteger })
+      .max(2_147_483_647, { error: validationMessages.nonnegativeInteger }),
+    actualCredits: z
+      .number({ error: validationMessages.nonnegativeInteger })
+      .int({ error: validationMessages.nonnegativeInteger })
+      .min(0, { error: validationMessages.nonnegativeInteger })
+      .max(2_147_483_647, { error: validationMessages.nonnegativeInteger }),
+  })
+  .strict();
+export type CompleteRequest = z.infer<typeof completeRequestSchema>;
+
+export interface RequestCompletion {
+  completedOn: string;
+  actualMinutes: number;
+  actualCredits: number;
+  reservedCredits: number;
+  periodId: string;
+  reservedPeriod: { startsOn: string; endsOn: string };
+}
+
 export interface RequestEstimate {
   id: string;
   requestId: string;
@@ -56,6 +82,7 @@ export interface AdminRequestSummary {
   status: RequestStatus;
   createdAt: string;
   latestEstimate: RequestEstimate | null;
+  completion: RequestCompletion | null;
 }
 export interface CustomerRequestSummary extends AdminRequestSummary {
   approvedEstimateId: string | null;
@@ -88,6 +115,11 @@ export interface ApproveEstimateResponse {
   reservedCredits: number;
   replayed: boolean;
 }
+export interface CompleteRequestResponse extends RequestCompletion {
+  requestId: string;
+  status: "done";
+  replayed: boolean;
+}
 
 export const requestEstimateSchema = z.object({
   id: z.uuid(),
@@ -103,6 +135,14 @@ export const requestEstimateSchema = z.object({
   approvedAt: z.iso.datetime().nullable(),
   supersededAt: z.iso.datetime().nullable(),
 });
+export const requestCompletionSchema = z.object({
+  completedOn: date,
+  actualMinutes: z.number().int().nonnegative(),
+  actualCredits: z.number().int().nonnegative(),
+  reservedCredits: z.number().int().positive(),
+  periodId: z.uuid(),
+  reservedPeriod: z.object({ startsOn: date, endsOn: date }),
+});
 export const adminRequestSummarySchema = z.object({
   id: z.uuid(),
   contractId: z.uuid(),
@@ -112,6 +152,7 @@ export const adminRequestSummarySchema = z.object({
   status: z.enum(requestStatuses),
   createdAt: z.iso.datetime(),
   latestEstimate: requestEstimateSchema.nullable(),
+  completion: requestCompletionSchema.nullable(),
 });
 export const customerRequestSummarySchema = adminRequestSummarySchema.extend({
   approvedEstimateId: z.uuid().nullable(),
@@ -171,5 +212,10 @@ export const approveEstimateResponseSchema = z.object({
   status: z.literal("in_progress"),
   approvedAt: z.iso.datetime(),
   reservedCredits: z.number().int().positive(),
+  replayed: z.boolean(),
+});
+export const completeRequestResponseSchema = requestCompletionSchema.extend({
+  requestId: z.uuid(),
+  status: z.literal("done"),
   replayed: z.boolean(),
 });

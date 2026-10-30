@@ -40,6 +40,7 @@ const request = {
     approvedAt: null,
     supersededAt: null,
   },
+  completion: null,
   approvedEstimateId: null,
 };
 
@@ -48,7 +49,7 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
-function setup(path: string) {
+function setup(path: string, adminOverrides: Record<string, unknown> = {}) {
   window.history.replaceState({}, "", path);
   const user = {
     email: "person@example.jp",
@@ -106,6 +107,17 @@ function setup(path: string) {
   const adminApiClient = {
     getSession: vi.fn(async () => ({ role: "admin" as const })),
     getAdminRequests: vi.fn(async () => ({ items: [] })),
+    getAdminRequest: vi.fn(async () => ({
+      ...request,
+      status: "in_progress" as const,
+      customer: {
+        customerId: "22222222-2222-4222-8222-222222222222",
+        shopName: "喫茶ひだまり",
+        contactName: "山田 花子",
+      },
+      estimates: [request.latestEstimate],
+    })),
+    ...adminOverrides,
   } as unknown as AdminApiClient;
   render(
     <App
@@ -142,6 +154,69 @@ describe("application request routes", () => {
     ).toBeTruthy();
     expect(adminApiClient.getSession).toHaveBeenCalledOnce();
     expect(adminApiClient.getAdminRequests).toHaveBeenCalledOnce();
+  });
+
+  it("shows the completion action through the real protected root admin route", async () => {
+    const { adminApiClient } = setup(`/admin/requests/${requestId}`);
+    expect(await screen.findByText("予約フォームの表示を整える")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "依頼を完了にする" }),
+    ).toBeTruthy();
+    expect(adminApiClient.getSession).toHaveBeenCalledOnce();
+    expect(adminApiClient.getAdminRequest).toHaveBeenCalledWith(requestId);
+  });
+
+  it("confirms and records completion through the protected root admin route", async () => {
+    const completed = {
+      requestId,
+      status: "done" as const,
+      completedOn: "2026-10-27",
+      actualMinutes: 0,
+      actualCredits: 0,
+      reservedCredits: 1,
+      periodId: "55555555-5555-4555-8555-555555555555",
+      reservedPeriod: { startsOn: "2026-10-01", endsOn: "2026-10-31" },
+      replayed: false,
+    };
+    const completeRequest = vi.fn(async () => completed);
+    const { adminApiClient } = setup(`/admin/requests/${requestId}`, {
+      completeRequest,
+    });
+    expect(
+      await screen.findByLabelText(webMessages.adminRequestCompletedOn),
+    ).toBeTruthy();
+    fireEvent.change(
+      screen.getByLabelText(webMessages.adminRequestCompletedOn),
+      {
+        target: { value: completed.completedOn },
+      },
+    );
+    fireEvent.change(
+      screen.getByLabelText(webMessages.adminRequestActualMinutes),
+      { target: { value: "0" } },
+    );
+    fireEvent.change(
+      screen.getByLabelText(webMessages.adminRequestActualCredits),
+      { target: { value: "0" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.adminRequestComplete }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: webMessages.adminRequestComplete,
+      }),
+    );
+    expect(
+      await screen.findByText(webMessages.adminRequestCompletionSuccess),
+    ).toBeTruthy();
+    expect(adminApiClient.getSession).toHaveBeenCalledOnce();
+    expect(completeRequest).toHaveBeenCalledWith(requestId, {
+      completedOn: completed.completedOn,
+      actualMinutes: 0,
+      actualCredits: 0,
+    });
   });
 
   it("reloads the home contract when returning after estimate approval", async () => {

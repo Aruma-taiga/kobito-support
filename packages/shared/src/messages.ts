@@ -53,6 +53,7 @@ export const validationMessages = {
   applicationConditions: "申込み内容の表示を確認してください。",
   boolean: "選択内容を確認してください。",
   unknownField: "入力内容に使用できない項目があります。",
+  nonnegativeInteger: "0以上の整数で入力してください。",
 } as const;
 
 export const webMessages = {
@@ -69,6 +70,22 @@ export const webMessages = {
   adminRequestUrgent: "急ぎ",
   adminRequestCustomer: "お客様",
   adminRequestStatus: "状況",
+  adminRequestComplete: "依頼を完了にする",
+  adminRequestCompletedOn: "完了日",
+  adminRequestActualMinutes: "実作業時間（分）",
+  requestMinuteUnit: "分",
+  adminRequestActualCredits: "実績クレジット",
+  adminRequestCompletionConfirm: "この実績で依頼を完了しますか？",
+  adminRequestActualExceedsEstimate:
+    "実績クレジットが見積を超えています。超過分は予約元の利用期間の残りに反映されます。追加の自動請求は行われません。",
+  adminRequestReservedPeriod: "予約元の利用期間",
+  adminRequestReservedCredits: "見積クレジット",
+  adminRequestCompletionSuccess: "依頼を完了にしました。",
+  adminRequestCompletionRefreshError:
+    "依頼を完了にしましたが、最新状態を読み込めませんでした。再読み込みしてください。",
+  adminRequestCompletionConflict:
+    "依頼の状態が変わりました。最新の状態を確認してください。",
+  adminRequestCompletionValidation: "完了内容を確認してください。",
   adminRequestEstimate: "見積を作成",
   adminEstimateCredits: "必要クレジット",
   adminEstimateDueOn: "作業目安日",
@@ -106,6 +123,11 @@ export const webMessages = {
   myRequestContactLine: "LINEで相談",
   myRequestDetails: "依頼の詳細",
   myRequestAvailableCredits: "今期の残り",
+  myRequestCompletionDate: "完了日",
+  myRequestCompletionActualMinutes: "実作業時間（分）",
+  myRequestCompletionActualCredits: "実績クレジット",
+  myRequestCompletionReservedCredits: "見積クレジット",
+  myRequestCompletionPeriod: "予約元の利用期間",
   estimateVersion: "見積の版",
   estimateCredits: "必要クレジット",
   estimateDueOn: "作業目安日",

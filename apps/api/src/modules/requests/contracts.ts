@@ -2,6 +2,8 @@ import type {
   AdminRequestDetail,
   AdminRequestSummary,
   ApproveEstimateResponse,
+  CompleteRequest,
+  CompleteRequestResponse,
   CreateEstimate,
   CreateRequest,
   CustomerRequestDetail,
@@ -58,4 +60,9 @@ export interface RequestModule {
     principal: Principal,
     id: string,
   ): Promise<ApproveEstimateResponse>;
+  completeRequest(
+    principal: Principal,
+    id: string,
+    body: CompleteRequest,
+  ): Promise<CompleteRequestResponse>;
 }
