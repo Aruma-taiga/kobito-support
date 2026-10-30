@@ -59,6 +59,7 @@ function extractBearerToken(header: string | undefined): string | undefined {
 export function createAuthenticate(
   verifier: IdentityVerifier,
   accounts: AccountLookup,
+  checkRevoked = false,
 ): MiddlewareHandler<{ Variables: ApiVariables }> {
   return async (context, next) => {
     const token = extractBearerToken(context.req.header("authorization"));
@@ -66,7 +67,7 @@ export function createAuthenticate(
 
     let identity: VerifiedIdentity;
     try {
-      identity = await verifier.verifyIdToken(token);
+      identity = await verifier.verifyIdToken(token, checkRevoked);
     } catch {
       throw new ApiError(401, "unauthorized");
     }

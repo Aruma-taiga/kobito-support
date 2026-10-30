@@ -6,6 +6,8 @@ import type { VerifiedIdentity } from "../../platform/auth.js";
 import type { RuntimeConfig } from "../../platform/config.js";
 import { PublicSettingsRepository } from "../../platform/settings.js";
 import { AccountsRepository } from "../accounts/repository.js";
+import { AdminRepository } from "../admin/repository.js";
+import { AdminService } from "../admin/service.js";
 import { ApplicationsRepository } from "./repository.js";
 import { ApplicationsService } from "./service.js";
 
@@ -105,6 +107,7 @@ function makeApp(
     },
     accounts,
     applications,
+    admin: new AdminService(new AdminRepository(pool)),
     publicSettings: new PublicSettingsRepository(pool),
     logger,
   };

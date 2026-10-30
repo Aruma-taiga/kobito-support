@@ -1,11 +1,14 @@
 import { webMessages } from "@kobito/shared";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import type { AdminAuthClient } from "./auth/admin-session.js";
 import type { AuthClient } from "./auth/session.js";
 import { AuthProvider, RequireAuth } from "./auth/session.js";
+import { AdminApp } from "./pages/AdminApp.js";
 import { ApplicationPage } from "./pages/ApplicationPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { MePage } from "./pages/MePage.js";
+import type { AdminApiClient } from "./platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "./platform/api-client.js";
 
 type PublicConfigState =
@@ -16,9 +19,13 @@ type PublicConfigState =
 export function App({
   apiClient,
   authClient,
+  adminApiClient,
+  adminAuthClient,
 }: {
   apiClient: ReturnTypeApiClient;
   authClient: AuthClient;
+  adminApiClient: AdminApiClient;
+  adminAuthClient: AdminAuthClient;
 }) {
   const [configState, setConfigState] = useState<PublicConfigState>({
     status: "loading",
@@ -98,6 +105,15 @@ export function App({
                   <ApplicationPage
                     apiClient={apiClient}
                     authClient={authClient}
+                  />
+                }
+              />
+              <Route
+                path="/admin/*"
+                element={
+                  <AdminApp
+                    apiClient={adminApiClient}
+                    authClient={adminAuthClient}
                   />
                 }
               />

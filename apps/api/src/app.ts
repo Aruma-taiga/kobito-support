@@ -3,13 +3,14 @@ import { cors } from "hono/cors";
 import type { AccountsDataRepository } from "./modules/accounts/repository.js";
 import { createAccountsRoutes } from "./modules/accounts/routes.js";
 import { AccountsService } from "./modules/accounts/service.js";
+import type { AdminModule } from "./modules/admin/contracts.js";
+import { createAdminRoutes } from "./modules/admin/routes.js";
 import type { ApplicationsModule } from "./modules/applications/contracts.js";
 import { createApplicationRoutes } from "./modules/applications/routes.js";
 import {
   type AccountLookup,
   createAuthenticate,
   type IdentityVerifier,
-  requireAdmin,
   requireCustomer,
 } from "./platform/auth.js";
 import type { RuntimeConfig } from "./platform/config.js";
@@ -23,6 +24,7 @@ export interface AppDependencies {
   verifier: IdentityVerifier;
   accounts: AccountLookup & AccountsDataRepository;
   applications: ApplicationsModule;
+  admin: AdminModule;
   publicSettings: { getServiceName(): Promise<string> };
   logger: ApiLogger;
 }
@@ -77,12 +79,14 @@ export function createApp(dependencies: AppDependencies) {
     }),
   );
 
-  const adminRoutes = new Hono<{ Variables: ApiVariables }>();
-  adminRoutes.use("*", authenticate, requireAdmin());
-  adminRoutes.all("*", (context) =>
-    context.json({ error: { code: "not_found" } }, 404),
+  app.route(
+    "/api/v1/admin",
+    createAdminRoutes({
+      admin: dependencies.admin,
+      verifier: dependencies.verifier,
+      accounts: dependencies.accounts,
+    }),
   );
-  app.route("/api/v1/admin", adminRoutes);
 
   return app;
 }

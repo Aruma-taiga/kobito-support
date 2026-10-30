@@ -9,6 +9,7 @@ type AppOverrides = Partial<
 > & {
   accounts?: Partial<AppDependencies["accounts"]>;
   applications?: Partial<AppDependencies["applications"]>;
+  admin?: Partial<AppDependencies["admin"]>;
 };
 
 const userForToken = {
@@ -60,6 +61,23 @@ function makeApp(overrides: AppOverrides = {}) {
         replayed: false,
       })),
     },
+    admin: {
+      listApplications: vi.fn(async () => ({
+        items: [],
+        page: 1,
+        pageSize: 25,
+        total: 0,
+      })),
+      getCustomerDetail: vi.fn(async () => {
+        throw new Error("not found in test admin detail");
+      }),
+      declineApplication: vi.fn(async () => ({
+        applicationId: "00000000-0000-4000-8000-000000000001",
+        contractId: "00000000-0000-4000-8000-000000000002",
+        status: "declined" as const,
+        replayed: false,
+      })),
+    },
     publicSettings: { getServiceName: vi.fn(async () => "コビトサポート") },
     logger: { info: vi.fn(), error: vi.fn() },
   };
@@ -68,6 +86,7 @@ function makeApp(overrides: AppOverrides = {}) {
     ...overrides,
     accounts: { ...defaults.accounts, ...overrides.accounts },
     applications: { ...defaults.applications, ...overrides.applications },
+    admin: { ...defaults.admin, ...overrides.admin },
   });
 }
 
@@ -246,6 +265,84 @@ describe("API routes and auth pipeline", () => {
     );
     expect(hidden.status).toBe(404);
     expect(await hidden.json()).toEqual({ error: { code: "not_found" } });
+  });
+
+  it("exposes the admin session only to a database admin with a verified factor", async () => {
+    const verifyIdToken = vi.fn(async () => ({
+      uid: "admin-uid",
+      firebase: { sign_in_second_factor: "phone" },
+    }));
+    const adminApp = makeApp({
+      verifier: { verifyIdToken },
+      accounts: {
+        findByAuthUserId: vi.fn(async () => ({
+          authUserId: "admin-uid",
+          role: "admin" as const,
+          customerId: null,
+        })),
+      },
+    });
+
+    const noToken = await adminApp.request("/api/v1/admin/session");
+    expect(noToken.status).toBe(401);
+
+    const session = await adminApp.request("/api/v1/admin/session", {
+      headers: { authorization: "Bearer verified-admin" },
+    });
+    expect(session.status).toBe(200);
+    expect(await session.json()).toEqual({ role: "admin" });
+    expect(verifyIdToken).toHaveBeenCalledWith("verified-admin", true);
+  });
+
+  it.each([
+    "auth/id-token-revoked",
+    "auth/user-disabled",
+  ])("checks revocation before exposing the admin namespace (%s)", async (providerCode) => {
+    const findByAuthUserId = vi.fn();
+    const verifyIdToken = vi.fn(
+      async (_token: string, _checkRevoked?: boolean) => {
+        throw new Error(providerCode);
+      },
+    );
+    const app = makeApp({
+      verifier: { verifyIdToken },
+      accounts: { findByAuthUserId },
+    });
+    const response = await app.request("/api/v1/admin/session", {
+      headers: { authorization: "Bearer revoked-admin" },
+    });
+    expect(response.status).toBe(401);
+    expect(verifyIdToken).toHaveBeenCalledWith("revoked-admin", true);
+    expect(findByAuthUserId).not.toHaveBeenCalled();
+  });
+
+  it("requires MFA on all admin routes while returning an obscured not-found for customers", async () => {
+    const adminWithoutMfa = makeApp({
+      verifier: { verifyIdToken: vi.fn(async () => ({ uid: "admin-uid" })) },
+      accounts: {
+        findByAuthUserId: vi.fn(async () => ({
+          authUserId: "admin-uid",
+          role: "admin" as const,
+          customerId: null,
+        })),
+      },
+    });
+    expect(
+      (
+        await adminWithoutMfa.request("/api/v1/admin/customers", {
+          headers: { authorization: "Bearer first-factor-only" },
+        })
+      ).status,
+    ).toBe(403);
+
+    const customerApp = makeApp();
+    expect(
+      (
+        await customerApp.request("/api/v1/admin/customers", {
+          headers: { authorization: "Bearer customer-token" },
+        })
+      ).status,
+    ).toBe(404);
   });
 
   it("returns generic 500 and never logs body, header, query, or DB error secrets", async () => {
