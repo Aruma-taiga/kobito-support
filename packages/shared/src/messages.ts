@@ -262,9 +262,12 @@ export const webMessages = {
   applicationNotesDescription: "紹介コードや連絡事項があれば入力してください。",
   applicationPaymentDescription:
     "お支払い方法を選択してください。今ご利用いただける方法を表示します。",
-  applicationPlanPriceHint: "表示金額は税込です。",
+  applicationPlanPriceHint:
+    "月額料金は税抜金額と税込金額を表示しています。申込内容の税込金額が契約時の料金として記録されます。",
+  applicationPlanChoiceNetPrice: "月額{price}円（税抜）",
+  applicationPlanChoiceGrossPrice: "{price}円（税込）",
   applicationPlanSummaryFixed:
-    "{name}：月額{price}円（税込）、毎月{credits}クレジット",
+    "{name}：月額{netPrice}円（税抜）・{grossPrice}円（税込）、毎月{credits}クレジット",
   applicationCustomDescription:
     "個別の条件はお申し込みの審査後にご案内します。",
   applicationCustomPrice: "お見積り",
@@ -289,7 +292,8 @@ export const webMessages = {
   applicationNoRollover: "未使用のクレジットは翌月に繰り越されません。",
   applicationCancelPeriodEnd:
     "解約は契約期間の末日に適用され、日割り計算はありません。",
-  applicationExtraCredit: "追加クレジットは1C {amount}円（税込）です。",
+  applicationExtraCredit:
+    "追加クレジットは1C {netAmount}円（税抜）・{grossAmount}円（税込）です。",
   applicationReceiptTitle: "お申し込みを受け付けました",
   applicationReceiptDescription: "入力内容を確認し、審査を進めます。",
   applicationReceiptReview:

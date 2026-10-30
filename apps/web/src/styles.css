@@ -378,8 +378,15 @@ button:disabled {
 }
 
 .choice-price {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
   color: #1f2e3a;
   font-weight: 700;
+}
+
+.choice-price-segment {
+  white-space: nowrap;
 }
 
 .choice-card.disabled {

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
+  approveApplicationResponseSchema,
   customerAccessSchema,
+  invoiceDetailSchema,
   welcomeSeenResponseSchema,
 } from "@kobito/shared";
 import { Pool } from "pg";
@@ -1034,6 +1036,68 @@ describe("initial invoice approval and customer access", () => {
       periods: "0",
       credits: "0",
       notices: "0",
+    });
+  });
+
+  it("issues the new fixed gross price and keeps an older accepted 5000-yen invoice frozen", async () => {
+    const oldOffer = await makeApplication({ price: 5000 });
+    const currentOffer = await makeApplication({ price: 5500 });
+    const app = makeApp();
+
+    const oldApproval = approveApplicationResponseSchema.parse(
+      await (await approve(app, oldOffer.applicationId)).json(),
+    );
+    expect(oldApproval.invoice).toMatchObject({
+      totalInclTax: 5000,
+      totalExclTax: 4546,
+      taxAmount: 454,
+    });
+
+    await pool.query(
+      "update plans set price_incl_tax=5500 where id=(select plan_id from applications where id=$1)",
+      [oldOffer.applicationId],
+    );
+
+    const currentApproval = approveApplicationResponseSchema.parse(
+      await (await approve(app, currentOffer.applicationId)).json(),
+    );
+    expect(currentApproval.invoice).toMatchObject({
+      totalInclTax: 5500,
+      totalExclTax: 5000,
+      taxAmount: 500,
+    });
+    const currentInvoiceId = currentApproval.invoice?.id;
+    const oldInvoiceId = oldApproval.invoice?.id;
+    if (!currentInvoiceId || !oldInvoiceId) {
+      throw new Error("Expected both fixed-price applications to be invoiced");
+    }
+
+    const currentDetailResponse = await app.request(
+      `/api/v1/me/invoices/${currentInvoiceId}`,
+      { headers: { authorization: `Bearer ${currentOffer.token}` } },
+    );
+    const currentDetail = invoiceDetailSchema.parse(
+      await currentDetailResponse.json(),
+    );
+    expect(currentDetail).toMatchObject({
+      totalInclTax: 5500,
+      totalExclTax: 5000,
+      taxAmount: 500,
+      acceptedPlan: { monthlyPriceInclTax: 5500 },
+      lines: [{ unitPriceInclTax: 5500, amountInclTax: 5500 }],
+    });
+
+    const oldDetailResponse = await app.request(
+      `/api/v1/me/invoices/${oldInvoiceId}`,
+      { headers: { authorization: `Bearer ${oldOffer.token}` } },
+    );
+    const oldDetail = invoiceDetailSchema.parse(await oldDetailResponse.json());
+    expect(oldDetail).toMatchObject({
+      totalInclTax: 5000,
+      totalExclTax: 4546,
+      taxAmount: 454,
+      acceptedPlan: { monthlyPriceInclTax: 5000 },
+      lines: [{ unitPriceInclTax: 5000, amountInclTax: 5000 }],
     });
   });
 

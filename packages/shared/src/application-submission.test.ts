@@ -34,7 +34,7 @@ const applicationConfig = {
   displayVersion: "a".repeat(64),
   conditions: {
     initialDueDays: 7,
-    extraCreditGrossYen: 4000,
+    extraCreditGrossYen: 4400,
     monthlyPrepaid: true,
     periodBasis: "contract_anchor",
     rollover: false,
@@ -228,7 +228,7 @@ describe("password-free application boundary contracts", () => {
   it("exports server-owned application conditions and Japanese copy needed for the confirmation screen", () => {
     expect(applicationPolicyConditions).toEqual({
       initialDueDays: 7,
-      extraCreditGrossYen: 4000,
+      extraCreditGrossYen: 4400,
       monthlyPrepaid: true,
       periodBasis: "contract_anchor",
       rollover: false,

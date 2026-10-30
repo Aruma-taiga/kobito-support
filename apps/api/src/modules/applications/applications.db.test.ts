@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { publicPlansSchema } from "@kobito/shared";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { type AppDependencies, createApp } from "../../app.js";
@@ -152,21 +153,25 @@ function makeApp(
 async function currentDisplayVersion(app: ReturnType<typeof makeApp>) {
   const response = await app.request("/api/v1/public/plans");
   expect(response.status).toBe(200);
-  const catalog = (await response.json()) as {
-    displayVersion: string;
-    plans: Array<{
-      code: string;
-      priceInclTax: number | null;
-      credits: number | null;
-      isCustom: boolean;
-    }>;
-  };
+  const catalog = publicPlansSchema.parse(await response.json());
   expect(catalog.plans).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
         code: "light",
-        priceInclTax: 5000,
+        priceInclTax: 5500,
         credits: 1,
+        isCustom: false,
+      }),
+      expect.objectContaining({
+        code: "standard",
+        priceInclTax: 11000,
+        credits: 3,
+        isCustom: false,
+      }),
+      expect.objectContaining({
+        code: "premium",
+        priceInclTax: 16500,
+        credits: 5,
         isCustom: false,
       }),
       expect.objectContaining({
@@ -334,10 +339,10 @@ describe("public application submission with PostgreSQL", () => {
     expect(rows.rows[0]?.marketing_opt_in).toBe(false);
     expect(rows.rows[0]?.password_column).toBeNull();
     expect(rows.rows[0]?.shown_terms).toMatchObject({
-      priceInclTax: 5000,
+      priceInclTax: 5500,
       credits: 1,
       initialDueDays: 7,
-      extraCreditGrossYen: 4000,
+      extraCreditGrossYen: 4400,
       monthlyPrepaid: true,
       periodBasis: "contract_anchor",
       rollover: false,
@@ -714,13 +719,16 @@ describe("public application submission with PostgreSQL", () => {
     const app = makeApp();
     const applicant = createApplicant();
     applicant.payload.displayVersion = await currentDisplayVersion(app);
-    const originalPrice = await pool.query<{ price_incl_tax: number }>(
-      "select price_incl_tax from plans where code = 'light'",
+    const originalPlan = await pool.query<{
+      id: string;
+      price_incl_tax: number;
+    }>(
+      "select id, price_incl_tax from plans where code = 'light' and valid_from = date '2026-10-31'",
     );
     try {
-      await pool.query(
-        "update plans set price_incl_tax = 5100 where code = 'light'",
-      );
+      await pool.query("update plans set price_incl_tax = 5100 where id = $1", [
+        originalPlan.rows[0]?.id,
+      ]);
       const response = await submit(app, applicant);
       expect(response.status).toBe(409);
       await expect(countForUid(applicant.uid)).resolves.toMatchObject({
@@ -728,10 +736,10 @@ describe("public application submission with PostgreSQL", () => {
         application_count: "0",
       });
     } finally {
-      await pool.query(
-        "update plans set price_incl_tax = $1 where code = 'light'",
-        [originalPrice.rows[0]?.price_incl_tax],
-      );
+      await pool.query("update plans set price_incl_tax = $1 where id = $2", [
+        originalPlan.rows[0]?.price_incl_tax,
+        originalPlan.rows[0]?.id,
+      ]);
     }
   });
 
@@ -739,17 +747,20 @@ describe("public application submission with PostgreSQL", () => {
     const app = makeApp();
     const applicant = createApplicant();
     applicant.payload.displayVersion = await currentDisplayVersion(app);
-    const originalPrice = await pool.query<{ price_incl_tax: number }>(
-      "select price_incl_tax from plans where code = 'light'",
+    const originalPlan = await pool.query<{
+      id: string;
+      price_incl_tax: number;
+    }>(
+      "select id, price_incl_tax from plans where code = 'light' and valid_from = date '2026-10-31'",
     );
     try {
       const first = await submit(app, applicant);
       expect(first.status).toBe(201);
       const originalReceipt = await first.json();
 
-      await pool.query(
-        "update plans set price_incl_tax = 5200 where code = 'light'",
-      );
+      await pool.query("update plans set price_incl_tax = 5200 where id = $1", [
+        originalPlan.rows[0]?.id,
+      ]);
       const replay = await submit(app, applicant);
       expect(replay.status).toBe(200);
       expect(await replay.json()).toMatchObject({
@@ -765,10 +776,10 @@ describe("public application submission with PostgreSQL", () => {
         error: { code: "offer_changed" },
       });
     } finally {
-      await pool.query(
-        "update plans set price_incl_tax = $1 where code = 'light'",
-        [originalPrice.rows[0]?.price_incl_tax],
-      );
+      await pool.query("update plans set price_incl_tax = $1 where id = $2", [
+        originalPlan.rows[0]?.price_incl_tax,
+        originalPlan.rows[0]?.id,
+      ]);
     }
   });
 

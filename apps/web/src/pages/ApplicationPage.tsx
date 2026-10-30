@@ -11,6 +11,7 @@ import {
   paymentStepSchema,
   planStepSchema,
   shopStepSchema,
+  splitTax,
   webMessages,
 } from "@kobito/shared";
 import {
@@ -54,6 +55,28 @@ type Draft = {
   consentPartnerShare: boolean;
   consentMarketing: boolean;
 };
+
+function formatMonthlyPrice(priceInclTax: number | null) {
+  if (priceInclTax === null) return null;
+  const tax = splitTax(priceInclTax);
+  return (
+    <>
+      <span className="choice-price-segment">
+        {webMessages.applicationPlanChoiceNetPrice.replace(
+          "{price}",
+          tax.netYen.toLocaleString("ja-JP"),
+        )}
+      </span>
+      <span className="choice-price-segment">
+        {webMessages.applicationPlanChoiceGrossPrice.replace(
+          "{price}",
+          tax.grossYen.toLocaleString("ja-JP"),
+        )}
+      </span>
+    </>
+  );
+}
+
 const emptyDraft: Draft = {
   shopName: "",
   contactName: "",
@@ -671,7 +694,7 @@ export function ApplicationPage({
                       <span className="choice-price">
                         {item.isCustom
                           ? webMessages.applicationCustomPrice
-                          : `${item.priceInclTax?.toLocaleString("ja-JP")}円 / 月`}
+                          : formatMonthlyPrice(item.priceInclTax)}
                       </span>
                       <small>
                         {item.isCustom
@@ -828,7 +851,16 @@ export function ApplicationPage({
                     : webMessages.applicationPlanSummaryFixed
                         .replace("{name}", plan?.name ?? "")
                         .replace(
-                          "{price}",
+                          "{netPrice}",
+                          plan?.priceInclTax === null ||
+                            plan?.priceInclTax === undefined
+                            ? ""
+                            : splitTax(plan.priceInclTax).netYen.toLocaleString(
+                                "ja-JP",
+                              ),
+                        )
+                        .replace(
+                          "{grossPrice}",
                           plan?.priceInclTax?.toLocaleString("ja-JP") ?? "",
                         )
                         .replace("{credits}", String(plan?.credits ?? ""))}
@@ -905,12 +937,19 @@ export function ApplicationPage({
                   <li>{webMessages.applicationNoRollover}</li>
                   <li>{webMessages.applicationCancelPeriodEnd}</li>
                   <li>
-                    {webMessages.applicationExtraCredit.replace(
-                      "{amount}",
-                      policy.conditions.extraCreditGrossYen.toLocaleString(
-                        "ja-JP",
-                      ),
-                    )}
+                    {webMessages.applicationExtraCredit
+                      .replace(
+                        "{netAmount}",
+                        splitTax(
+                          policy.conditions.extraCreditGrossYen,
+                        ).netYen.toLocaleString("ja-JP"),
+                      )
+                      .replace(
+                        "{grossAmount}",
+                        policy.conditions.extraCreditGrossYen.toLocaleString(
+                          "ja-JP",
+                        ),
+                      )}
                   </li>
                 </ul>
               </section>
