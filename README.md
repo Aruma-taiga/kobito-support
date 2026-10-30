@@ -4,11 +4,11 @@ TypeScript の基幹システムです。設計と作業順は `docs/` を参照
 
 ## 現在の段階
 
-PR1〜PR4 で、pnpm workspace、環境設定の検証、PostgreSQL 16 と Firebase Auth Emulator のローカル環境、migration runner・初期 seed、共通 domain package と Hono API skeleton を用意しています。API は health、settings に保存されたサービス名、認証済み顧客の最小プロフィールだけを提供します。申込・請求・依頼の業務 API、申込画面、ログイン UI はまだありません。`pnpm dev` はありません。
+PR1〜PR5 で、pnpm workspace、環境設定の検証、PostgreSQL 16 と Firebase Auth Emulator、migration runner・初期 seed、共通 domain package、Hono API skeleton、顧客ログイン画面を用意しています。ログイン後は API から取得した店舗名・担当者名だけを表示します。申込・請求・依頼の業務 API と画面はまだありません。
 
 ## 必要なもの
 
-- Node.js 22 以上
+- Node.js 22.22.2 以上（web test toolchain の jsdom が Node 22.22.2 以上を要求）
 - Corepack
 - Docker Compose
 
@@ -22,7 +22,7 @@ pnpm --version
 pnpm install --frozen-lockfile
 ```
 
-`.tools/` は Git 管理外です。Node.js 22 以上と pnpm 10.22.0 が使われていることを確認してください。
+`.tools/` は Git 管理外です。Node.js 22.22.2 以上と pnpm 10.22.0 が使われていることを確認してください。
 
 ## ローカル設定と DB
 
@@ -67,22 +67,43 @@ pnpm db:reset
 pnpm test:db
 ```
 
-## API skeleton と Auth Emulator
+## Web ログイン画面
+
+`.env` に次のローカル用 Vite 設定を追加してください。これらは Firebase Auth Emulator のデモ値です。
+
+```dotenv
+VITE_FIREBASE_API_KEY=fake-api-key
+VITE_FIREBASE_AUTH_DOMAIN=demo-kobito-support.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=demo-kobito-support
+VITE_FIREBASE_APP_ID=1:000000000000:web:local-preview
+VITE_API_BASE_URL=http://127.0.0.1:3000
+VITE_FIREBASE_AUTH_EMULATOR_URL=http://127.0.0.1:9099
+```
+
+`.env` の `DEV_AUTH_EMAIL` と `DEV_AUTH_PASSWORD` にローカル専用値を設定し、上の DB 初期化後に開発ユーザーを登録してから API と web dev server を起動します。
+
+```sh
+pnpm dev:seed-auth
+pnpm dev
+```
+
+`http://localhost:5173/login` を開き、`.env` に設定した認証情報でログインしてください。
+
+ログイン後の `/me` は API の `/api/v1/me` を呼び出し、店舗名と担当者名を表示します。web は起動時に public config API からサービス名を取得します。本番 web build には実プロジェクトの Firebase public config と HTTPS API URL を指定してください。開発用 demo project、fake API key、Auth Emulator は本番 build で拒否されます。Vite の `VITE_` 変数は bundle に含まれるため、server secret を設定しないでください。
+
+## API と Auth Emulator
 
 API は Firebase Admin SDK で ID token を検証し、`user_accounts` の UID・role・customer ID を認証情報として使います。顧客 API は認証された customer ID で必ず絞り、管理 API の namespace は DB role と ID token の第2要素の両方を要求します（現在、管理用の業務 endpoint はありません）。公開 config は `settings.service_name` だけを返し、会社情報・銀行情報などは含みません。
 
-`.env` の `DEV_AUTH_EMAIL` と `DEV_AUTH_PASSWORD` にローカル専用の値を設定し、DB を初期化して開発 customer を作成します。
+上記のローカルセットアップで DB を初期化し、`pnpm dev:seed-auth` を実行してから API を起動してください。API だけを別起動するときは次を使います。
 
 ```sh
-pnpm db:reset
-pnpm dev:seed-auth
 pnpm dev:api
 ```
 
-別のターミナルで API を起動し、ローカル smoke helper を実行します。helper は Auth Emulator の sign-in REST API から ID token をメモリ上で取得し `/api/v1/me` を呼びます。token とプロフィールは表示しません。
+`pnpm dev:seed-auth` は設定済みのローカル Auth Emulator に開発ユーザーを登録し、DB に customer account を用意します。`pnpm dev:smoke-auth` は Auth Emulator の sign-in REST API から ID token をメモリ上で取得し `/api/v1/me` を呼びます。token とプロフィールは表示しません。
 
 ```sh
-pnpm dev:api
 # 別ターミナル
 pnpm dev:smoke-auth
 ```
