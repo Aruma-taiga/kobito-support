@@ -203,6 +203,17 @@ button:disabled {
   font-weight: 600;
 }
 
+.contract-period-range {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.3em;
+}
+
+.contract-period-start,
+.contract-period-range time {
+  white-space: nowrap;
+}
+
 .logout-button {
   margin-top: 0;
 }

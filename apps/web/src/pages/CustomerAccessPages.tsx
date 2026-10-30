@@ -60,6 +60,7 @@ function allowedCustomerPath(
     if (access.welcomeRequired) return pathname === "/me/welcome";
     return (
       pathname === "/me" ||
+      pathname === "/me/contract" ||
       pathname === "/me/requests" ||
       pathname.startsWith("/me/requests/") ||
       isInvoicePath(pathname)
