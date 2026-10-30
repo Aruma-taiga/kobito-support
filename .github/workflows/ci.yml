@@ -34,6 +34,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build shared package
         run: pnpm build:shared
+      - name: Build API package
+        run: pnpm build:api
       - name: Lint
         run: pnpm lint
       - name: Typecheck
