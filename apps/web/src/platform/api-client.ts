@@ -1,8 +1,14 @@
 import {
   type ApplicationReceipt,
+  type ApproveEstimateResponse,
   applicationReceiptSchema,
+  approveEstimateResponseSchema,
   type CustomerContractResponse,
+  type CustomerRequestDetail,
+  type CustomerRequestSummary,
   customerContractResponseSchema,
+  customerRequestDetailSchema,
+  customerRequestListSchema,
   type InvoiceDetail,
   type InvoiceList,
   invoiceDetailSchema,
@@ -38,7 +44,11 @@ export class ApiClientError extends Error {
       | "server"
       | "invalid_response"
       | "conditions_changed"
-      | "application_conflict",
+      | "application_conflict"
+      | "request_conflict"
+      | "estimate_conflict"
+      | "insufficient_credits"
+      | "validation_error",
   ) {
     super(code);
   }
@@ -93,6 +103,77 @@ export function createApiClient(options: ApiClientOptions) {
       throw new ApiClientError("server");
     }
 
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new ApiClientError("invalid_response");
+    }
+    const parsed = schema.safeParse(payload);
+    if (!parsed.success) throw new ApiClientError("invalid_response");
+    return parsed.data;
+  }
+
+  async function postJson<T>(
+    endpoint: string,
+    schema: {
+      safeParse(data: unknown): { success: true; data: T } | { success: false };
+    },
+    body: unknown,
+  ): Promise<T> {
+    const user = options.getCurrentUser();
+    if (!user) throw new ApiClientError("unauthorized");
+    let token: string;
+    try {
+      token = await user.getIdToken();
+    } catch {
+      await options.signOut().catch(() => undefined);
+      throw new ApiClientError("unauthorized");
+    }
+    let response: Response;
+    try {
+      response = await fetcher(new URL(endpoint, options.baseUrl), {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        credentials: "omit",
+        redirect: "error",
+        cache: "no-store",
+      });
+    } catch {
+      throw new ApiClientError("network");
+    }
+    if (response.status === 401) {
+      await options.signOut().catch(() => undefined);
+      throw new ApiClientError("unauthorized");
+    }
+    if (!response.ok) {
+      let responseCode: string | undefined;
+      try {
+        const payload = (await response.clone().json()) as {
+          error?: { code?: unknown };
+        };
+        if (typeof payload.error?.code === "string")
+          responseCode = payload.error.code;
+      } catch {
+        responseCode = undefined;
+      }
+      if (
+        responseCode === "request_conflict" ||
+        responseCode === "estimate_conflict" ||
+        responseCode === "insufficient_credits"
+      ) {
+        throw new ApiClientError(responseCode);
+      }
+      if (response.status === 403) throw new ApiClientError("forbidden");
+      if (response.status === 404) throw new ApiClientError("not_found");
+      if (response.status === 422) throw new ApiClientError("validation_error");
+      throw new ApiClientError("server");
+    }
     let payload: unknown;
     try {
       payload = await response.json();
@@ -236,6 +317,29 @@ export function createApiClient(options: ApiClientOptions) {
       getJson("/api/v1/me", meResponseSchema, true),
     getContract: (): Promise<CustomerContractResponse> =>
       getJson("/api/v1/me/contract", customerContractResponseSchema, true),
+    getCustomerRequests(
+      openOnly = false,
+    ): Promise<{ items: CustomerRequestSummary[] }> {
+      return getJson(
+        `/api/v1/me/requests${openOnly ? "?open=1" : ""}`,
+        customerRequestListSchema,
+        true,
+      );
+    },
+    getCustomerRequest(requestId: string): Promise<CustomerRequestDetail> {
+      return getJson(
+        `/api/v1/me/requests/${encodeURIComponent(requestId)}`,
+        customerRequestDetailSchema,
+        true,
+      );
+    },
+    approveEstimate(estimateId: string): Promise<ApproveEstimateResponse> {
+      return postJson(
+        `/api/v1/me/estimates/${encodeURIComponent(estimateId)}/approve`,
+        approveEstimateResponseSchema,
+        {},
+      );
+    },
     getInvoices: (): Promise<InvoiceList> =>
       getJson("/api/v1/me/invoices", invoiceListSchema, true),
     getInvoice: (invoiceId: string): Promise<InvoiceDetail> =>

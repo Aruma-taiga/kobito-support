@@ -170,6 +170,7 @@ export function RequireAdminAuth() {
       <header className="admin-toolbar">
         <Link to="/admin/bank-transfers">{webMessages.bankTransferTitle}</Link>
         <Link to="/admin/invoices">{webMessages.invoiceListTitle}</Link>
+        <Link to="/admin/requests">{webMessages.adminRequestsTitle}</Link>
         <AdminLogoutButton />
       </header>
       <Outlet />

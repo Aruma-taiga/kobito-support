@@ -2,19 +2,31 @@ import {
   type AdminApplicationQueueQuery,
   type AdminApplicationQueueResponse,
   type AdminCustomerDetail,
+  type AdminRequestDetail,
+  type AdminRequestSummary,
   type AdminSession,
   adminApplicationQueueQuerySchema,
   adminApplicationQueueResponseSchema,
   adminCustomerDetailSchema,
+  adminRequestDetailSchema,
+  adminRequestListSchema,
   adminSessionSchema,
   approveApplicationResponseSchema,
   type ConfirmBankPaymentRequest,
+  type CreateEstimate,
+  type CreateRequest,
   confirmBankPaymentRequestSchema,
   confirmBankPaymentResponseSchema,
+  createEstimateResponseSchema,
+  createEstimateSchema,
+  createRequestResponseSchema,
+  createRequestSchema,
   type DeclineApplicationRequest,
   type DeclineApplicationResponse,
   declineApplicationRequestSchema,
   declineApplicationResponseSchema,
+  type EligibleRequestContracts,
+  eligibleRequestContractsSchema,
   type InvoiceDetail,
   type InvoiceList,
   type InvoiceReadiness,
@@ -22,6 +34,7 @@ import {
   invoiceListSchema,
   invoiceReadinessSchema,
   pendingBankTransfersSchema,
+  type RequestEstimate,
 } from "@kobito/shared";
 
 export interface AdminApiAuthUser {
@@ -37,6 +50,9 @@ export type AdminApiErrorCode =
   | "network"
   | "server"
   | "invoice_unavailable"
+  | "request_conflict"
+  | "estimate_conflict"
+  | "insufficient_credits"
   | "invalid_response";
 
 export class AdminApiError extends Error {
@@ -90,6 +106,24 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
     }
 
     if (!response.ok) {
+      let responseCode: string | undefined;
+      try {
+        const payload = (await response.clone().json()) as {
+          error?: { code?: unknown };
+        };
+        if (typeof payload.error?.code === "string") {
+          responseCode = payload.error.code;
+        }
+      } catch {
+        responseCode = undefined;
+      }
+      if (
+        responseCode === "request_conflict" ||
+        responseCode === "estimate_conflict" ||
+        responseCode === "insufficient_credits"
+      ) {
+        throw new AdminApiError(responseCode);
+      }
       const codes: Record<number, AdminApiErrorCode> = {
         401: "unauthorized",
         403: "forbidden",
@@ -201,6 +235,47 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
         `/api/v1/admin/applications/${encodeURIComponent(applicationId)}/approve`,
         approveApplicationResponseSchema,
         { method: "POST", body: "{}" },
+      );
+    },
+    getRequestContracts(): Promise<EligibleRequestContracts> {
+      return request(
+        "/api/v1/admin/request-contracts",
+        eligibleRequestContractsSchema,
+      );
+    },
+    getAdminRequests(): Promise<{ items: AdminRequestSummary[] }> {
+      return request("/api/v1/admin/requests", adminRequestListSchema);
+    },
+    getAdminRequest(requestId: string): Promise<AdminRequestDetail> {
+      return request(
+        `/api/v1/admin/requests/${encodeURIComponent(requestId)}`,
+        adminRequestDetailSchema,
+      );
+    },
+    createRequest(value: CreateRequest, idempotencyKey: string) {
+      const parsed = createRequestSchema.safeParse(value);
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      return request(`/api/v1/admin/requests`, createRequestResponseSchema, {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(parsed.data),
+      });
+    },
+    sendEstimate(
+      requestId: string,
+      value: CreateEstimate,
+      idempotencyKey: string,
+    ): Promise<RequestEstimate> {
+      const parsed = createEstimateSchema.safeParse(value);
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      return request(
+        `/api/v1/admin/requests/${encodeURIComponent(requestId)}/estimates`,
+        createEstimateResponseSchema,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": idempotencyKey },
+          body: JSON.stringify(parsed.data),
+        },
       );
     },
     getInvoices(): Promise<InvoiceList> {

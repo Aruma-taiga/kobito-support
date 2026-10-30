@@ -4,6 +4,142 @@ import { AdminApiError, createAdminApiClient } from "./admin-api-client.js";
 const tokenUser = { getIdToken: vi.fn(async () => "admin-id-token") };
 
 describe("admin API client", () => {
+  it("uses the eligible-contract endpoint and keeps request/estimate idempotency keys in headers", async () => {
+    const requestId = "11111111-1111-4111-8111-111111111111";
+    const contractId = "22222222-2222-4222-8222-222222222222";
+    const estimateId = "33333333-3333-4333-8333-333333333333";
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          items: [
+            {
+              contractId,
+              customerId: "44444444-4444-4444-8444-444444444444",
+              shopName: "喫茶ひだまり",
+              contactName: "山田 花子",
+              status: "active",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            id: requestId,
+            contractId,
+            receivedOn: "2026-10-26",
+            summary: "予約フォームの修正",
+            urgent: false,
+            status: "received",
+            createdAt: "2026-10-26T00:00:00.000Z",
+            replayed: false,
+          },
+          { status: 201 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            id: estimateId,
+            requestId,
+            version: 1,
+            credits: 1,
+            dueOn: "2026-10-30",
+            workItems: ["フォームを修正"],
+            doneCriteria: "送信できる",
+            exclusions: null,
+            customerPrep: null,
+            sentAt: "2026-10-26T00:00:00.000Z",
+            approvedAt: null,
+            supersededAt: null,
+            replayed: false,
+          },
+          { status: 201 },
+        ),
+      );
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher,
+    });
+
+    await expect(client.getRequestContracts()).resolves.toMatchObject({
+      items: [{ contractId, status: "active" }],
+    });
+    await expect(
+      client.createRequest(
+        {
+          contractId,
+          receivedOn: "2026-10-26",
+          summary: "予約フォームの修正",
+          urgent: false,
+        },
+        "55555555-5555-4555-8555-555555555555",
+      ),
+    ).resolves.toMatchObject({ id: requestId });
+    await expect(
+      client.sendEstimate(
+        requestId,
+        {
+          credits: 1,
+          dueOn: "2026-10-30",
+          workItems: ["フォームを修正"],
+          doneCriteria: "送信できる",
+        },
+        "66666666-6666-4666-8666-666666666666",
+      ),
+    ).resolves.toMatchObject({ id: estimateId });
+
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/admin/request-contracts",
+    );
+    const createCall = fetcher.mock.calls[1];
+    expect(String(createCall?.[0])).toBe(
+      "https://api.example.test/api/v1/admin/requests",
+    );
+    expect(createCall?.[1]).toMatchObject({
+      method: "POST",
+      headers: {
+        Authorization: "Bearer admin-id-token",
+        "Idempotency-Key": "55555555-5555-4555-8555-555555555555",
+      },
+      body: JSON.stringify({
+        contractId,
+        receivedOn: "2026-10-26",
+        summary: "予約フォームの修正",
+        urgent: false,
+      }),
+      credentials: "omit",
+    });
+    const estimateCall = fetcher.mock.calls[2];
+    expect(String(estimateCall?.[0])).toBe(
+      `https://api.example.test/api/v1/admin/requests/${requestId}/estimates`,
+    );
+    expect(estimateCall?.[1]?.headers).toMatchObject({
+      "Idempotency-Key": "66666666-6666-4666-8666-666666666666",
+    });
+    expect(String(estimateCall?.[0])).not.toContain(
+      "55555555-5555-4555-8555-555555555555",
+    );
+  });
+
+  it("maps request-specific conflict codes without exposing API error details", async () => {
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher: vi.fn<typeof fetch>(async () =>
+        Response.json(
+          { error: { code: "request_conflict", private: "internal detail" } },
+          { status: 409 },
+        ),
+      ),
+    });
+    await expect(client.getAdminRequests()).rejects.toMatchObject({
+      code: "request_conflict",
+    });
+  });
+
   it("loads pending bank transfers with the administrator session token", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({ items: [] }),

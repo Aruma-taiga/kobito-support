@@ -1,3 +1,13 @@
+import type { RequestStatus } from "./states.js";
+
+export const requestStatusLabels: Record<RequestStatus, string> = {
+  received: "受付済み",
+  awaiting_approval: "見積・了承待ち",
+  in_progress: "作業中",
+  done: "完了",
+  withdrawn: "取り下げ",
+};
+
 export const planLabels = {
   light: "ライト",
   standard: "スタンダード",
@@ -26,6 +36,7 @@ export const invoiceStatusLabels = {
 } as const;
 
 export const validationMessages = {
+  date: "日付を入力してください。",
   required: "入力してください。",
   maxLength: "入力文字数が上限を超えています。",
   email: "メールアドレスの形式で入力してください。",
@@ -45,6 +56,63 @@ export const validationMessages = {
 } as const;
 
 export const webMessages = {
+  adminRequestsTitle: "ご依頼の記録と見積",
+  adminRequestsNew: "依頼を登録",
+  adminRequestNewDescription:
+    "契約中のお客様を選び、依頼の内容と受付日を記録します。",
+  adminRequestNoEligibleContract: "依頼を登録できる契約がありません。",
+  requestSelectOption: "選択してください",
+  adminRequestCancelScheduled: "・解約予定",
+  adminRequestsCreate: "依頼を登録する",
+  adminRequestReceivedOn: "受付日",
+  adminRequestSummary: "依頼の概要",
+  adminRequestUrgent: "急ぎ",
+  adminRequestCustomer: "お客様",
+  adminRequestStatus: "状況",
+  adminRequestEstimate: "見積を作成",
+  adminEstimateCredits: "必要クレジット",
+  adminEstimateDueOn: "作業目安日",
+  adminEstimateWorkItems: "作業内容",
+  adminEstimateWorkItemsHint: "1項目ずつ入力",
+  adminEstimateDoneCriteria: "完了の状態",
+  adminEstimateExclusions: "含まれないもの",
+  adminEstimateCustomerPrep: "ご用意いただくもの",
+  adminEstimateSend: "見積を送信",
+  adminEstimateSentRefreshError:
+    "見積は送信しましたが、依頼の最新状態を読み込めませんでした。再読み込みしてください。",
+  adminEstimateRevise: "見積を出し直す",
+  requestStatusReceived: requestStatusLabels.received,
+  requestStatusAwaitingApproval: requestStatusLabels.awaiting_approval,
+  requestStatusInProgress: requestStatusLabels.in_progress,
+  requestStatusDone: requestStatusLabels.done,
+  requestStatusWithdrawn: requestStatusLabels.withdrawn,
+  requestsLoadError: "依頼を読み込めませんでした。",
+  requestActionError: "依頼を更新できませんでした。もう一度お試しください。",
+  requestValidationError: "入力内容を確認してください。",
+  requestSendBusy: "送信しています…",
+  requestCreditUnit: "クレジット",
+  myRequestsTitle: "ご依頼の状況",
+  myRequestsEmpty: "依頼はありません。",
+  myRequestEstimateTitle: "お見積り",
+  myRequestApprove: "見積を了承する",
+  myRequestApproveConfirm: "この見積を了承しますか？クレジットを予約します。",
+  myRequestCancel: "戻る",
+  myRequestApprovalSuccess: "見積を了承しました。",
+  myRequestBalanceRefreshError:
+    "了承後の残りクレジットを確認できませんでした。マイページに戻って最新の情報を確認してください。",
+  myRequestInsufficientCredits:
+    "今期の残りクレジットが不足しています。LINEでご相談ください。",
+  myRequestConflict: "見積の状況が変わりました。最新の状況をご確認ください。",
+  myRequestContactLine: "LINEで相談",
+  myRequestDetails: "依頼の詳細",
+  myRequestAvailableCredits: "今期の残り",
+  estimateVersion: "見積の版",
+  estimateCredits: "必要クレジット",
+  estimateDueOn: "作業目安日",
+  estimateWorkItems: "作業内容",
+  estimateDoneCriteria: "完了の状態",
+  estimateExclusions: "含まれないもの",
+  estimateCustomerPrep: "ご用意いただくもの",
   genericServiceName: "サービス",
   serviceConfigLoading: "サービス情報を読み込んでいます。",
   serviceConfigError: "サービス情報を読み込めませんでした。",

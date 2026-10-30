@@ -14,6 +14,8 @@ import {
 import { ApiError, type ApiVariables } from "../../platform/types.js";
 import type { AccountsDataRepository } from "../accounts/repository.js";
 import type { InvoiceModule } from "../invoices/contracts.js";
+import type { RequestModule } from "../requests/contracts.js";
+import { createRequestAdminRoutes } from "../requests/routes.js";
 import type { AdminModule } from "./contracts.js";
 
 const maxDeclineBodyBytes = 16 * 1024;
@@ -24,6 +26,7 @@ export function createAdminRoutes(dependencies: {
   verifier: IdentityVerifier;
   accounts: AccountsDataRepository;
   invoices: InvoiceModule;
+  requests?: RequestModule;
 }) {
   const routes = new Hono<{ Variables: ApiVariables }>();
   const authenticate = createAuthenticate(
@@ -34,6 +37,8 @@ export function createAdminRoutes(dependencies: {
   routes.use("*", authenticate, requireAdmin());
 
   routes.get("/session", (context) => context.json({ role: "admin" as const }));
+  if (dependencies.requests)
+    createRequestAdminRoutes(routes, dependencies.requests);
 
   routes.post(
     "/applications/:id/approve",

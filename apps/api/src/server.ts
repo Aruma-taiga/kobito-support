@@ -11,6 +11,8 @@ import { ApplicationsService } from "./modules/applications/service.js";
 import { ChromiumInvoicePdfRenderer } from "./modules/invoices/renderer.js";
 import { InvoiceRepository } from "./modules/invoices/repository.js";
 import { InvoiceService } from "./modules/invoices/service.js";
+import { RequestRepository } from "./modules/requests/repository.js";
+import { RequestService } from "./modules/requests/service.js";
 import { createFirebaseVerifier } from "./platform/auth.js";
 import { loadConfig } from "./platform/config.js";
 import { consoleLogger } from "./platform/logger.js";
@@ -41,6 +43,7 @@ const app = createApp({
   applications,
   admin: new AdminService(new AdminRepository(pool)),
   invoices,
+  requests: new RequestService(new RequestRepository(pool)),
   publicSettings: new PublicSettingsRepository(pool),
   logger: consoleLogger,
   komojuInbox: new KomojuInboxRepository(pool),
