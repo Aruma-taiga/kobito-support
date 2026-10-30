@@ -18,10 +18,15 @@ function setup(initialPath: string) {
       return () => listeners.delete(listener);
     },
     signIn: vi.fn(async () => {
-      user = { email: "shop@example.jp", getIdToken: async () => "token" };
+      user = {
+        uid: "shop-test",
+        email: "shop@example.jp",
+        getIdToken: async () => "token",
+      };
       for (const listener of listeners) listener(user);
     }),
     signUp: vi.fn(async () => ({
+      uid: "new-shop-test",
       email: null,
       getIdToken: async () => "token",
     })),

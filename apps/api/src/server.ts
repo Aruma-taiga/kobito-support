@@ -8,6 +8,8 @@ import { AdminRepository } from "./modules/admin/repository.js";
 import { AdminService } from "./modules/admin/service.js";
 import { ApplicationsRepository } from "./modules/applications/repository.js";
 import { ApplicationsService } from "./modules/applications/service.js";
+import { PostgresCustomerAccessRepository } from "./modules/customer-access/repository.js";
+import { CustomerAccessService } from "./modules/customer-access/service.js";
 import { ChromiumInvoicePdfRenderer } from "./modules/invoices/renderer.js";
 import { InvoiceRepository } from "./modules/invoices/repository.js";
 import { InvoiceService } from "./modules/invoices/service.js";
@@ -44,6 +46,9 @@ const app = createApp({
   admin: new AdminService(new AdminRepository(pool)),
   invoices,
   requests: new RequestService(new RequestRepository(pool)),
+  customerAccess: new CustomerAccessService(
+    new PostgresCustomerAccessRepository(pool),
+  ),
   publicSettings: new PublicSettingsRepository(pool),
   logger: consoleLogger,
   komojuInbox: new KomojuInboxRepository(pool),

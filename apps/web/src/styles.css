@@ -584,6 +584,74 @@ button:disabled {
   margin: 16px 0 0;
 }
 
+.access-card {
+  display: grid;
+  gap: 18px;
+  max-width: 680px;
+  margin-inline: auto;
+}
+
+.access-card h1,
+.access-card h2,
+.access-card p {
+  margin: 0;
+}
+
+.access-status-copy {
+  padding: 16px;
+  border-radius: 8px;
+  background: #f5f7fb;
+  font-weight: 600;
+}
+
+.access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sign-out-action {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.access-link {
+  justify-self: start;
+  text-decoration: none;
+}
+
+.access-logout {
+  justify-self: start;
+}
+
+.welcome-check {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  color: white;
+  background: #23734c;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.welcome-guidance {
+  padding: 16px;
+  border: 1px solid #dce2ea;
+  border-radius: 8px;
+}
+
+.welcome-guidance ol {
+  margin: 12px 0 0;
+  padding-left: 24px;
+}
+
+:where(.welcome-guidance) li + li {
+  margin-top: 8px;
+}
+
 .request-summary-list dt {
   color: #5f6b73;
   font-size: 14px;

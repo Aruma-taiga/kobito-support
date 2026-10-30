@@ -8,6 +8,8 @@ import { PublicSettingsRepository } from "../../platform/settings.js";
 import { AccountsRepository } from "../accounts/repository.js";
 import { AdminRepository } from "../admin/repository.js";
 import { AdminService } from "../admin/service.js";
+import { PostgresCustomerAccessRepository } from "../customer-access/repository.js";
+import { CustomerAccessService } from "../customer-access/service.js";
 import { ApplicationsRepository } from "./repository.js";
 import { ApplicationsService } from "./service.js";
 
@@ -107,6 +109,9 @@ function makeApp(
     },
     accounts,
     applications,
+    customerAccess: new CustomerAccessService(
+      new PostgresCustomerAccessRepository(pool),
+    ),
     admin: new AdminService(new AdminRepository(pool)),
     invoices: {
       getReadiness: async () => ({
@@ -342,12 +347,15 @@ describe("public application submission with PostgreSQL", () => {
     const meAfter = await app.request("/api/v1/me", {
       headers: { authorization: `Bearer ${applicant.token}` },
     });
-    expect(meAfter.status).toBe(200);
-    expect(await meAfter.json()).toMatchObject({
-      customer: {
-        shopName: "応募テスト店舗",
-        contactName: "応募テスト担当者",
-      },
+    expect(meAfter.status).toBe(404);
+    const access = await app.request("/api/v1/me/access", {
+      headers: { authorization: `Bearer ${applicant.token}` },
+    });
+    expect(await access.json()).toMatchObject({
+      contractStatus: "under_review",
+      landingPath: "/me/waiting",
+      access: "pending",
+      invoiceAccess: true,
     });
   });
 

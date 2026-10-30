@@ -5,6 +5,7 @@ import {
 } from "@kobito/shared";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { SignOutAction } from "../auth/SignOutAction.js";
 import type { AdminApiClient } from "../platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
 
@@ -36,10 +37,16 @@ function InvoiceListPage({
   client,
   basePath,
   returnLabel,
+  returnPath,
+  accessNotice,
+  showLogout,
 }: {
   client: InvoiceClient;
   basePath: string;
   returnLabel: string;
+  returnPath?: string | null | undefined;
+  accessNotice?: string | undefined;
+  showLogout?: boolean | undefined;
 }) {
   const [items, setItems] = useState<InvoiceListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,17 +81,22 @@ function InvoiceListPage({
         className="card invoice-card"
         aria-labelledby="invoice-list-title"
       >
-        <Link
-          className="admin-back-link"
-          to={
-            returnLabel === webMessages.adminQueueTitle
-              ? "/admin/customers"
-              : "/me"
-          }
-        >
-          {returnLabel}
-        </Link>
+        {returnPath !== null ? (
+          <Link
+            className="admin-back-link"
+            to={
+              returnPath ??
+              (returnLabel === webMessages.adminQueueTitle
+                ? "/admin/customers"
+                : "/me")
+            }
+          >
+            {returnLabel}
+          </Link>
+        ) : null}
         <h1 id="invoice-list-title">{webMessages.invoiceListTitle}</h1>
+        {showLogout ? <SignOutAction /> : null}
+        {accessNotice ? <p className="muted-text">{accessNotice}</p> : null}
         {loading ? (
           <output className="status-message">
             {webMessages.invoiceListLoading}
@@ -389,14 +401,25 @@ export function AdminInvoiceDetailPage({
 
 export function MyInvoiceListPage({
   apiClient,
+  returnPath,
+  returnLabel,
+  accessNotice,
+  showLogout,
 }: {
   apiClient: ReturnTypeApiClient;
+  returnPath?: string | null | undefined;
+  returnLabel?: string | undefined;
+  accessNotice?: string | undefined;
+  showLogout?: boolean | undefined;
 }) {
   return (
     <InvoiceListPage
       client={apiClient}
       basePath="/me/invoices"
-      returnLabel={webMessages.homeTitle}
+      returnLabel={returnLabel ?? webMessages.homeTitle}
+      returnPath={returnPath}
+      accessNotice={accessNotice}
+      showLogout={showLogout}
     />
   );
 }

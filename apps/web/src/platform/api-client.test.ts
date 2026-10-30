@@ -2,6 +2,67 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "./api-client.js";
 
 describe("authenticated web API client", () => {
+  it("loads customer access policy and explicitly records welcome acknowledgement", async () => {
+    const access = {
+      contractStatus: "active",
+      landingPath: "/me/welcome",
+      access: "active",
+      welcomeRequired: true,
+      invoiceAccess: true,
+      invoiceAccessUntil: null,
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(access))
+      .mockResolvedValueOnce(
+        Response.json({ seenAt: "2026-10-27T00:00:00.000Z" }),
+      );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        getIdToken: vi.fn(async () => "customer-id-token"),
+      }),
+      signOut: vi.fn(async () => undefined),
+      fetcher,
+    });
+
+    await expect(client.getCustomerAccess()).resolves.toEqual(access);
+    await expect(client.markWelcomeSeen()).resolves.toEqual({
+      seenAt: "2026-10-27T00:00:00.000Z",
+    });
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/me/access",
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer customer-id-token",
+    });
+    expect(String(fetcher.mock.calls[1]?.[0])).toBe(
+      "https://api.example.test/api/v1/me/welcome-seen",
+    );
+    expect(fetcher.mock.calls[1]?.[1]).toMatchObject({
+      method: "POST",
+      headers: { Authorization: "Bearer customer-id-token" },
+      body: "{}",
+      credentials: "omit",
+    });
+  });
+
+  it("maps customer access role mismatch to a safe not-found error", async () => {
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        getIdToken: vi.fn(async () => "customer-id-token"),
+      }),
+      signOut: vi.fn(async () => undefined),
+      fetcher: vi.fn<typeof fetch>(async () =>
+        Response.json({ error: { code: "not_found" } }, { status: 404 }),
+      ),
+    });
+
+    await expect(client.getCustomerAccess()).rejects.toEqual(
+      expect.objectContaining({ code: "not_found" }),
+    );
+  });
   it("loads only the signed-in customer request routes and maps approval balance conflicts", async () => {
     const requestId = "11111111-1111-4111-8111-111111111111";
     const estimateId = "22222222-2222-4222-8222-222222222222";

@@ -41,7 +41,7 @@ function formatJstDate(value: string): string {
 function formatPaymentMethod(method: string): string {
   if (method === "bank_transfer") return webMessages.applicationBankTransfer;
   if (method === "card") return webMessages.applicationCardPayment;
-  if (method === "konbini") return webMessages.applicationKonbiniPayment;
+  if (method === "konbini") return webMessages.historicalKonbiniPayment;
   return "";
 }
 

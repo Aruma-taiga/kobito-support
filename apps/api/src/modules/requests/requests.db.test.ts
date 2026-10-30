@@ -14,6 +14,8 @@ import type { RuntimeConfig } from "../../platform/config.js";
 import { AccountsRepository } from "../accounts/repository.js";
 import { AdminRepository } from "../admin/repository.js";
 import { AdminService } from "../admin/service.js";
+import { PostgresCustomerAccessRepository } from "../customer-access/repository.js";
+import { CustomerAccessService } from "../customer-access/service.js";
 import { InvoiceRepository } from "../invoices/repository.js";
 import { InvoiceService } from "../invoices/service.js";
 import { RequestRepository } from "./repository.js";
@@ -94,6 +96,10 @@ function makeApp(
     admin: new AdminService(new AdminRepository(appPool)),
     invoices,
     requests: new RequestService(new RequestRepository(appPool, now)),
+    customerAccess: new CustomerAccessService(
+      new PostgresCustomerAccessRepository(appPool, now),
+      now,
+    ),
     publicSettings: { getServiceName: async () => "Test" },
     logger: { info: () => {}, error: () => {} },
     komojuInbox: { receive: async () => "accepted" },
@@ -1151,8 +1157,7 @@ describe("request estimate API integration", () => {
     const customerList = await completionApp.request("/api/v1/me/requests", {
       headers: { authorization: `Bearer ${fixture.customer.token}` },
     });
-    expect.soft(customerList.status).toBe(200);
-    expect.soft(await customerList.json()).toEqual({ items: [] });
+    expect.soft(customerList.status).toBe(404);
     const customerDetail = await completionApp.request(
       `/api/v1/me/requests/${fixture.requestId}`,
       { headers: { authorization: `Bearer ${fixture.customer.token}` } },

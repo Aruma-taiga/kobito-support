@@ -83,6 +83,17 @@ function makeApp(): ReturnType<typeof createApp> {
       },
       getCustomerContract: async () => ({ contract: null }),
     },
+    customerAccess: {
+      getAccess: async () => ({
+        contractStatus: null,
+        landingPath: "/me",
+        access: "none",
+        welcomeRequired: false,
+        invoiceAccess: false,
+        invoiceAccessUntil: null,
+      }),
+      markWelcomeSeen: async () => ({ seenAt: "2026-01-01T00:00:00.000Z" }),
+    },
     publicSettings: { getServiceName: async () => "Test service" },
     komojuInbox: { receive: async () => "accepted" as const },
     logger: { info: () => {}, error: () => {} },

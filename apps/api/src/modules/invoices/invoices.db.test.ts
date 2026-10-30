@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import {
+  customerAccessSchema,
+  welcomeSeenResponseSchema,
+} from "@kobito/shared";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type AppDependencies, createApp } from "../../app.js";
@@ -8,6 +12,8 @@ import { customerScopeFor } from "../../platform/scope.js";
 import { AccountsRepository } from "../accounts/repository.js";
 import { AdminRepository } from "../admin/repository.js";
 import { AdminService } from "../admin/service.js";
+import { PostgresCustomerAccessRepository } from "../customer-access/repository.js";
+import { CustomerAccessService } from "../customer-access/service.js";
 import { InvoiceRepository } from "./repository.js";
 import { InvoiceService } from "./service.js";
 
@@ -98,6 +104,10 @@ function makeApp(
     },
     admin: new AdminService(new AdminRepository(pool)),
     invoices: new InvoiceService(invoiceRepository),
+    customerAccess: new CustomerAccessService(
+      new PostgresCustomerAccessRepository(pool, () => now),
+      () => now,
+    ),
     publicSettings: { getServiceName: async () => "Test service" },
     komojuInbox: { receive: async () => "accepted" as const },
     logger: { info: () => {}, error: () => {} },
@@ -176,6 +186,27 @@ async function makeApplication(
     [uid, customerId],
   );
   return { customerId, applicationId, contractId, uid, token };
+}
+
+async function makeLegacyCustomer() {
+  const suffix = randomUUID();
+  const result = await pool.query<{ id: string }>(
+    `insert into customers (shop_name, contact_name, billing_name, billing_address, email)
+     values ($1,'Legacy contact','Legacy billing','Legacy address',$2) returning id`,
+    [`${prefix}-legacy-${suffix}`, `${suffix}@example.test`],
+  );
+  const customerId = result.rows[0]?.id;
+  if (!customerId) throw new Error("Legacy customer fixture insert failed");
+  customerIds.push(customerId);
+  const uid = `${prefix}-legacy-${suffix}-customer`;
+  const token = `${uid}-token`;
+  userIds.push(uid);
+  identities.set(token, { uid });
+  await pool.query(
+    "insert into user_accounts(auth_user_id,customer_id,role) values ($1,$2,'customer')",
+    [uid, customerId],
+  );
+  return { customerId, token };
 }
 
 function approve(app: ReturnType<typeof createApp>, id: string) {
@@ -284,6 +315,309 @@ afterAll(async () => {
 });
 
 describe("initial invoice approval and customer access", () => {
+  it.each([
+    "under_review",
+    "quoting",
+    "awaiting_payment",
+  ] as const)("allows the c04 invoice namespace but hides profile and contract data for %s", async (status) => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    await pool.query("update contracts set status=$2 where id=$1", [
+      fixture.contractId,
+      status,
+    ]);
+    const headers = { authorization: `Bearer ${fixture.token}` };
+    const accessResponse = await app.request("/api/v1/me/access", { headers });
+    expect(await accessResponse.json()).toMatchObject({
+      contractStatus: status,
+      landingPath: "/me/waiting",
+      access: "pending",
+      invoiceAccess: true,
+    });
+    expect((await app.request("/api/v1/me", { headers })).status).toBe(404);
+    expect((await app.request("/api/v1/me/contract", { headers })).status).toBe(
+      404,
+    );
+    const invoices = await app.request("/api/v1/me/invoices", { headers });
+    expect(invoices.status).toBe(200);
+    expect(await invoices.json()).toEqual({ invoices: [] });
+  });
+
+  it("sends awaiting quote approval to c12 and withholds the invoice namespace", async () => {
+    const fixture = await makeApplication({ custom: true });
+    const app = makeApp();
+    await pool.query(
+      "update contracts set status='awaiting_quote_approval' where id=$1",
+      [fixture.contractId],
+    );
+    const headers = { authorization: `Bearer ${fixture.token}` };
+    const access = await app.request("/api/v1/me/access", { headers });
+    expect(await access.json()).toMatchObject({
+      contractStatus: "awaiting_quote_approval",
+      landingPath: "/me/plan-quote",
+      access: "pending",
+      invoiceAccess: false,
+    });
+    expect((await app.request("/api/v1/me/invoices", { headers })).status).toBe(
+      404,
+    );
+  });
+
+  it("hides lapsed profile and invoice data while exposing the minimal finished landing", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    const issued = await approve(app, fixture.applicationId);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    await pool.query("update contracts set status='lapsed' where id=$1", [
+      fixture.contractId,
+    ]);
+    const auth = { authorization: `Bearer ${fixture.token}` };
+
+    const profile = await app.request("/api/v1/me", { headers: auth });
+    expect(profile.status).toBe(404);
+
+    const invoiceList = await app.request("/api/v1/me/invoices", {
+      headers: auth,
+    });
+    expect(invoiceList.status).toBe(404);
+    expect(
+      (
+        await app.request(`/api/v1/me/invoices/${invoiceId}`, {
+          headers: auth,
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await app.request(`/api/v1/me/invoices/${invoiceId}/pdf`, {
+          headers: auth,
+        })
+      ).status,
+    ).toBe(404);
+
+    const access = await app.request("/api/v1/me/access", { headers: auth });
+    expect(access.status).toBe(200);
+    const accessBody = await access.json();
+    expect(customerAccessSchema.parse(accessBody)).toEqual(accessBody);
+    expect(Object.keys(accessBody as Record<string, unknown>).sort()).toEqual([
+      "access",
+      "contractStatus",
+      "invoiceAccess",
+      "invoiceAccessUntil",
+      "landingPath",
+      "welcomeRequired",
+    ]);
+    expect(accessBody).toMatchObject({
+      contractStatus: "lapsed",
+      landingPath: "/me/finished",
+      access: "finished",
+      invoiceAccess: false,
+    });
+    const rejectedWelcome = await app.request("/api/v1/me/welcome-seen", {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(rejectedWelcome.status).toBe(409);
+    const unchanged = await pool.query<{ welcome_shown_at: Date | null }>(
+      "select welcome_shown_at from contracts where id=$1",
+      [fixture.contractId],
+    );
+    expect(unchanged.rows[0]?.welcome_shown_at).toBeNull();
+
+    const declined = await makeApplication();
+    await pool.query("update contracts set status='declined' where id=$1", [
+      declined.contractId,
+    ]);
+    const declinedAccess = await app.request("/api/v1/me/access", {
+      headers: { authorization: `Bearer ${declined.token}` },
+    });
+    expect(await declinedAccess.json()).toMatchObject({
+      contractStatus: "declined",
+      landingPath: "/me/finished",
+      access: "finished",
+      invoiceAccess: false,
+    });
+    expect(
+      (
+        await app.request("/api/v1/me", {
+          headers: { authorization: `Bearer ${declined.token}` },
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it("acknowledges the active customer's first welcome with a stable replay timestamp", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    await pool.query("update contracts set status='active' where id=$1", [
+      fixture.contractId,
+    ]);
+    const headers = {
+      authorization: `Bearer ${fixture.token}`,
+      "content-type": "application/json",
+    };
+    const results = await Promise.all([
+      app.request("/api/v1/me/welcome-seen", {
+        method: "POST",
+        headers,
+        body: "{}",
+      }),
+      app.request("/api/v1/me/welcome-seen", {
+        method: "POST",
+        headers,
+        body: "{}",
+      }),
+    ]);
+    expect(results.map((response) => response.status)).toEqual([200, 200]);
+    const bodies = await Promise.all(
+      results.map((response) => response.json()),
+    );
+    const firstBody = bodies[0] as { seenAt: string };
+    expect(welcomeSeenResponseSchema.parse(firstBody)).toEqual(firstBody);
+    expect(Number.isNaN(Date.parse(firstBody.seenAt))).toBe(false);
+    expect(bodies[1]).toEqual(firstBody);
+
+    const replay = await app.request("/api/v1/me/welcome-seen", {
+      method: "POST",
+      headers,
+      body: "{}",
+    });
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual(firstBody);
+    const replayAfterClockAdvance = await makeApp(
+      config,
+      new Date("2026-02-01T00:00:00.000Z"),
+    ).request("/api/v1/me/welcome-seen", {
+      method: "POST",
+      headers,
+      body: "{}",
+    });
+    expect(await replayAfterClockAdvance.json()).toEqual(firstBody);
+  });
+
+  it("uses persisted ended_at in Tokyo and denies data after the calendar-year retention cutoff", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    const issued = await approve(app, fixture.applicationId);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    await pool.query(
+      "update contracts set status='ended', ended_at=$2::timestamptz where id=$1",
+      [fixture.contractId, "2025-02-28T15:00:00.000Z"],
+    );
+    const auth = { authorization: `Bearer ${fixture.token}` };
+    const retained = await app.request("/api/v1/me/access", { headers: auth });
+    expect(await retained.json()).toMatchObject({
+      landingPath: "/me/invoices",
+      access: "ended",
+      invoiceAccess: true,
+      invoiceAccessUntil: "2026-03-01",
+    });
+    expect((await app.request("/api/v1/me", { headers: auth })).status).toBe(
+      404,
+    );
+    expect(
+      (await app.request("/api/v1/me/invoices", { headers: auth })).status,
+    ).toBe(200);
+    expect(
+      (await app.request(`/api/v1/me/invoices/${invoiceId}`, { headers: auth }))
+        .status,
+    ).toBe(200);
+    expect(
+      (
+        await app.request(`/api/v1/me/invoices/${invoiceId}/pdf`, {
+          headers: auth,
+        })
+      ).status,
+    ).toBe(200);
+
+    await pool.query(
+      "update contracts set ended_at=$2::timestamptz where id=$1",
+      [fixture.contractId, "2025-01-30T02:00:00.000Z"],
+    );
+    const expired = await app.request("/api/v1/me/access", { headers: auth });
+    expect(await expired.json()).toMatchObject({
+      landingPath: "/me/finished",
+      access: "finished",
+      invoiceAccess: false,
+      invoiceAccessUntil: null,
+    });
+    expect(
+      (await app.request("/api/v1/me/invoices", { headers: auth })).status,
+    ).toBe(404);
+    expect(
+      (
+        await app.request(`/api/v1/me/invoices/${invoiceId}/pdf`, {
+          headers: auth,
+        })
+      ).status,
+    ).toBe(404);
+
+    await pool.query("update contracts set ended_at=null where id=$1", [
+      fixture.contractId,
+    ]);
+    const missingEndDate = await app.request("/api/v1/me/access", {
+      headers: auth,
+    });
+    expect(await missingEndDate.json()).toMatchObject({
+      landingPath: "/me/finished",
+      invoiceAccess: false,
+    });
+  });
+
+  it("returns no access for an anonymized customer even with a contract row", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    await pool.query("update customers set anonymized_at=now() where id=$1", [
+      fixture.customerId,
+    ]);
+    const response = await app.request("/api/v1/me/access", {
+      headers: { authorization: `Bearer ${fixture.token}` },
+    });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ error: { code: "not_found" } });
+    const welcome = await app.request("/api/v1/me/welcome-seen", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${fixture.token}`,
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(welcome.status).toBe(404);
+  });
+
+  it("retains profile-only compatibility for a legacy customer without a contract", async () => {
+    const fixture = await makeLegacyCustomer();
+    const app = makeApp();
+    const headers = { authorization: `Bearer ${fixture.token}` };
+    const access = await app.request("/api/v1/me/access", { headers });
+    const accessBody = await access.json();
+    expect(customerAccessSchema.parse(accessBody)).toMatchObject({
+      contractStatus: null,
+      landingPath: "/me",
+      access: "none",
+      invoiceAccess: false,
+    });
+    const profile = await app.request("/api/v1/me", { headers });
+    expect(profile.status).toBe(200);
+    expect(await profile.json()).toEqual({
+      customer: {
+        id: fixture.customerId,
+        shopName: expect.stringContaining("legacy"),
+        contactName: "Legacy contact",
+      },
+    });
+    expect((await app.request("/api/v1/me/contract", { headers })).status).toBe(
+      404,
+    );
+    expect((await app.request("/api/v1/me/requests", { headers })).status).toBe(
+      404,
+    );
+  });
+
   it("confirms a live bank payment once and activates period one from Tokyo confirmation date", async () => {
     const fixture = await makeApplication({ price: 5432 });
     const app = makeApp();
@@ -431,14 +765,7 @@ describe("initial invoice approval and customer access", () => {
     const otherContract = await app.request("/api/v1/me/contract", {
       headers: { authorization: `Bearer ${other.token}` },
     });
-    expect(await otherContract.json()).toMatchObject({
-      contract: {
-        id: other.contractId,
-        status: "under_review",
-        plan: null,
-        currentPeriod: null,
-      },
-    });
+    expect(otherContract.status).toBe(404);
     await pool.query(
       "update billing_periods set starts_on='2026-02-01',ends_on='2026-02-28' where contract_id=$1",
       [fixture.contractId],

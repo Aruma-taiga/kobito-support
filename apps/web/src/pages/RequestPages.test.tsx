@@ -119,6 +119,7 @@ function adminSetup(
 
 function customerSetup(path: string, overrides: Record<string, unknown> = {}) {
   const user = {
+    uid: "customer-test",
     email: "customer@example.jp",
     getIdToken: vi.fn(async () => "customer-token"),
   };
