@@ -6,7 +6,7 @@ create extension if not exists pgcrypto;
 
 -- ===== 設定（G-01：サービス名などを1か所で差し替え） =====
 create table settings (
-  key         text primary key,           -- service_name, company_name, invoice_registration_no, bank_account, contact_email (info@singularta.com), konbini_fee_yen(見送り), ...
+  key         text primary key,           -- service_name, company_name, invoice_registration_no, bank_account, contact_email (info@cingulata.jp), konbini_fee_yen(見送り), ...
   value       jsonb not null,
   updated_at  timestamptz not null default now()
 );
