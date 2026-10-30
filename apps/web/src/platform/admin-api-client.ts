@@ -8,6 +8,9 @@ import {
   adminCustomerDetailSchema,
   adminSessionSchema,
   approveApplicationResponseSchema,
+  type ConfirmBankPaymentRequest,
+  confirmBankPaymentRequestSchema,
+  confirmBankPaymentResponseSchema,
   type DeclineApplicationRequest,
   type DeclineApplicationResponse,
   declineApplicationRequestSchema,
@@ -18,6 +21,7 @@ import {
   invoiceDetailSchema,
   invoiceListSchema,
   invoiceReadinessSchema,
+  pendingBankTransfersSchema,
 } from "@kobito/shared";
 
 export interface AdminApiAuthUser {
@@ -201,6 +205,21 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
     },
     getInvoices(): Promise<InvoiceList> {
       return request("/api/v1/admin/invoices", invoiceListSchema);
+    },
+    getPendingBankTransfers() {
+      return request(
+        "/api/v1/admin/bank-transfers/pending",
+        pendingBankTransfersSchema,
+      );
+    },
+    confirmBankPayment(invoiceId: string, value: ConfirmBankPaymentRequest) {
+      const parsed = confirmBankPaymentRequestSchema.safeParse(value);
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      return request(
+        `/api/v1/admin/invoices/${encodeURIComponent(invoiceId)}/confirm-payment`,
+        confirmBankPaymentResponseSchema,
+        { method: "POST", body: JSON.stringify(parsed.data) },
+      );
     },
     getInvoiceReadiness(): Promise<InvoiceReadiness> {
       return request(

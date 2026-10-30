@@ -4,6 +4,77 @@ import { AdminApiError, createAdminApiClient } from "./admin-api-client.js";
 const tokenUser = { getIdToken: vi.fn(async () => "admin-id-token") };
 
 describe("admin API client", () => {
+  it("loads pending bank transfers with the administrator session token", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ items: [] }),
+    );
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher,
+    });
+
+    await expect(client.getPendingBankTransfers()).resolves.toEqual({
+      items: [],
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      new URL("https://api.example.test/api/v1/admin/bank-transfers/pending"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer admin-id-token",
+        }),
+        credentials: "omit",
+      }),
+    );
+  });
+
+  it("posts only a confirmed amount/date and preview acknowledgement", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        invoiceId: "44444444-4444-4444-8444-444444444444",
+        paymentId: "55555555-5555-4555-8555-555555555555",
+        amount: 5500,
+        paidOn: "2026-10-26",
+        contractId: "33333333-3333-4333-8333-333333333333",
+        anchorDate: "2026-10-26",
+        period: {
+          id: "66666666-6666-4666-8666-666666666666",
+          seq: 1,
+          startsOn: "2026-10-26",
+          endsOn: "2026-11-25",
+          priceInclTax: 5500,
+          credits: 3,
+        },
+        preview: true,
+        replayed: false,
+      }),
+    );
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher,
+    });
+
+    await client.confirmBankPayment("44444444-4444-4444-8444-444444444444", {
+      amount: 5500,
+      paidOn: "2026-10-26",
+      previewAcknowledged: true,
+    });
+
+    expect(fetcher).toHaveBeenCalledWith(
+      new URL(
+        "https://api.example.test/api/v1/admin/invoices/44444444-4444-4444-8444-444444444444/confirm-payment",
+      ),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          amount: 5500,
+          paidOn: "2026-10-26",
+          previewAcknowledged: true,
+        }),
+      }),
+    );
+  });
   it("requires the current admin Firebase token before requesting the session", async () => {
     const fetcher = vi.fn<typeof fetch>();
     const client = createAdminApiClient({

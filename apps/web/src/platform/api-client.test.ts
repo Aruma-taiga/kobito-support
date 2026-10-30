@@ -2,6 +2,28 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "./api-client.js";
 
 describe("authenticated web API client", () => {
+  it("loads the contract summary through the authenticated customer API", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ contract: null }),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        getIdToken: vi.fn(async () => "customer-id-token"),
+      }),
+      signOut: vi.fn(async () => undefined),
+      fetcher,
+    });
+    await expect(client.getContract()).resolves.toEqual({ contract: null });
+    expect(fetcher).toHaveBeenCalledWith(
+      new URL("https://api.example.test/api/v1/me/contract"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer customer-id-token",
+        }),
+      }),
+    );
+  });
   it("submits a password-free application with the same idempotency key", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json(

@@ -1,6 +1,7 @@
 import {
   adminApplicationQueueQuerySchema,
   approveApplicationRequestSchema,
+  confirmBankPaymentRequestSchema,
   declineApplicationRequestSchema,
 } from "@kobito/shared";
 import { Hono } from "hono";
@@ -89,6 +90,45 @@ export function createAdminRoutes(dependencies: {
     context.json(
       await dependencies.invoices.listAdmin(context.get("principal")),
     ),
+  );
+  routes.get("/bank-transfers/pending", async (context) =>
+    context.json(
+      await dependencies.invoices.listPendingBankTransfers(
+        context.get("principal"),
+      ),
+    ),
+  );
+  routes.post(
+    "/invoices/:id/confirm-payment",
+    bodyLimit({
+      maxSize: 4 * 1024,
+      onError: (context) =>
+        context.json({ error: { code: "invalid_request" } }, 400),
+    }),
+    async (context) => {
+      const contentType = context.req
+        .header("content-type")
+        ?.split(";", 1)[0]
+        ?.trim()
+        .toLowerCase();
+      if (contentType !== "application/json")
+        throw new ApiError(400, "invalid_request");
+      let raw: unknown;
+      try {
+        raw = await context.req.json();
+      } catch {
+        throw new ApiError(400, "invalid_request");
+      }
+      const body = confirmBankPaymentRequestSchema.safeParse(raw);
+      if (!body.success) throw new ApiError(422, "validation_error");
+      return context.json(
+        await dependencies.invoices.confirmBankPayment(
+          context.get("principal"),
+          context.req.param("id"),
+          body.data,
+        ),
+      );
+    },
   );
   routes.get("/invoices/readiness", async (context) =>
     context.json(

@@ -1,15 +1,22 @@
 import { createHash, randomUUID } from "node:crypto";
 import type {
   ApproveApplicationResponse,
+  ConfirmBankPaymentRequest,
+  ConfirmBankPaymentResponse,
+  CustomerContractResponse,
   InvoiceDetail,
   InvoiceList,
   InvoiceListItem,
   InvoiceReadiness,
+  PendingBankTransfers,
 } from "@kobito/shared";
 import {
   addCalendarDays,
+  confirmBankPaymentResponseSchema,
+  customerContractResponseSchema,
   invoiceDetailSchema,
   invoiceTotals,
+  periodFor,
   planCodes,
 } from "@kobito/shared";
 import type { Pool, PoolClient } from "pg";
@@ -36,6 +43,26 @@ interface InvoiceRow {
   billing_address: string;
   issuer_snapshot: unknown;
   lines: unknown;
+}
+
+interface BankInvoiceRow {
+  id: string;
+  invoice_no: string;
+  contract_id: string;
+  customer_id: string;
+  contract_status: string;
+  anchor_date: string | null;
+  invoice_status: string;
+  payment_method: string;
+  kind: string;
+  issued_on: string;
+  due_on: string | null;
+  total_incl_tax: number;
+  issuer_snapshot: unknown;
+  shop_name: string;
+  billing_name: string;
+  email: string;
+  line_user_id: string | null;
 }
 
 type IssuerSnapshot = InvoiceDetail["issuer"];
@@ -107,6 +134,357 @@ export class InvoiceRepository implements InvoiceModule {
     private readonly renderer: InvoicePdfRenderer,
     private readonly clock: () => Date = () => new Date(),
   ) {}
+
+  async listPendingBankTransfers(
+    principal: Principal,
+  ): Promise<PendingBankTransfers> {
+    this.assertAdmin(principal);
+    const rows = await this.pool.query<
+      InvoiceRow & {
+        contract_id: string;
+        customer_id: string;
+        shop_name: string;
+        customer_billing_name: string;
+      }
+    >(
+      `select i.id, i.invoice_no, i.status, i.payment_method, i.issued_on::text as issued_on,
+              i.due_on::text as due_on, i.total_incl_tax, i.total_excl_tax, i.tax_amount,
+              i.billing_name, coalesce(i.billing_address_snapshot,cst.billing_address) as billing_address,
+              i.issuer_snapshot, coalesce(l.lines,'[]'::jsonb) as lines, c.id as contract_id, cst.id as customer_id,
+              cst.shop_name, cst.billing_name as customer_billing_name
+         from invoices i join contracts c on c.id=i.contract_id join customers cst on cst.id=c.customer_id
+        left join lateral (
+          select jsonb_agg(jsonb_build_object('description',line.description,'quantity',line.quantity,
+            'unit_price_incl_tax',line.unit_price_incl_tax,'amount_incl_tax',line.amount_incl_tax,'tax_rate',line.tax_rate)
+            order by line.id) as lines from invoice_lines line where line.invoice_id=i.id
+        ) l on true
+        where i.kind='initial' and i.payment_method='bank_transfer' and i.status in ('issued','overdue')
+          and c.status='awaiting_payment'
+        order by i.due_on asc nulls last, i.issued_on asc, i.invoice_no asc limit 100`,
+    );
+    return {
+      items: rows.rows.map((row) => ({
+        invoice: this.listItem(this.toDetail(row)),
+        customer: {
+          id: row.customer_id,
+          shopName: row.shop_name,
+          billingName: row.customer_billing_name,
+        },
+        contractId: row.contract_id,
+      })),
+    };
+  }
+
+  confirmBankPayment(
+    principal: Principal,
+    invoiceId: string,
+    request: ConfirmBankPaymentRequest,
+  ): Promise<ConfirmBankPaymentResponse> {
+    this.assertAdmin(principal);
+    return withAdminAudit(
+      this.pool,
+      principal,
+      {
+        action: "invoice.bank_payment.confirmed",
+        targetType: "invoice",
+        targetId: invoiceId,
+        detail: { toStatus: "paid" },
+      },
+      (client) =>
+        this.confirmBankPaymentInTransaction(
+          client,
+          principal,
+          invoiceId,
+          request,
+        ),
+    );
+  }
+
+  private async confirmBankPaymentInTransaction(
+    client: PoolClient,
+    principal: Principal,
+    invoiceId: string,
+    request: ConfirmBankPaymentRequest,
+  ): Promise<ConfirmBankPaymentResponse> {
+    await client.query("set local lock_timeout = '5s'");
+    await client.query("set local statement_timeout = '30s'");
+    const reference = await client.query<{ contract_id: string }>(
+      "select contract_id from invoices where id=$1 and kind='initial'",
+      [invoiceId],
+    );
+    const contractId = reference.rows[0]?.contract_id;
+    if (!contractId) throw new ApiError(404, "not_found");
+    const contractResult = await client.query<{
+      id: string;
+      customer_id: string;
+      status: string;
+      anchor_date: string | null;
+    }>(
+      "select id, customer_id, status, anchor_date::text as anchor_date from contracts where id=$1 for update",
+      [contractId],
+    );
+    const contract = contractResult.rows[0];
+    if (!contract) throw new ApiError(404, "not_found");
+    const result = await client.query<BankInvoiceRow>(
+      `select i.id, i.invoice_no, i.contract_id, c.customer_id, c.status as contract_status,
+              c.anchor_date::text as anchor_date, i.status as invoice_status, i.payment_method, i.kind,
+              i.issued_on::text as issued_on, i.due_on::text as due_on, i.total_incl_tax,
+              i.issuer_snapshot, customer.shop_name, customer.billing_name, customer.email, customer.line_user_id
+         from invoices i join contracts c on c.id=i.contract_id join customers customer on customer.id=c.customer_id
+        where i.id=$1 for update of i`,
+      [invoiceId],
+    );
+    const invoice = result.rows[0];
+    if (!invoice) throw new ApiError(404, "not_found");
+    const snapshot = safeObject(invoice.issuer_snapshot);
+    const preview = snapshot.preview === true;
+    if (
+      preview &&
+      (!request.previewAcknowledged ||
+        !isLocalInvoicePreviewEnvironment(this.config))
+    )
+      throw new ApiError(409, "application_conflict");
+
+    if (
+      invoice.kind !== "initial" ||
+      invoice.payment_method !== "bank_transfer"
+    )
+      throw new ApiError(409, "application_conflict");
+    const existingPayment = await client.query<{
+      id: string;
+      amount: number;
+      paid_on: string;
+      method: string;
+      confirmed_via: string;
+    }>(
+      "select id, amount, paid_on::text as paid_on, method, confirmed_via from payments where invoice_id=$1 order by created_at",
+      [invoiceId],
+    );
+    if (invoice.invoice_status === "paid") {
+      const payment = existingPayment.rows[0];
+      const periodResult = await client.query<{
+        id: string;
+        seq: number;
+        starts_on: string;
+        ends_on: string;
+        price_incl_tax: number;
+        credits: number;
+      }>(
+        "select id,seq,starts_on::text as starts_on,ends_on::text as ends_on,price_incl_tax,credits from billing_periods where contract_id=$1 and seq=1",
+        [contractId],
+      );
+      const period = periodResult.rows[0];
+      if (
+        existingPayment.rows.length !== 1 ||
+        !payment ||
+        payment.method !== "bank_transfer" ||
+        payment.confirmed_via !== "manual" ||
+        payment.amount !== request.amount ||
+        payment.paid_on !== request.paidOn ||
+        !period ||
+        !contract.anchor_date
+      )
+        throw new ApiError(409, "application_conflict");
+      return confirmBankPaymentResponseSchema.parse({
+        invoiceId,
+        paymentId: payment.id,
+        amount: payment.amount,
+        paidOn: payment.paid_on,
+        contractId,
+        anchorDate: contract.anchor_date,
+        period: {
+          id: period.id,
+          seq: 1,
+          startsOn: period.starts_on,
+          endsOn: period.ends_on,
+          priceInclTax: period.price_incl_tax,
+          credits: period.credits,
+        },
+        preview,
+        replayed: true,
+      });
+    }
+    if (
+      !new Set(["issued", "overdue"]).has(invoice.invoice_status) ||
+      invoice.contract_status !== "awaiting_payment"
+    )
+      throw new ApiError(409, "application_conflict");
+    if (request.amount !== invoice.total_incl_tax)
+      throw new ApiError(422, "validation_error");
+    const today = todayInTokyo(this.clock());
+    if (
+      !invoice.due_on ||
+      request.paidOn < invoice.issued_on ||
+      request.paidOn > invoice.due_on ||
+      request.paidOn > today
+    )
+      throw new ApiError(422, "validation_error");
+    if (existingPayment.rows.length)
+      throw new ApiError(409, "application_conflict");
+    if (contract.anchor_date) throw new ApiError(409, "application_conflict");
+
+    const accepted = safeObject(snapshot.acceptedPlan);
+    const planId =
+      typeof accepted.planId === "string" &&
+      /^[0-9a-f-]{36}$/i.test(accepted.planId)
+        ? accepted.planId
+        : undefined;
+    const planName =
+      typeof accepted.planName === "string" ? accepted.planName.trim() : "";
+    const price = accepted.monthlyPriceInclTax;
+    const credits = accepted.credits;
+    const planCode = accepted.planCode;
+    if (
+      !planId ||
+      !planName ||
+      typeof planCode !== "string" ||
+      !planCodes.includes(planCode as (typeof planCodes)[number]) ||
+      !Number.isSafeInteger(price) ||
+      price !== invoice.total_incl_tax ||
+      !Number.isSafeInteger(credits) ||
+      (credits as number) <= 0
+    )
+      throw new ApiError(409, "application_conflict");
+    const period = periodFor(today, 0);
+    const periodId = randomUUID();
+    const paymentId = randomUUID();
+    await client.query(
+      `insert into billing_periods (id,contract_id,seq,starts_on,ends_on,plan_id,price_incl_tax,credits)
+       values ($1,$2,1,$3,$4,$5,$6,$7)`,
+      [
+        periodId,
+        contractId,
+        period.startsOn,
+        period.endsOn,
+        planId,
+        price,
+        credits,
+      ],
+    );
+    await client.query(
+      `insert into payments (id,invoice_id,method,amount,paid_on,confirmed_via,confirmed_by)
+       values ($1,$2,'bank_transfer',$3,$4,'manual',$5)`,
+      [
+        paymentId,
+        invoiceId,
+        request.amount,
+        request.paidOn,
+        principal.authUserId,
+      ],
+    );
+    await client.query(
+      "update invoices set status='paid', period_id=$2 where id=$1",
+      [invoiceId, periodId],
+    );
+    await client.query(
+      "update contracts set status='active',anchor_date=$2 where id=$1",
+      [contractId, today],
+    );
+    await client.query(
+      `insert into credit_entries (contract_id,period_id,kind,amount,invoice_id,note)
+       values ($1,$2,'grant',$3,$4,'初月請求の入金確認')`,
+      [contractId, periodId, credits, invoiceId],
+    );
+    if (!preview) {
+      for (const [kind, targetId] of [
+        ["NT-02b", contractId],
+        ["NT-04", periodId],
+      ] as const) {
+        const payload = JSON.stringify({ contractId, periodId, invoiceId });
+        await client.query(
+          `insert into notifications (customer_id,kind,channel,dedupe_key,scheduled_at,payload)
+           values ($1,$2,'email',$3,now(),$4::jsonb) on conflict (dedupe_key) do nothing`,
+          [invoice.customer_id, kind, `${kind}:${targetId}:email`, payload],
+        );
+        if (invoice.line_user_id)
+          await client.query(
+            `insert into notifications (customer_id,kind,channel,dedupe_key,scheduled_at,payload)
+           values ($1,$2,'line',$3,now(),$4::jsonb) on conflict (dedupe_key) do nothing`,
+            [invoice.customer_id, kind, `${kind}:${targetId}:line`, payload],
+          );
+      }
+    }
+    return confirmBankPaymentResponseSchema.parse({
+      invoiceId,
+      paymentId,
+      amount: request.amount,
+      paidOn: request.paidOn,
+      contractId,
+      anchorDate: today,
+      period: { id: periodId, seq: 1, ...period, priceInclTax: price, credits },
+      preview,
+      replayed: false,
+    });
+  }
+
+  async getCustomerContract(
+    scope: CustomerScope,
+  ): Promise<CustomerContractResponse> {
+    const result = await this.pool.query<{
+      id: string;
+      status: string;
+      anchor_date: string | null;
+      preview: boolean;
+      accepted_plan: unknown;
+      period_id: string | null;
+      seq: number | null;
+      starts_on: string | null;
+      ends_on: string | null;
+      price_incl_tax: number | null;
+      credits: number | null;
+      balance: number | null;
+    }>(
+      `select c.id,c.status,c.anchor_date::text as anchor_date, coalesce((i.issuer_snapshot->>'preview')::boolean,false) as preview,
+              i.issuer_snapshot->'acceptedPlan' as accepted_plan, bp.id as period_id,bp.seq,bp.starts_on::text as starts_on,
+              bp.ends_on::text as ends_on,bp.price_incl_tax,bp.credits,coalesce(cb.balance,0)::int as balance
+         from contracts c
+         left join lateral (select invoice.* from invoices invoice where invoice.contract_id=c.id and invoice.kind='initial' order by invoice.created_at desc limit 1) i on true
+         left join lateral (select period.* from billing_periods period where period.contract_id=c.id and c.status in ('active','cancel_scheduled') and period.starts_on <= $2::date and period.ends_on >= $2::date order by period.seq desc limit 1) bp on true
+         left join credit_balances cb on cb.period_id=bp.id and cb.contract_id=c.id
+        where c.customer_id=$1 order by c.created_at desc,c.id desc limit 1`,
+      [scope.customerId, todayInTokyo(this.clock())],
+    );
+    const row = result.rows[0];
+    if (!row) return customerContractResponseSchema.parse({ contract: null });
+    const accepted = safeObject(row.accepted_plan);
+    const plan =
+      typeof accepted.planName === "string" &&
+      Number.isSafeInteger(accepted.monthlyPriceInclTax) &&
+      Number.isSafeInteger(accepted.credits)
+        ? {
+            name: accepted.planName,
+            priceInclTax: accepted.monthlyPriceInclTax as number,
+            credits: accepted.credits as number,
+          }
+        : null;
+    const currentPeriod =
+      row.period_id &&
+      row.seq &&
+      row.starts_on &&
+      row.ends_on &&
+      row.price_incl_tax !== null &&
+      row.credits !== null
+        ? {
+            id: row.period_id,
+            seq: row.seq,
+            startsOn: row.starts_on,
+            endsOn: row.ends_on,
+            priceInclTax: row.price_incl_tax,
+            credits: row.credits,
+            balance: row.balance ?? 0,
+          }
+        : null;
+    return customerContractResponseSchema.parse({
+      contract: {
+        id: row.id,
+        status: row.status,
+        anchorDate: row.anchor_date,
+        preview: row.preview,
+        plan,
+        currentPeriod,
+      },
+    });
+  }
 
   approveApplication(
     principal: Principal,

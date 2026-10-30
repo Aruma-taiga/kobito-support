@@ -62,3 +62,77 @@ describe("expired customer session recovery", () => {
     ).toBeTruthy();
   });
 });
+
+describe("customer contract summary", () => {
+  it("shows the agreed plan and available period details from the contract API", async () => {
+    const currentUser = {
+      email: "customer@example.jp",
+      getIdToken: vi.fn(async () => "customer-token"),
+    };
+    const authClient: AuthClient = {
+      currentUser: () => currentUser,
+      subscribe: (listener) => {
+        queueMicrotask(() => listener(currentUser));
+        return () => undefined;
+      },
+      signIn: async () => undefined,
+      signUp: async () => ({ email: null, getIdToken: async () => "token" }),
+      signOut: async () => undefined,
+    };
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/me")) {
+        return Response.json({
+          customer: {
+            id: "11111111-1111-4111-8111-111111111111",
+            shopName: "喫茶ひだまり",
+            contactName: "山田花子",
+          },
+        });
+      }
+      return Response.json({
+        contract: {
+          id: "22222222-2222-4222-8222-222222222222",
+          status: "active",
+          anchorDate: "2026-10-26",
+          preview: false,
+          plan: { name: "ライト", priceInclTax: 5500, credits: 1 },
+          currentPeriod: {
+            id: "33333333-3333-4333-8333-333333333333",
+            seq: 1,
+            startsOn: "2026-10-26",
+            endsOn: "2026-11-25",
+            priceInclTax: 5500,
+            credits: 1,
+            balance: 1,
+          },
+        },
+      });
+    });
+    const apiClient = createApiClient({
+      baseUrl: "http://127.0.0.1:3000",
+      getCurrentUser: () => currentUser,
+      signOut: vi.fn(async () => undefined),
+      fetcher,
+    });
+    render(
+      <AuthProvider client={authClient}>
+        <MemoryRouter initialEntries={["/me"]}>
+          <MePage apiClient={apiClient} />
+        </MemoryRouter>
+      </AuthProvider>,
+    );
+    expect(
+      await screen.findByText(/ライト・5,500円（税込）・1クレジット/),
+    ).toBeTruthy();
+    expect(screen.getByText("2026-10-26〜2026-11-25")).toBeTruthy();
+    expect(fetcher).toHaveBeenCalledWith(
+      new URL("http://127.0.0.1:3000/api/v1/me/contract"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer customer-token",
+        }),
+      }),
+    );
+  });
+});

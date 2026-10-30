@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { customerScopeFor } from "../../platform/scope.js";
-import type { ApiVariables } from "../../platform/types.js";
+import { ApiError, type ApiVariables } from "../../platform/types.js";
 import type { InvoiceModule } from "./contracts.js";
 
 export function createInvoiceCustomerRoutes(dependencies: {
@@ -10,6 +10,13 @@ export function createInvoiceCustomerRoutes(dependencies: {
   routes.get("/me/invoices", async (context) => {
     const scope = customerScopeFor(context.get("principal"));
     return context.json(await dependencies.invoices.listCustomer(scope));
+  });
+  routes.get("/me/contract", async (context) => {
+    if ([...new URL(context.req.url).searchParams.keys()].length) {
+      throw new ApiError(422, "validation_error");
+    }
+    const scope = customerScopeFor(context.get("principal"));
+    return context.json(await dependencies.invoices.getCustomerContract(scope));
   });
   routes.get("/me/invoices/:id", async (context) => {
     const scope = customerScopeFor(context.get("principal"));

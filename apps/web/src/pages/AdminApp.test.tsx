@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -98,6 +99,8 @@ function setup(
     getInvoice?: ReturnType<typeof vi.fn>;
     getInvoicePdf?: ReturnType<typeof vi.fn>;
     getInvoiceReadiness?: ReturnType<typeof vi.fn>;
+    getPendingBankTransfers?: ReturnType<typeof vi.fn>;
+    confirmBankPayment?: ReturnType<typeof vi.fn>;
     completeSecondFactor?: ReturnType<typeof vi.fn>;
     signOut?: ReturnType<typeof vi.fn>;
   } = {},
@@ -218,6 +221,28 @@ function setup(
         mode: "preview" as const,
         reason: "preview_only" as const,
       })),
+    getPendingBankTransfers:
+      options.getPendingBankTransfers ?? vi.fn(async () => ({ items: [] })),
+    confirmBankPayment:
+      options.confirmBankPayment ??
+      vi.fn(async () => ({
+        invoiceId,
+        paymentId: "77777777-7777-4777-8777-777777777777",
+        amount: 5500,
+        paidOn: "2026-10-26",
+        contractId,
+        anchorDate: "2026-10-26",
+        period: {
+          id: "88888888-8888-4888-8888-888888888888",
+          seq: 1,
+          startsOn: "2026-10-26",
+          endsOn: "2026-11-25",
+          priceInclTax: 5500,
+          credits: 1,
+        },
+        preview: true,
+        replayed: false,
+      })),
   };
   render(
     <MemoryRouter initialEntries={[options.initialPath ?? "/admin/login"]}>
@@ -279,6 +304,90 @@ describe("admin MFA and review UI", () => {
     );
     expect(apiClient.getSession).toHaveBeenCalledOnce();
     expect(apiClient.getApplications).toHaveBeenCalledOnce();
+  });
+
+  it("requires input, preview acknowledgement, a review step, and a final confirm", async () => {
+    const getPendingBankTransfers = vi.fn(async () => ({
+      items: [
+        {
+          invoice,
+          customer: {
+            id: customerId,
+            shopName: "喫茶ひだまり",
+            billingName: "山田太郎",
+          },
+          contractId,
+        },
+      ],
+    }));
+    const confirmBankPayment = vi.fn(async () => ({
+      invoiceId,
+      paymentId: "77777777-7777-4777-8777-777777777777",
+      amount: 5500,
+      paidOn: "2026-10-26",
+      contractId,
+      anchorDate: "2026-10-26",
+      period: {
+        id: "88888888-8888-4888-8888-888888888888",
+        seq: 1 as const,
+        startsOn: "2026-10-26",
+        endsOn: "2026-11-25",
+        priceInclTax: 5500,
+        credits: 1,
+      },
+      preview: true,
+      replayed: false,
+    }));
+    setup({
+      initialPath: "/admin/bank-transfers",
+      signedIn: true,
+      getPendingBankTransfers,
+      confirmBankPayment,
+    });
+
+    expect(await screen.findByText("喫茶ひだまり")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.bankTransferConfirm }),
+    );
+    expect(
+      screen.getByLabelText(webMessages.bankTransferPreviewAck),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: webMessages.bankTransferReview })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    fireEvent.change(screen.getByLabelText(webMessages.bankTransferAmount), {
+      target: { value: "5500" },
+    });
+    fireEvent.change(screen.getByLabelText(webMessages.bankTransferDate), {
+      target: { value: "2026-10-26" },
+    });
+    fireEvent.click(screen.getByLabelText(webMessages.bankTransferPreviewAck));
+    fireEvent.click(
+      screen.getByRole("button", { name: webMessages.bankTransferReview }),
+    );
+    expect(confirmBankPayment).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/喫茶ひだまり.*INV-2026-001.*5,500円.*2026-10-26/),
+    ).toBeTruthy();
+    fireEvent.click(
+      within(
+        screen.getByRole("region", {
+          name: webMessages.bankTransferFinalTitle,
+        }),
+      ).getByRole("button", { name: webMessages.bankTransferConfirm }),
+    );
+    await waitFor(() =>
+      expect(confirmBankPayment).toHaveBeenCalledWith(invoiceId, {
+        amount: 5500,
+        paidOn: "2026-10-26",
+        previewAcknowledged: true,
+      }),
+    );
+    expect(
+      await screen.findByText(webMessages.bankTransferSuccessPreview),
+    ).toBeTruthy();
   });
 
   it("shows a safe error after a wrong MFA code and never opens the queue", async () => {

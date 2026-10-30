@@ -15,6 +15,7 @@ import {
 } from "../auth/admin-session.js";
 import { AdminAuthClientError } from "../auth/firebase-admin-client.js";
 import type { AdminApiClient } from "../platform/admin-api-client.js";
+import { AdminBankTransferPage } from "./BankTransferPage.js";
 import {
   AdminInvoiceDetailPage,
   AdminInvoiceListPage,
@@ -993,6 +994,10 @@ export function AdminApp({
           <Route
             path="invoices"
             element={<AdminInvoiceListPage apiClient={apiClient} />}
+          />
+          <Route
+            path="bank-transfers"
+            element={<AdminBankTransferPage apiClient={apiClient} />}
           />
           <Route
             path="invoices/:id"
