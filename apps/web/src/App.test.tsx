@@ -707,7 +707,7 @@ describe("application request routes", () => {
       }),
     ).toBeTruthy();
     expect(window.location.pathname).toBe("/me/invoices");
-    expect(apiClient.getInvoices).toHaveBeenCalledOnce();
+    await waitFor(() => expect(apiClient.getInvoices).toHaveBeenCalledOnce());
     expect(apiClient.getMe).not.toHaveBeenCalled();
     expect(apiClient.getContract).not.toHaveBeenCalled();
     expect(apiClient.getCustomerRequests).not.toHaveBeenCalled();
