@@ -10,6 +10,10 @@
     "lint": "biome check .",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
+    "test:db": "pnpm --filter @kobito/db test:db",
+    "db:migrate": "pnpm --filter @kobito/db migrate",
+    "db:seed": "pnpm --filter @kobito/db seed",
+    "db:reset": "pnpm --filter @kobito/db reset",
     "check": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "devDependencies": {
