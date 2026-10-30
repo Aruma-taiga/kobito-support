@@ -20,6 +20,7 @@ import {
   AdminInvoiceDetailPage,
   AdminInvoiceListPage,
 } from "./InvoicePages.js";
+import { AdminIssuerSettingsPage } from "./IssuerSettingsPage.js";
 import {
   AdminRequestCreatePage,
   AdminRequestDetailPage,
@@ -391,6 +392,9 @@ function AdminQueuePage({ apiClient }: { apiClient: AdminApiClient }) {
     <main className="page-main">
       <section className="card admin-card" aria-labelledby="admin-queue-title">
         <h1 id="admin-queue-title">{webMessages.adminQueueTitle}</h1>
+        <nav className="admin-settings-nav" aria-label="管理設定">
+          <Link to="/admin/settings">{webMessages.adminIssuerSettingsNav}</Link>
+        </nav>
         <form className="admin-search" onSubmit={search}>
           <label className="field-label" htmlFor="admin-queue-search">
             {webMessages.adminSearchLabel}
@@ -1026,6 +1030,10 @@ export function AdminApp({
           <Route
             path="bank-transfers"
             element={<AdminBankTransferPage apiClient={apiClient} />}
+          />
+          <Route
+            path="settings"
+            element={<AdminIssuerSettingsPage apiClient={apiClient} />}
           />
           <Route
             path="invoices/:id"

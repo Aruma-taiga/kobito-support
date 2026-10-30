@@ -100,6 +100,8 @@ function setup(
     getInvoice?: ReturnType<typeof vi.fn>;
     getInvoicePdf?: ReturnType<typeof vi.fn>;
     getInvoiceReadiness?: ReturnType<typeof vi.fn>;
+    getIssuerSettings?: ReturnType<typeof vi.fn>;
+    updateIssuerSettings?: ReturnType<typeof vi.fn>;
     getPendingBankTransfers?: ReturnType<typeof vi.fn>;
     confirmBankPayment?: ReturnType<typeof vi.fn>;
     getRequestContracts?: ReturnType<typeof vi.fn>;
@@ -108,6 +110,7 @@ function setup(
     createRequest?: ReturnType<typeof vi.fn>;
     sendEstimate?: ReturnType<typeof vi.fn>;
     completeSecondFactor?: ReturnType<typeof vi.fn>;
+    startSecondFactor?: ReturnType<typeof vi.fn>;
     signOut?: ReturnType<typeof vi.fn>;
   } = {},
 ) {
@@ -140,7 +143,8 @@ function setup(
       }
       return result;
     }),
-    startSecondFactor: vi.fn(async () => undefined),
+    startSecondFactor:
+      options.startSecondFactor ?? vi.fn(async () => undefined),
     completeSecondFactor:
       options.completeSecondFactor ??
       vi.fn(async () => {
@@ -227,6 +231,33 @@ function setup(
         mode: "preview" as const,
         reason: "preview_only" as const,
       })),
+    getIssuerSettings:
+      options.getIssuerSettings ??
+      vi.fn(async () => ({
+        settings: {
+          serviceName: "コビトサポート",
+          companyName: "",
+          companyAddress: "",
+          invoiceRegistrationNo: null,
+          invoicePrefix: "INV",
+          bankAccount: {
+            bankName: "",
+            branchName: "",
+            accountType: "",
+            accountNumber: "",
+            accountHolder: "",
+          },
+        },
+        revision: "a".repeat(64),
+        issuanceReady: false,
+      })),
+    updateIssuerSettings:
+      options.updateIssuerSettings ??
+      vi.fn(async (_expectedRevision, settings) => ({
+        settings,
+        revision: "b".repeat(64),
+        issuanceReady: false,
+      })),
     getPendingBankTransfers:
       options.getPendingBankTransfers ?? vi.fn(async () => ({ items: [] })),
     confirmBankPayment:
@@ -287,15 +318,13 @@ async function fillLogin() {
 }
 
 async function finishMfa() {
-  fireEvent.change(
-    await screen.findByLabelText(webMessages.adminMfaTotpCodeLabel),
-    {
-      target: { value: "123456" },
-    },
-  );
-  fireEvent.click(
-    screen.getByRole("button", { name: webMessages.adminMfaCodeSubmit }),
-  );
+  const input = await screen.findByLabelText(webMessages.adminMfaTotpCodeLabel);
+  const submit = screen.getByRole("button", {
+    name: webMessages.adminMfaCodeSubmit,
+  });
+  await waitFor(() => expect(submit.hasAttribute("disabled")).toBe(false));
+  fireEvent.change(input, { target: { value: "123456" } });
+  fireEvent.click(submit);
 }
 
 describe("admin MFA and review UI", () => {
@@ -320,6 +349,34 @@ describe("admin MFA and review UI", () => {
     );
     expect(apiClient.getSession).toHaveBeenCalledOnce();
     expect(apiClient.getApplications).toHaveBeenCalledOnce();
+  });
+
+  it("waits for the MFA challenge to start before enabling code submission", async () => {
+    let resolveChallenge!: () => void;
+    const startSecondFactor = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveChallenge = resolve;
+        }),
+    );
+    const completeSecondFactor = vi.fn(async () => undefined);
+    setup({ startSecondFactor, completeSecondFactor });
+    await fillLogin();
+    await screen.findByRole("heading", {
+      name: webMessages.adminMfaChallengeTitle,
+    });
+    await waitFor(() => expect(startSecondFactor).toHaveBeenCalledOnce());
+    expect(
+      screen
+        .getByRole("button", { name: webMessages.adminMfaCodeSubmit })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(completeSecondFactor).not.toHaveBeenCalled();
+
+    const finishing = finishMfa();
+    await act(async () => resolveChallenge());
+    await finishing;
+    expect(completeSecondFactor).toHaveBeenCalledWith("totp-1", "123456");
   });
 
   it("requires input, preview acknowledgement, a review step, and a final confirm", async () => {
@@ -413,15 +470,7 @@ describe("admin MFA and review UI", () => {
       }),
     });
     await fillLogin();
-    fireEvent.change(
-      await screen.findByLabelText(webMessages.adminMfaTotpCodeLabel),
-      {
-        target: { value: "123456" },
-      },
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: webMessages.adminMfaCodeSubmit }),
-    );
+    await finishMfa();
     expect((await screen.findByRole("alert")).textContent).toContain(
       webMessages.adminMfaInvalidCode,
     );
@@ -843,6 +892,133 @@ describe("admin MFA and review UI", () => {
     expect(await screen.findByText(queueItem.shopName)).toBeTruthy();
     expect(apiClient.getSession).toHaveBeenCalledOnce();
     expect(apiClient.getApplications).toHaveBeenCalledOnce();
+  });
+
+  it("lets an MFA-authorized admin edit issuer settings and explains readiness and invoice snapshots", async () => {
+    const { apiClient } = setup({
+      initialPath: "/admin/settings",
+      signedIn: true,
+    });
+    expect(
+      await screen.findByRole("heading", { name: "発行者・振込先設定" }),
+    ).toBeTruthy();
+    expect(
+      await screen.findByText(webMessages.adminIssuerSettingsNotReady),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "変更後に発行する請求書へ反映されます。発行済み請求書の内容は変わりません。",
+      ),
+    ).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("会社名"), {
+      target: { value: "合同会社ひだまり" },
+    });
+    fireEvent.change(screen.getByLabelText("会社住所"), {
+      target: { value: "東京都杉並区1-2-3" },
+    });
+    fireEvent.change(screen.getByLabelText("銀行名"), {
+      target: { value: "みずほ銀行" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "設定を保存" }));
+    await waitFor(() =>
+      expect(apiClient.updateIssuerSettings).toHaveBeenCalledWith(
+        "a".repeat(64),
+        expect.objectContaining({
+          companyName: "合同会社ひだまり",
+          bankAccount: expect.objectContaining({ bankName: "みずほ銀行" }),
+        }),
+      ),
+    );
+  });
+
+  it("surfaces stale settings and offers an explicit reload without overwriting", async () => {
+    type SettingsResponse = Awaited<
+      ReturnType<AdminApiClient["getIssuerSettings"]>
+    >;
+    let resolveSettings!: (response: SettingsResponse) => void;
+    const getIssuerSettings = vi
+      .fn<() => Promise<SettingsResponse>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<SettingsResponse>((resolve) => {
+            resolveSettings = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        settings: {
+          serviceName: "コビトサポート",
+          companyName: "",
+          companyAddress: "",
+          invoiceRegistrationNo: null,
+          invoicePrefix: "INV",
+          bankAccount: {
+            bankName: "",
+            branchName: "",
+            accountType: "",
+            accountNumber: "",
+            accountHolder: "",
+          },
+        },
+        revision: "a".repeat(64),
+        issuanceReady: false,
+      });
+    const updateIssuerSettings = vi.fn(async () => {
+      throw new AdminApiError("issuer_settings_conflict");
+    });
+    const { apiClient } = setup({
+      initialPath: "/admin/settings",
+      signedIn: true,
+      getIssuerSettings,
+      updateIssuerSettings,
+    });
+    await screen.findByRole("heading", { name: "発行者・振込先設定" });
+    expect(
+      screen.getByText(webMessages.adminIssuerSettingsLoading),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "設定を保存" })).toBeNull();
+    await waitFor(() => expect(getIssuerSettings).toHaveBeenCalledOnce());
+    await act(async () => {
+      resolveSettings({
+        settings: {
+          serviceName: "コビトサポート",
+          companyName: "",
+          companyAddress: "",
+          invoiceRegistrationNo: null,
+          invoicePrefix: "INV",
+          bankAccount: {
+            bankName: "",
+            branchName: "",
+            accountType: "",
+            accountNumber: "",
+            accountHolder: "",
+          },
+        },
+        revision: "a".repeat(64),
+        issuanceReady: false,
+      });
+    });
+    fireEvent.change(await screen.findByLabelText("会社名"), {
+      target: { value: "ローカル編集" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "設定を保存" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "別の管理者が設定を更新しました。最新の設定を読み込み直してください。",
+    );
+    expect(
+      screen.getByRole("button", { name: "最新の設定を読み込む" }),
+    ).toBeTruthy();
+    expect((screen.getByLabelText("会社名") as HTMLInputElement).value).toBe(
+      "ローカル編集",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "最新の設定を読み込む" }),
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText("会社名") as HTMLInputElement).value).toBe(
+        "",
+      ),
+    );
+    expect(apiClient.getIssuerSettings).toHaveBeenCalledTimes(2);
   });
 
   it("rechecks the server session on a refreshed protected route before loading the queue", async () => {

@@ -30,7 +30,8 @@ export class ApiError extends Error {
       | "invoice_unavailable"
       | "request_conflict"
       | "estimate_conflict"
-      | "insufficient_credits",
+      | "insufficient_credits"
+      | "settings_revision_conflict",
   ) {
     super(code);
   }

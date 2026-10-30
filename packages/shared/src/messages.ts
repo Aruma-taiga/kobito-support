@@ -329,6 +329,37 @@ export const webMessages = {
   adminDeclineCancel: "戻る",
   adminDeclineWorking: "更新しています…",
   adminLogout: "ログアウト",
+  adminIssuerSettingsNav: "発行者・振込先設定",
+  adminIssuerSettingsTitle: "発行者・振込先設定",
+  adminIssuerSettingsLoading: "発行者・振込先設定を読み込んでいます。",
+  adminIssuerSettingsLoadError:
+    "設定を読み込めませんでした。再読み込みしてください。",
+  adminIssuerSettingsSave: "設定を保存",
+  adminIssuerSettingsSaving: "設定を保存しています…",
+  adminIssuerSettingsSaved: "設定を保存しました。",
+  adminIssuerSettingsSaveError:
+    "設定を保存できませんでした。入力内容と接続を確認して再試行してください。",
+  adminIssuerSettingsConflict:
+    "別の管理者が設定を更新しました。最新の設定を読み込み直してください。",
+  adminIssuerSettingsReload: "最新の設定を読み込む",
+  adminIssuerSettingsReady:
+    "発行者情報は入力済みです。本番の請求書発行には文書保管・法務文書の準備も必要です。",
+  adminIssuerSettingsNotReady: "発行者情報に未入力の項目があります。",
+  adminIssuerSettingsSnapshot:
+    "変更後に発行する請求書へ反映されます。発行済み請求書の内容は変わりません。",
+  adminIssuerSettingsUnsaved:
+    "未保存の変更があります。入力状況の表示は保存済み設定に基づきます。",
+  adminIssuerSettingsServiceName: "サービス名",
+  adminIssuerSettingsCompanyName: "会社名",
+  adminIssuerSettingsCompanyAddress: "会社住所",
+  adminIssuerSettingsRegistration: "インボイス登録番号",
+  adminIssuerSettingsInvoicePrefix: "請求書番号の接頭辞",
+  adminIssuerSettingsBankName: "銀行名",
+  adminIssuerSettingsBranchName: "支店名",
+  adminIssuerSettingsAccountType: "口座種別",
+  adminIssuerSettingsAccountNumber: "口座番号",
+  adminIssuerSettingsAccountHolder: "口座名義",
+  issuerSettingsControlCharacterError: "制御文字は使用できません。",
   adminQueuePlanSummaryFixed:
     "{name}：月額{price}円（税込）、毎月{credits}クレジット",
   adminConsentGiven: "同意あり",

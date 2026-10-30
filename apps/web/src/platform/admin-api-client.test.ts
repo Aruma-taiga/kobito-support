@@ -3,7 +3,73 @@ import { AdminApiError, createAdminApiClient } from "./admin-api-client.js";
 
 const tokenUser = { getIdToken: vi.fn(async () => "admin-id-token") };
 
+const issuerSettings = {
+  serviceName: "コビトサポート",
+  companyName: "合同会社ひだまり",
+  companyAddress: "東京都杉並区1-2-3",
+  invoiceRegistrationNo: null,
+  invoicePrefix: "KS",
+  bankAccount: {
+    bankName: "みずほ銀行",
+    branchName: "荻窪",
+    accountType: "普通",
+    accountNumber: "1234567",
+    accountHolder: "ド）ヒダマリ",
+  },
+};
+
 describe("admin API client", () => {
+  it("loads and updates issuer settings with authenticated revision protection", async () => {
+    const payload = {
+      settings: issuerSettings,
+      revision: "a".repeat(64),
+      issuanceReady: true,
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(payload))
+      .mockResolvedValueOnce(
+        Response.json({ ...payload, revision: "b".repeat(64) }),
+      );
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher,
+    });
+    await expect(client.getIssuerSettings()).resolves.toEqual(payload);
+    await expect(
+      client.updateIssuerSettings(payload.revision, issuerSettings),
+    ).resolves.toMatchObject({ revision: "b".repeat(64) });
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/admin/settings",
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer admin-id-token",
+    });
+    expect(fetcher.mock.calls[1]?.[1]).toMatchObject({
+      method: "PUT",
+      body: JSON.stringify({
+        expectedRevision: payload.revision,
+        settings: issuerSettings,
+      }),
+    });
+  });
+
+  it("maps revision conflicts to a safe settings-specific client error", async () => {
+    const client = createAdminApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => tokenUser,
+      fetcher: vi.fn<typeof fetch>(async () =>
+        Response.json(
+          { error: { code: "settings_revision_conflict", detail: "private" } },
+          { status: 409 },
+        ),
+      ),
+    });
+    await expect(
+      client.updateIssuerSettings("a".repeat(64), issuerSettings),
+    ).rejects.toMatchObject({ code: "issuer_settings_conflict" });
+  });
   it("uses the eligible-contract endpoint and keeps request/estimate idempotency keys in headers", async () => {
     const requestId = "11111111-1111-4111-8111-111111111111";
     const contractId = "22222222-2222-4222-8222-222222222222";

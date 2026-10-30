@@ -5,6 +5,7 @@ export * from "./credits.js";
 export * from "./customer-access.js";
 export * from "./invoice.js";
 export * from "./invoice-number.js";
+export * from "./issuer-settings.js";
 export * from "./messages.js";
 export * from "./periods.js";
 export * from "./pricing.js";

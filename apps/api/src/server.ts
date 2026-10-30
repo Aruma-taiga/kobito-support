@@ -13,6 +13,8 @@ import { CustomerAccessService } from "./modules/customer-access/service.js";
 import { ChromiumInvoicePdfRenderer } from "./modules/invoices/renderer.js";
 import { InvoiceRepository } from "./modules/invoices/repository.js";
 import { InvoiceService } from "./modules/invoices/service.js";
+import { IssuerSettingsRepository } from "./modules/issuer-settings/repository.js";
+import { IssuerSettingsService } from "./modules/issuer-settings/service.js";
 import { RequestRepository } from "./modules/requests/repository.js";
 import { RequestService } from "./modules/requests/service.js";
 import { createFirebaseVerifier } from "./platform/auth.js";
@@ -44,6 +46,7 @@ const app = createApp({
   accounts,
   applications,
   admin: new AdminService(new AdminRepository(pool)),
+  issuerSettings: new IssuerSettingsService(new IssuerSettingsRepository(pool)),
   invoices,
   requests: new RequestService(new RequestRepository(pool)),
   customerAccess: new CustomerAccessService(
