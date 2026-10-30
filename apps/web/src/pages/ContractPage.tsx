@@ -15,13 +15,26 @@ type ContractPageState =
 
 export function ContractPage({
   apiClient,
+  lineLiffId,
 }: {
   apiClient: ReturnTypeApiClient;
+  lineLiffId?: string | undefined;
 }) {
-  const { signOut } = useAuthSession();
+  const {
+    state: session,
+    sessionGeneration,
+    getSessionGeneration,
+    signOut,
+  } = useAuthSession();
   const [state, setState] = useState<ContractPageState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [logoutError, setLogoutError] = useState(false);
+  const [lineLinked, setLineLinked] = useState<
+    "loading" | "linked" | "unlinked" | "error"
+  >("loading");
+  const [lineAttempt, setLineAttempt] = useState(0);
+  const lineStatusUserId =
+    session.status === "authenticated" ? session.user.uid : null;
 
   // attempt intentionally retriggers this request after a customer retry.
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt is a refetch trigger
@@ -47,6 +60,36 @@ export function ContractPage({
       current = false;
     };
   }, [apiClient, attempt]);
+
+  // lineAttempt intentionally retriggers the LINE status request after retry.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: lineAttempt is a refetch trigger
+  useEffect(() => {
+    let current = true;
+    const requestGeneration = getSessionGeneration();
+    if (lineLiffId && lineStatusUserId) {
+      setLineLinked("loading");
+      void apiClient.getLineLinkStatus(lineStatusUserId).then(
+        ({ linked }) => {
+          if (current && getSessionGeneration() === requestGeneration)
+            setLineLinked(linked ? "linked" : "unlinked");
+        },
+        () => {
+          if (current && getSessionGeneration() === requestGeneration)
+            setLineLinked("error");
+        },
+      );
+    }
+    return () => {
+      current = false;
+    };
+  }, [
+    apiClient,
+    getSessionGeneration,
+    lineAttempt,
+    lineLiffId,
+    lineStatusUserId,
+    sessionGeneration,
+  ]);
 
   async function handleSignOut() {
     setLogoutError(false);
@@ -149,6 +192,41 @@ export function ContractPage({
               <p className="invoice-preview-warning" role="note">
                 {webMessages.contractPreview}
               </p>
+            ) : null}
+            {lineLiffId ? (
+              <section
+                className="contract-summary"
+                aria-label={webMessages.lineLogin}
+              >
+                <h2>{webMessages.lineLogin}</h2>
+                {lineLinked === "linked" ? (
+                  <p>{webMessages.lineLinked}</p>
+                ) : null}
+                {lineLinked === "unlinked" ? (
+                  <Link className="secondary-button" to="/liff?to=home">
+                    {webMessages.lineLink}
+                  </Link>
+                ) : null}
+                {lineLinked === "loading" ? (
+                  <output className="status-message">
+                    {webMessages.lineLoading}
+                  </output>
+                ) : null}
+                {lineLinked === "error" ? (
+                  <>
+                    <p className="error-message" role="alert">
+                      {webMessages.lineUnavailable}
+                    </p>
+                    <button
+                      className="secondary-button"
+                      onClick={() => setLineAttempt((value) => value + 1)}
+                      type="button"
+                    >
+                      {webMessages.lineRetry}
+                    </button>
+                  </>
+                ) : null}
+              </section>
             ) : null}
             <p>{webMessages.contractNextInvoiceNotice}</p>
             <section className="contract-summary">

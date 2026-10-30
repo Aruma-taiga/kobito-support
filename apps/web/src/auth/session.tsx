@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Navigate, Outlet } from "react-router-dom";
@@ -18,7 +19,8 @@ export interface AuthUser {
 export interface AuthClient {
   currentUser(): AuthUser | null;
   subscribe(listener: (user: AuthUser | null) => void): () => void;
-  signIn(email: string, password: string): Promise<void>;
+  signIn(email: string, password: string): Promise<AuthUser>;
+  signInWithCustomToken(token: string): Promise<AuthUser>;
   signUp(email: string, password: string): Promise<AuthUser>;
   signOut(): Promise<void>;
 }
@@ -30,6 +32,8 @@ export type SessionState =
 
 interface AuthContextValue {
   state: SessionState;
+  sessionGeneration: number;
+  getSessionGeneration(): number;
   signOut(): Promise<void>;
 }
 
@@ -46,22 +50,34 @@ export function AuthProvider({
     status: "loading",
     user: null,
   });
+  const [sessionGeneration, setSessionGeneration] = useState(0);
+  const sessionGenerationRef = useRef(0);
 
-  useEffect(
-    () =>
-      client.subscribe((user) =>
-        setState(
-          user
-            ? { status: "authenticated", user }
-            : { status: "signed_out", user: null },
-        ),
-      ),
-    [client],
-  );
+  useEffect(() => {
+    let previousUid: string | null | undefined;
+    return client.subscribe((user) => {
+      const nextUid = user?.uid ?? null;
+      if (previousUid !== undefined && previousUid !== nextUid) {
+        sessionGenerationRef.current += 1;
+        setSessionGeneration(sessionGenerationRef.current);
+      }
+      previousUid = nextUid;
+      setState(
+        user
+          ? { status: "authenticated", user }
+          : { status: "signed_out", user: null },
+      );
+    });
+  }, [client]);
 
   const value = useMemo(
-    () => ({ state, signOut: () => client.signOut() }),
-    [client, state],
+    () => ({
+      state,
+      sessionGeneration,
+      getSessionGeneration: () => sessionGenerationRef.current,
+      signOut: () => client.signOut(),
+    }),
+    [client, sessionGeneration, state],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

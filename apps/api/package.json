@@ -12,6 +12,7 @@
     "seed:dev-admin": "tsx scripts/seed-dev-admin.ts",
     "admin:dev-code": "tsx scripts/dev-admin-code.ts",
     "smoke:local-auth": "tsx scripts/smoke-local-auth.ts",
+    "smoke:line-auth": "tsx scripts/smoke-line-auth.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json"
   },
   "dependencies": {
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@types/pg": "8.15.5",
+    "firebase": "13.1.0",
     "tsx": "4.20.6"
   }
 }

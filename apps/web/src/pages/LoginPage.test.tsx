@@ -7,7 +7,7 @@ import type { AuthClient, AuthUser } from "../auth/session.js";
 import { AuthProvider } from "../auth/session.js";
 import { LoginPage } from "./LoginPage.js";
 
-function setup(initialPath: string) {
+function setup(initialPath: string, lineLiffId?: string) {
   let user: AuthUser | null = null;
   const listeners = new Set<(current: AuthUser | null) => void>();
   const authClient: AuthClient = {
@@ -18,13 +18,20 @@ function setup(initialPath: string) {
       return () => listeners.delete(listener);
     },
     signIn: vi.fn(async () => {
-      user = {
+      const signedInUser = {
         uid: "shop-test",
         email: "shop@example.jp",
         getIdToken: async () => "token",
       };
+      user = signedInUser;
       for (const listener of listeners) listener(user);
+      return signedInUser;
     }),
+    signInWithCustomToken: vi.fn(async () => ({
+      uid: "shop-test",
+      email: "shop@example.jp",
+      getIdToken: async () => "token",
+    })),
     signUp: vi.fn(async () => ({
       uid: "new-shop-test",
       email: null,
@@ -41,7 +48,9 @@ function setup(initialPath: string) {
         <Routes>
           <Route
             path="/login"
-            element={<LoginPage authClient={authClient} />}
+            element={
+              <LoginPage authClient={authClient} lineLiffId={lineLiffId} />
+            }
           />
           <Route path="/apply/shop" element={<p>申込みフォーム</p>} />
           <Route path="/me" element={<p>マイページ</p>} />
@@ -78,5 +87,13 @@ describe("controlled login return", () => {
     await signIn();
     expect(await screen.findByText("マイページ")).toBeTruthy();
     expect(screen.queryByText("申込みフォーム")).toBeNull();
+  });
+
+  it("shows the LINE entry only when a public LIFF ID is configured", async () => {
+    setup("/login", "2000000000-AbCdEfGh");
+    const lineLink = await screen.findByRole("link", {
+      name: "LINEでログイン",
+    });
+    expect(lineLink.getAttribute("href")).toBe("/liff?to=home");
   });
 });

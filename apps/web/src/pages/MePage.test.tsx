@@ -22,7 +22,8 @@ describe("expired customer session recovery", () => {
         queueMicrotask(() => listener(currentUser));
         return () => undefined;
       },
-      signIn: async () => undefined,
+      signIn: async () => currentUser,
+      signInWithCustomToken: async () => currentUser,
       signUp: async () => ({
         uid: "customer-test",
         email: null,
@@ -82,7 +83,8 @@ describe("customer contract summary", () => {
         queueMicrotask(() => listener(currentUser));
         return () => undefined;
       },
-      signIn: async () => undefined,
+      signIn: async () => currentUser,
+      signInWithCustomToken: async () => currentUser,
       signUp: async () => currentUser,
       signOut: async () => undefined,
     };
@@ -120,7 +122,16 @@ describe("customer contract summary", () => {
         queueMicrotask(() => listener(currentUser));
         return () => undefined;
       },
-      signIn: async () => undefined,
+      signIn: async () => ({
+        uid: "customer-test",
+        email: null,
+        getIdToken: async () => "token",
+      }),
+      signInWithCustomToken: async () => ({
+        uid: "customer-test",
+        email: null,
+        getIdToken: async () => "token",
+      }),
       signUp: async () => ({
         uid: "customer-test",
         email: null,

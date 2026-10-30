@@ -51,6 +51,15 @@ export function createFirebaseVerifier(
   };
 }
 
+export function createFirebaseCustomTokenIssuer(config: RuntimeConfig) {
+  const app =
+    getApps().find((candidate) => candidate.name === "kobito-api") ??
+    initializeApp({ projectId: config.firebaseProjectId }, "kobito-api");
+  return {
+    createCustomToken: (uid: string) => getAuth(app).createCustomToken(uid),
+  };
+}
+
 function extractBearerToken(header: string | undefined): string | undefined {
   const match = /^Bearer ([^\s]+)$/i.exec(header ?? "");
   return match?.[1];

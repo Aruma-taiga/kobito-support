@@ -17,6 +17,7 @@ import {
   CustomerWelcomePage,
 } from "./pages/CustomerAccessPages.js";
 import { MyInvoiceDetailPage } from "./pages/InvoicePages.js";
+import { LiffPage } from "./pages/LiffPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { MyRequestDetailPage, MyRequestsPage } from "./pages/RequestPages.js";
 import type { AdminApiClient } from "./platform/admin-api-client.js";
@@ -32,11 +33,13 @@ export function App({
   authClient,
   adminApiClient,
   adminAuthClient,
+  lineLiffId,
 }: {
   apiClient: ReturnTypeApiClient;
   authClient: AuthClient;
   adminApiClient: AdminApiClient;
   adminAuthClient: AdminAuthClient;
+  lineLiffId?: string | undefined;
 }) {
   const [configState, setConfigState] = useState<PublicConfigState>({
     status: "loading",
@@ -108,7 +111,19 @@ export function App({
               <Route path="/" element={<Navigate to="/me" replace />} />
               <Route
                 path="/login"
-                element={<LoginPage authClient={authClient} />}
+                element={
+                  <LoginPage authClient={authClient} lineLiffId={lineLiffId} />
+                }
+              />
+              <Route
+                path="/liff"
+                element={
+                  <LiffPage
+                    liffId={lineLiffId}
+                    apiClient={apiClient}
+                    authClient={authClient}
+                  />
+                }
               />
               <Route
                 path="/apply/*"
@@ -141,7 +156,12 @@ export function App({
                   />
                   <Route
                     path="/me/contract"
-                    element={<ContractPage apiClient={apiClient} />}
+                    element={
+                      <ContractPage
+                        apiClient={apiClient}
+                        lineLiffId={lineLiffId}
+                      />
+                    }
                   />
                   <Route
                     path="/me/finished"

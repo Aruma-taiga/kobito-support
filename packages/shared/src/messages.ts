@@ -57,6 +57,23 @@ export const validationMessages = {
 } as const;
 
 export const webMessages = {
+  lineLogin: "LINEでログイン",
+  lineLoading: "LINEの認証を確認しています。",
+  lineNotConfigured: "LINE連携の準備中です。",
+  lineUnavailable:
+    "LINEでの認証を確認できませんでした。もう一度お試しください。",
+  lineLinkRequired:
+    "LINEとアカウントを連携します。メールアドレスとパスワードでログインしてください。",
+  lineLinkAction: "ログインしてLINEを連携",
+  lineLinked: "LINE連携済み",
+  lineLink: "LINEを連携する",
+  lineLinkConflict:
+    "このLINEアカウントは連携できません。別の連携がある場合は運営にお問い合わせください。",
+  lineRetry: "もう一度確認する",
+  lineSignInRequired: "ログインしてからLINE連携を進めてください。",
+  lineSwitchAccount: "LINEに連携したアカウントで続ける",
+  lineSwitchWarning:
+    "現在ログイン中のアカウントと、LINEに連携したアカウントが異なります。",
   adminRequestsTitle: "ご依頼の記録と見積",
   adminRequestsNew: "依頼を登録",
   adminRequestNewDescription:

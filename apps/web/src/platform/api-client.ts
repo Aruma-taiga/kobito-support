@@ -15,6 +15,10 @@ import {
   type InvoiceList,
   invoiceDetailSchema,
   invoiceListSchema,
+  lineLinkResponseSchema,
+  lineLinkStatusResponseSchema,
+  lineSignInResponseSchema,
+  lineTokenRequestSchema,
   type MeResponse,
   meResponseSchema,
   type PublicConfig,
@@ -27,7 +31,14 @@ import {
   welcomeSeenResponseSchema,
 } from "@kobito/shared";
 
+type LineLinkResponse = ReturnType<typeof lineLinkResponseSchema.parse>;
+type LineLinkStatusResponse = ReturnType<
+  typeof lineLinkStatusResponseSchema.parse
+>;
+type LineSignInResponse = ReturnType<typeof lineSignInResponseSchema.parse>;
+
 export interface ApiAuthUser {
+  uid?: string;
   getIdToken(): Promise<string>;
 }
 
@@ -52,7 +63,11 @@ export class ApiClientError extends Error {
       | "request_conflict"
       | "estimate_conflict"
       | "insufficient_credits"
-      | "validation_error",
+      | "validation_error"
+      | "conflict"
+      | "service_unavailable"
+      | "invalid_line_token"
+      | "session_changed",
   ) {
     super(code);
   }
@@ -67,6 +82,7 @@ export function createApiClient(options: ApiClientOptions) {
       safeParse(data: unknown): { success: true; data: T } | { success: false };
     },
     authenticated: boolean,
+    expectedAuthUserId?: string,
   ): Promise<T> {
     const headers: Record<string, string> = {
       Accept: "application/json",
@@ -74,13 +90,25 @@ export function createApiClient(options: ApiClientOptions) {
     if (authenticated) {
       const user = options.getCurrentUser();
       if (!user) throw new ApiClientError("unauthorized");
+      if (expectedAuthUserId !== undefined && user.uid !== expectedAuthUserId)
+        throw new ApiClientError("session_changed");
       let token: string;
       try {
         token = await user.getIdToken();
       } catch {
+        if (
+          expectedAuthUserId !== undefined &&
+          options.getCurrentUser()?.uid !== expectedAuthUserId
+        )
+          throw new ApiClientError("session_changed");
         await options.signOut().catch(() => undefined);
         throw new ApiClientError("unauthorized");
       }
+      if (
+        expectedAuthUserId !== undefined &&
+        options.getCurrentUser()?.uid !== expectedAuthUserId
+      )
+        throw new ApiClientError("session_changed");
       headers.Authorization = `Bearer ${token}`;
     }
 
@@ -97,6 +125,12 @@ export function createApiClient(options: ApiClientOptions) {
       throw new ApiClientError("network");
     }
 
+    if (
+      expectedAuthUserId !== undefined &&
+      options.getCurrentUser()?.uid !== expectedAuthUserId
+    )
+      throw new ApiClientError("session_changed");
+
     if (response.status === 401) {
       if (authenticated) await options.signOut().catch(() => undefined);
       throw new ApiClientError("unauthorized");
@@ -104,6 +138,9 @@ export function createApiClient(options: ApiClientOptions) {
     if (!response.ok) {
       if (response.status === 403) throw new ApiClientError("forbidden");
       if (response.status === 404) throw new ApiClientError("not_found");
+      if (response.status === 409) throw new ApiClientError("conflict");
+      if (response.status === 503)
+        throw new ApiClientError("service_unavailable");
       throw new ApiClientError("server");
     }
 
@@ -124,16 +161,29 @@ export function createApiClient(options: ApiClientOptions) {
       safeParse(data: unknown): { success: true; data: T } | { success: false };
     },
     body: unknown,
+    expectedAuthUserId?: string,
   ): Promise<T> {
     const user = options.getCurrentUser();
     if (!user) throw new ApiClientError("unauthorized");
+    if (expectedAuthUserId !== undefined && user.uid !== expectedAuthUserId)
+      throw new ApiClientError("session_changed");
     let token: string;
     try {
       token = await user.getIdToken();
     } catch {
+      if (
+        expectedAuthUserId !== undefined &&
+        options.getCurrentUser()?.uid !== expectedAuthUserId
+      )
+        throw new ApiClientError("session_changed");
       await options.signOut().catch(() => undefined);
       throw new ApiClientError("unauthorized");
     }
+    if (
+      expectedAuthUserId !== undefined &&
+      options.getCurrentUser()?.uid !== expectedAuthUserId
+    )
+      throw new ApiClientError("session_changed");
     let response: Response;
     try {
       response = await fetcher(new URL(endpoint, options.baseUrl), {
@@ -151,6 +201,11 @@ export function createApiClient(options: ApiClientOptions) {
     } catch {
       throw new ApiClientError("network");
     }
+    if (
+      expectedAuthUserId !== undefined &&
+      options.getCurrentUser()?.uid !== expectedAuthUserId
+    )
+      throw new ApiClientError("session_changed");
     if (response.status === 401) {
       await options.signOut().catch(() => undefined);
       throw new ApiClientError("unauthorized");
@@ -167,14 +222,19 @@ export function createApiClient(options: ApiClientOptions) {
         responseCode = undefined;
       }
       if (
+        responseCode === "conflict" ||
         responseCode === "request_conflict" ||
         responseCode === "estimate_conflict" ||
-        responseCode === "insufficient_credits"
+        responseCode === "insufficient_credits" ||
+        responseCode === "invalid_line_token"
       ) {
         throw new ApiClientError(responseCode);
       }
       if (response.status === 403) throw new ApiClientError("forbidden");
       if (response.status === 404) throw new ApiClientError("not_found");
+      if (response.status === 409) throw new ApiClientError("conflict");
+      if (response.status === 503)
+        throw new ApiClientError("service_unavailable");
       if (response.status === 422) throw new ApiClientError("validation_error");
       throw new ApiClientError("server");
     }
@@ -253,6 +313,48 @@ export function createApiClient(options: ApiClientOptions) {
     return parsed.data;
   }
 
+  async function postPublicLineToken<T>(
+    endpoint: string,
+    schema: {
+      safeParse(data: unknown): { success: true; data: T } | { success: false };
+    },
+    idToken: string,
+  ): Promise<T> {
+    const body = lineTokenRequestSchema.safeParse({ idToken });
+    if (!body.success) throw new ApiClientError("invalid_response");
+    let response: Response;
+    try {
+      response = await fetcher(new URL(endpoint, options.baseUrl), {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body.data),
+        credentials: "omit",
+        redirect: "error",
+        cache: "no-store",
+      });
+    } catch {
+      throw new ApiClientError("network");
+    }
+    if (response.status === 401) throw new ApiClientError("unauthorized");
+    if (response.status === 404) throw new ApiClientError("not_found");
+    if (response.status === 409) throw new ApiClientError("conflict");
+    if (response.status === 503)
+      throw new ApiClientError("service_unavailable");
+    if (!response.ok) throw new ApiClientError("server");
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new ApiClientError("invalid_response");
+    }
+    const parsed = schema.safeParse(payload);
+    if (!parsed.success) throw new ApiClientError("invalid_response");
+    return parsed.data;
+  }
+
   async function getInvoicePdf(invoiceId: string): Promise<Blob> {
     const user = options.getCurrentUser();
     if (!user) throw new ApiClientError("unauthorized");
@@ -315,6 +417,31 @@ export function createApiClient(options: ApiClientOptions) {
         `/api/v1/public/partners/${encodeURIComponent(code)}`,
         publicPartnerSchema,
         false,
+      ),
+    signInWithLine: (idToken: string): Promise<LineSignInResponse> =>
+      postPublicLineToken(
+        "/api/v1/auth/line",
+        lineSignInResponseSchema,
+        idToken,
+      ),
+    getLineLinkStatus: (
+      expectedAuthUserId?: string,
+    ): Promise<LineLinkStatusResponse> =>
+      getJson(
+        "/api/v1/me/line",
+        lineLinkStatusResponseSchema,
+        true,
+        expectedAuthUserId,
+      ),
+    linkLine: (
+      idToken: string,
+      expectedAuthUserId: string,
+    ): Promise<LineLinkResponse> =>
+      postJson(
+        "/api/v1/me/line/link",
+        lineLinkResponseSchema,
+        { idToken },
+        expectedAuthUserId,
       ),
     postApplication,
     getMe: (): Promise<MeResponse> =>

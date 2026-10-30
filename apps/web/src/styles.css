@@ -151,6 +151,12 @@ input {
   border: 1px solid #2f5b85;
 }
 
+.login-card > .secondary-button {
+  display: block;
+  margin-top: 12px;
+  text-align: center;
+}
+
 .secondary-button:hover:not(:disabled) {
   background: #f0f4f7;
 }

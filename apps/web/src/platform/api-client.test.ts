@@ -2,6 +2,194 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "./api-client.js";
 
 describe("authenticated web API client", () => {
+  it("exchanges a public LINE ID token without an existing Firebase session", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({
+        customToken: "firebase-custom-token",
+        authUserId: "uid-1",
+      }),
+    );
+    const signOut = vi.fn(async () => undefined);
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => null,
+      signOut,
+      fetcher,
+    });
+
+    await expect(client.signInWithLine("line-id-token")).resolves.toEqual({
+      customToken: "firebase-custom-token",
+      authUserId: "uid-1",
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      new URL("https://api.example.test/api/v1/auth/line"),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ idToken: "line-id-token" }),
+        credentials: "omit",
+      }),
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.headers).not.toHaveProperty(
+      "Authorization",
+    );
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it("checks LINE linkage and explicitly links only with the current Firebase bearer", async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json({ linked: false }))
+      .mockResolvedValueOnce(Response.json({ linked: true }));
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        uid: "customer-1",
+        getIdToken: vi.fn(async () => "firebase-id-token"),
+      }),
+      signOut: vi.fn(async () => undefined),
+      fetcher,
+    });
+
+    await expect(client.getLineLinkStatus()).resolves.toEqual({
+      linked: false,
+    });
+    await expect(
+      client.linkLine("line-id-token", "customer-1"),
+    ).resolves.toEqual({
+      linked: true,
+    });
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+      Authorization: "Bearer firebase-id-token",
+    });
+    expect(fetcher.mock.calls[1]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ idToken: "line-id-token" }),
+      credentials: "omit",
+    });
+  });
+
+  it("does not sign out an existing Firebase session when LINE token verification returns 401", async () => {
+    const signOut = vi.fn(async () => undefined);
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        uid: "customer-1",
+        getIdToken: vi.fn(async () => "firebase-id-token"),
+      }),
+      signOut,
+      fetcher: vi.fn<typeof fetch>(async () =>
+        Response.json({}, { status: 401 }),
+      ),
+    });
+    await expect(
+      client.signInWithLine("invalid-line-token"),
+    ).rejects.toMatchObject({ code: "unauthorized" });
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it("maps LINE account collisions to a conflict without exposing provider details", async () => {
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        uid: "customer-1",
+        getIdToken: vi.fn(async () => "firebase-id-token"),
+      }),
+      signOut: vi.fn(async () => undefined),
+      fetcher: vi.fn<typeof fetch>(async () =>
+        Response.json(
+          { error: { code: "conflict", provider: "private detail" } },
+          { status: 409 },
+        ),
+      ),
+    });
+    await expect(
+      client.linkLine("line-id-token", "customer-1"),
+    ).rejects.toMatchObject({
+      code: "conflict",
+    });
+  });
+
+  it("keeps the Firebase session when an authenticated LINE link rejects an expired LINE token", async () => {
+    const signOut = vi.fn(async () => undefined);
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        uid: "customer-1",
+        getIdToken: vi.fn(async () => "firebase-id-token"),
+      }),
+      signOut,
+      fetcher: vi.fn<typeof fetch>(async () =>
+        Response.json(
+          { error: { code: "invalid_line_token" } },
+          { status: 400 },
+        ),
+      ),
+    });
+
+    await expect(
+      client.linkLine("expired-line-token", "customer-1"),
+    ).rejects.toMatchObject({ code: "invalid_line_token" });
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it("maps unavailable LINE verification to a retryable provider error", async () => {
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        uid: "customer-1",
+        getIdToken: vi.fn(async () => "firebase-id-token"),
+      }),
+      signOut: vi.fn(async () => undefined),
+      fetcher: vi.fn<typeof fetch>(async () =>
+        Response.json(
+          { error: { code: "service_unavailable" } },
+          { status: 503 },
+        ),
+      ),
+    });
+    await expect(
+      client.linkLine("line-id-token", "customer-1"),
+    ).rejects.toMatchObject({
+      code: "service_unavailable",
+    });
+  });
+
+  it("does not send a LINE link request if the Firebase UID changes while its ID token is loading", async () => {
+    let resolveToken!: (token: string) => void;
+    const tokenPromise = new Promise<string>((resolve) => {
+      resolveToken = resolve;
+    });
+    let currentUser = {
+      uid: "customer-1",
+      getIdToken: vi.fn(() => tokenPromise),
+    };
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ linked: true }),
+    );
+    const signOut = vi.fn(async () => undefined);
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => currentUser,
+      signOut,
+      fetcher,
+    });
+
+    const linkWithExpectedUid = client.linkLine as (
+      idToken: string,
+      expectedAuthUserId: string,
+    ) => Promise<unknown>;
+    const linking = linkWithExpectedUid("line-id-token", "customer-1");
+    currentUser = {
+      uid: "customer-2",
+      getIdToken: vi.fn(async () => "new-user-token"),
+    };
+    resolveToken("old-user-token");
+
+    await expect(linking).rejects.toMatchObject({ code: "session_changed" });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
   it("loads customer access policy and explicitly records welcome acknowledgement", async () => {
     const access = {
       contractStatus: "active",

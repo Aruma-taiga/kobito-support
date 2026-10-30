@@ -1,5 +1,10 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import type { LineModule } from "./modules/accounts/line/contracts.js";
+import {
+  createLineCustomerRoutes,
+  createLinePublicRoutes,
+} from "./modules/accounts/line/routes.js";
 import type { AccountsDataRepository } from "./modules/accounts/repository.js";
 import { createAccountsRoutes } from "./modules/accounts/routes.js";
 import { AccountsService } from "./modules/accounts/service.js";
@@ -43,6 +48,7 @@ export interface AppDependencies {
   publicSettings: { getServiceName(): Promise<string> };
   logger: ApiLogger;
   komojuInbox: KomojuInbox;
+  line?: LineModule;
 }
 
 export function createApp(dependencies: AppDependencies) {
@@ -80,6 +86,9 @@ export function createApp(dependencies: AppDependencies) {
       inbox: dependencies.komojuInbox,
     }),
   );
+  if (dependencies.line) {
+    app.route("/api/v1", createLinePublicRoutes(dependencies.line));
+  }
   app.get("/api/v1/public/config", async (context) => {
     const [serviceName, catalog] = await Promise.all([
       dependencies.publicSettings.getServiceName(),
@@ -100,6 +109,8 @@ export function createApp(dependencies: AppDependencies) {
     requireCustomer(),
     requireCustomerAccess(dependencies.customerAccess),
   );
+  if (dependencies.line)
+    app.route("/api/v1", createLineCustomerRoutes(dependencies.line));
   app.route("/api/v1", createCustomerAccessRoutes(dependencies.customerAccess));
   app.route(
     "/api/v1",
