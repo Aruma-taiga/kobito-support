@@ -4,19 +4,19 @@ export const planCatalog = {
   light: {
     code: "light",
     label: planLabels.light,
-    monthlyGrossYen: 5_000,
+    monthlyGrossYen: 5_500,
     monthlyCredits: 1,
   },
   standard: {
     code: "standard",
     label: planLabels.standard,
-    monthlyGrossYen: 10_000,
+    monthlyGrossYen: 11_000,
     monthlyCredits: 3,
   },
   premium: {
     code: "premium",
     label: planLabels.premium,
-    monthlyGrossYen: 15_000,
+    monthlyGrossYen: 16_500,
     monthlyCredits: 5,
   },
   custom: {
@@ -35,7 +35,7 @@ export const planCodes = [
   "premium",
   "custom",
 ] as const satisfies readonly PlanCode[];
-export const extraCreditGrossYen = 4_000;
+export const extraCreditGrossYen = 4_400;
 
 export interface TaxBreakdown {
   grossYen: number;

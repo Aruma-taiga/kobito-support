@@ -1,22 +1,29 @@
 import type { Pool } from "pg";
 
-const PLAN_START_DATE = "2026-10-25";
-
 const plans = [
-  { code: "light", name: "ライト", price: 5000, credits: 1, custom: false },
+  {
+    code: "light",
+    name: "ライト",
+    price: 5500,
+    credits: 1,
+    custom: false,
+    validFrom: "2026-10-31",
+  },
   {
     code: "standard",
     name: "スタンダード",
-    price: 10_000,
+    price: 11_000,
     credits: 3,
     custom: false,
+    validFrom: "2026-10-31",
   },
   {
     code: "premium",
     name: "プレミアム",
-    price: 15_000,
+    price: 16_500,
     credits: 5,
     custom: false,
+    validFrom: "2026-10-31",
   },
   {
     code: "custom",
@@ -24,6 +31,7 @@ const plans = [
     price: null,
     credits: null,
     custom: true,
+    validFrom: "2026-10-25",
   },
 ] as const;
 
@@ -61,7 +69,7 @@ export async function seedDatabase(pool: Pool): Promise<void> {
           plan.price,
           plan.credits,
           plan.custom,
-          PLAN_START_DATE,
+          plan.validFrom,
         ],
       );
     }

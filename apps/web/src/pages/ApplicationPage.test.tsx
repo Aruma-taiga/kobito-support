@@ -351,10 +351,56 @@ describe("application flow", () => {
     await screen.findByRole("heading", { name: "ご要望" });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "申込み内容の確認" });
-    expect(screen.getByText(/ライト.*5,000円.*1クレジット/)).toBeTruthy();
+    expect(
+      screen.getByText(/月額4,546円（税抜）・5,000円（税込）/),
+    ).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /申し込む/ }).hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  it("shows public tax-exclusive monthly prices beside accepted gross prices", async () => {
+    const publicPlans = {
+      ...plans,
+      plans: plans.plans.map((item) =>
+        item.code === "light" ? { ...item, priceInclTax: 5500 } : item,
+      ),
+    };
+    const publicConfig = {
+      ...config,
+      application: {
+        ...config.application,
+        conditions: {
+          ...config.application.conditions,
+          extraCreditGrossYen: 4400,
+        },
+      },
+    };
+    setup({ plansSequence: [publicPlans], configSequence: [publicConfig] });
+    await completeShopStep();
+
+    expect(
+      screen.getByRole("radio", { name: /ライト/ }).parentElement?.textContent,
+    ).toContain("月額5,000円（税抜）5,500円（税込）");
+    fireEvent.click(screen.getByRole("radio", { name: /ライト/ }));
+    fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
+    await screen.findByRole("heading", { name: "お支払い方法" });
+    fireEvent.click(screen.getByRole("radio", { name: /銀行振込/ }));
+    fireEvent.change(screen.getByLabelText(/請求先の名称/), {
+      target: { value: "喫茶ひだまり" },
+    });
+    fireEvent.change(screen.getByLabelText(/請求先の住所/), {
+      target: { value: "東京都杉並区1-2-3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
+    await screen.findByRole("heading", { name: "ご要望" });
+    fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
+    await screen.findByRole("heading", { name: "申込み内容の確認" });
+
+    expect(screen.getByText(/5,000円（税抜）・5,500円（税込）/)).toBeTruthy();
+    expect(
+      screen.getByText(/追加クレジットは1C 4,000円（税抜）・4,400円（税込）/),
+    ).toBeTruthy();
   });
 
   it("requires C04 when a referral code is present", async () => {

@@ -45,7 +45,7 @@ describe("application preview/live policy gates", () => {
     expect(catalog.application?.displayVersion).toBe(catalog.displayVersion);
     expect(catalog.application?.conditions).toEqual({
       initialDueDays: 7,
-      extraCreditGrossYen: 4000,
+      extraCreditGrossYen: 4400,
       monthlyPrepaid: true,
       periodBasis: "contract_anchor",
       rollover: false,

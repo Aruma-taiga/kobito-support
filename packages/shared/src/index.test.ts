@@ -10,6 +10,7 @@ import {
   completionEntries,
   completionEntriesForPeriod,
   confirmStepSchema,
+  extraCreditGrossYen,
   formatInvoiceNo,
   invoiceKinds,
   invoiceTotals,
@@ -74,19 +75,19 @@ describe("gross-price calculations", () => {
       light: {
         code: "light",
         label: "ライト",
-        monthlyGrossYen: 5000,
+        monthlyGrossYen: 5500,
         monthlyCredits: 1,
       },
       standard: {
         code: "standard",
         label: "スタンダード",
-        monthlyGrossYen: 10000,
+        monthlyGrossYen: 11000,
         monthlyCredits: 3,
       },
       premium: {
         code: "premium",
         label: "プレミアム",
-        monthlyGrossYen: 15000,
+        monthlyGrossYen: 16500,
         monthlyCredits: 5,
       },
       custom: {
@@ -97,6 +98,7 @@ describe("gross-price calculations", () => {
       },
     });
     expect(planCatalog.custom.monthlyGrossYen).toBeNull();
+    expect(extraCreditGrossYen).toBe(4400);
     expect(planCatalog.custom.monthlyCredits).toBeNull();
     expect(planCatalog.light.label).toBe("ライト");
     expect(paymentMethods).toEqual(["card", "konbini", "bank_transfer"]);
