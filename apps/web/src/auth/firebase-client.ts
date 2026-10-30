@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from "firebase/app";
 import {
   connectAuthEmulator,
+  createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -33,6 +34,7 @@ export function createFirebaseAuthClient(config: WebConfig): AuthClient {
   }
 
   const wrapUser = (user: User): AuthUser => ({
+    email: user.email,
     getIdToken: () => user.getIdToken(),
   });
 
@@ -52,6 +54,14 @@ export function createFirebaseAuthClient(config: WebConfig): AuthClient {
     },
     signIn: async (email, password) => {
       await signInWithEmailAndPassword(auth, email, password);
+    },
+    signUp: async (email, password) => {
+      const credential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password,
+      );
+      return wrapUser(credential.user);
     },
     signOut: async () => {
       try {

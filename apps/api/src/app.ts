@@ -3,6 +3,8 @@ import { cors } from "hono/cors";
 import type { AccountsDataRepository } from "./modules/accounts/repository.js";
 import { createAccountsRoutes } from "./modules/accounts/routes.js";
 import { AccountsService } from "./modules/accounts/service.js";
+import type { ApplicationsModule } from "./modules/applications/contracts.js";
+import { createApplicationRoutes } from "./modules/applications/routes.js";
 import {
   type AccountLookup,
   createAuthenticate,
@@ -20,6 +22,7 @@ export interface AppDependencies {
   config: RuntimeConfig;
   verifier: IdentityVerifier;
   accounts: AccountLookup & AccountsDataRepository;
+  applications: ApplicationsModule;
   publicSettings: { getServiceName(): Promise<string> };
   logger: ApiLogger;
 }
@@ -37,7 +40,7 @@ export function createApp(dependencies: AppDependencies) {
     cors({
       origin: dependencies.config.webOrigin,
       allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowHeaders: ["Authorization", "Content-Type"],
+      allowHeaders: ["Authorization", "Content-Type", "Idempotency-Key"],
       maxAge: 600,
     }),
   );
@@ -52,17 +55,26 @@ export function createApp(dependencies: AppDependencies) {
   );
 
   app.get("/healthz", (context) => context.json({ status: "ok" }));
-  app.get("/api/v1/public/config", async (context) =>
-    context.json({
-      serviceName: await dependencies.publicSettings.getServiceName(),
-    }),
-  );
+  app.get("/api/v1/public/config", async (context) => {
+    const [serviceName, catalog] = await Promise.all([
+      dependencies.publicSettings.getServiceName(),
+      dependencies.applications.getPublicCatalog(),
+    ]);
+    return context.json({ serviceName, application: catalog.application });
+  });
 
   app.use("/api/v1/me", authenticate, requireCustomer());
   app.use("/api/v1/me/*", authenticate, requireCustomer());
   app.route(
     "/api/v1",
     createAccountsRoutes(new AccountsService(dependencies.accounts)),
+  );
+  app.route(
+    "/api/v1",
+    createApplicationRoutes({
+      verifier: dependencies.verifier,
+      applications: dependencies.applications,
+    }),
   );
 
   const adminRoutes = new Hono<{ Variables: ApiVariables }>();

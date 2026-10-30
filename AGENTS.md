@@ -3,9 +3,11 @@
 ## Scope and delivery
 
 - Repository: `kobito-support`; GitHub account: `Aruma-taiga`.
-- Follow the user-approved five sequential PR stages. Work only on the currently authorized stage, and wait for its CI to pass before starting the next stage. Keep changes within the authorized stage; do not start business/API or web functionality until its stage is approved.
+- The five foundation PR stages are complete. The user authorized continuing with applications, review, initial invoicing, bank-transfer reconciliation, and contract activation. Deliver bounded vertical slices as separate PRs and wait for each slice's CI before starting the next implementation stage. Do not merge PRs or deploy without authorization.
 - Keep PR titles and descriptions in Japanese.
 - Prefer the low-cost `gpt-6-luna` model for implementation and testing work. Use test-driven development: write meaningful tests first, observe the failing result, implement, and run them again.
+- Delegate bounded implementation, testing, investigation, and browser tasks to sub-agents regularly. Keep the main thread focused on decisions, critical review, and concise verified outcomes rather than duplicating investigations or relaying full logs. Assign non-overlapping file ownership when working in parallel.
+- Coordinate runtime resources as well as files: assign ownership of development servers, ports, and browser sessions. Parallel browser tasks must use separate named sessions/profiles. Mock servers must use separately allocated ports and must never replace or shadow the real API or web server being used for another agent's browser verification. Stop only processes you own, and report server lifecycle changes before handoffs.
 - Keep each stage's README accurate. Do not claim app workflows exist until implemented and verified.
 
 ## Product sources and language

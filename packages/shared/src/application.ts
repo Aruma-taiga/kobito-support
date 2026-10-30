@@ -31,6 +31,17 @@ const passwordSchema = z
     error: validationMessages.passwordBlank,
   });
 
+export const applicationPolicyConditions = {
+  initialDueDays: 7,
+  extraCreditGrossYen: 4000,
+  monthlyPrepaid: true,
+  periodBasis: "contract_anchor",
+  rollover: false,
+  cancellation: "period_end_no_proration",
+} as const;
+
+export const applicationPaymentMethods = ["bank_transfer"] as const;
+
 const invoiceRegistrationNoSchema = z.preprocess(
   (value) =>
     typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -50,6 +61,13 @@ const shopFields = {
     .max(254, { error: validationMessages.maxLength }),
   phone: optionalText(50),
   password: passwordSchema,
+};
+
+const authenticatedShopFields = {
+  shopName: shopFields.shopName,
+  contactName: shopFields.contactName,
+  email: shopFields.email,
+  phone: shopFields.phone,
 };
 
 const planFields = {
@@ -87,6 +105,12 @@ const consentFields = {
 export const shopStepSchema = z.strictObject(shopFields, {
   error: validationMessages.unknownField,
 });
+
+/** Shop step for a Firebase-authenticated applicant; no unused password field. */
+export const authenticatedShopStepSchema = z.strictObject(
+  authenticatedShopFields,
+  { error: validationMessages.unknownField },
+);
 
 export const planStepSchema = z.strictObject(planFields, {
   error: validationMessages.unknownField,
@@ -126,6 +150,51 @@ export const applicationFormSchema = z
     }
   });
 
+const passwordlessApplicationFields = {
+  ...authenticatedShopFields,
+  ...planFields,
+  ...paymentFields,
+  ...notesFields,
+  ...consentFields,
+};
+
+function refinePartnerConsent(
+  application: {
+    referralCode?: string | undefined;
+    consentPartnerShare?: boolean | undefined;
+  },
+  context: z.RefinementCtx,
+) {
+  if (application.referralCode && application.consentPartnerShare !== true) {
+    context.addIssue({
+      code: "custom",
+      path: ["consentPartnerShare"],
+      message: validationMessages.partnerConsent,
+    });
+  }
+}
+
+export const authenticatedApplicationFormSchema = z
+  .strictObject(passwordlessApplicationFields, {
+    error: validationMessages.unknownField,
+  })
+  .superRefine(refinePartnerConsent);
+
+const displayVersionSchema = z
+  .string({ error: validationMessages.required })
+  .regex(/^[a-f0-9]{64}$/, { error: validationMessages.required });
+
+/** API request body: password and all provider/server-owned fields are rejected. */
+export const applicationSubmissionSchema = z
+  .strictObject(
+    {
+      ...passwordlessApplicationFields,
+      displayVersion: displayVersionSchema,
+    },
+    { error: validationMessages.unknownField },
+  )
+  .superRefine(refinePartnerConsent);
+
 export type ShopStep = z.infer<typeof shopStepSchema>;
 export type PlanStep = z.infer<typeof planStepSchema>;
 export type PaymentStep = z.infer<typeof paymentStepSchema>;
@@ -133,3 +202,15 @@ export type NotesStep = z.infer<typeof notesStepSchema>;
 export type ConfirmStep = z.infer<typeof confirmStepSchema>;
 export type ApplicationFormInput = z.input<typeof applicationFormSchema>;
 export type ApplicationForm = z.output<typeof applicationFormSchema>;
+export type AuthenticatedApplicationFormInput = z.input<
+  typeof authenticatedApplicationFormSchema
+>;
+export type AuthenticatedApplicationForm = z.output<
+  typeof authenticatedApplicationFormSchema
+>;
+export type ApplicationSubmissionInput = z.input<
+  typeof applicationSubmissionSchema
+>;
+export type ApplicationSubmission = z.output<
+  typeof applicationSubmissionSchema
+>;

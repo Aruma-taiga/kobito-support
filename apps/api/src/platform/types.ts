@@ -16,12 +16,17 @@ export type ApiMiddleware = MiddlewareHandler<{ Variables: ApiVariables }>;
 
 export class ApiError extends Error {
   constructor(
-    readonly status: 401 | 403 | 404 | 500,
+    readonly status: 400 | 401 | 403 | 404 | 409 | 422 | 500 | 503,
     readonly code:
+      | "invalid_request"
       | "unauthorized"
       | "forbidden"
       | "not_found"
-      | "internal_error",
+      | "application_conflict"
+      | "offer_changed"
+      | "validation_error"
+      | "internal_error"
+      | "application_unavailable",
   ) {
     super(code);
   }

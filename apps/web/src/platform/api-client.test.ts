@@ -2,6 +2,47 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "./api-client.js";
 
 describe("authenticated web API client", () => {
+  it("submits a password-free application with the same idempotency key", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json(
+        {
+          applicationId: "11111111-1111-4111-8111-111111111111",
+          contractId: "22222222-2222-4222-8222-222222222222",
+          status: "under_review",
+          replayed: false,
+        },
+        { status: 201 },
+      ),
+    );
+    const client = createApiClient({
+      baseUrl: "http://127.0.0.1:3000",
+      getCurrentUser: () => ({
+        getIdToken: vi.fn(async () => "application-token"),
+      }),
+      signOut: vi.fn(async () => undefined),
+      fetcher,
+    });
+    const body = {
+      shopName: "Shop",
+      email: "shop@example.jp",
+      displayVersion: "a".repeat(64),
+    };
+    await expect(
+      client.postApplication(body, "33333333-3333-4333-8333-333333333333"),
+    ).resolves.toMatchObject({ status: "under_review" });
+    const call = fetcher.mock.calls[0];
+    if (!call) throw new Error("Expected an application request");
+    const [url, init] = call;
+    expect(String(url)).toBe("http://127.0.0.1:3000/api/v1/applications");
+    expect(init?.headers).toMatchObject({
+      Authorization: "Bearer application-token",
+      "Idempotency-Key": "33333333-3333-4333-8333-333333333333",
+    });
+    expect(JSON.parse(String(init?.body))).toEqual(body);
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty("password");
+    expect(init?.credentials).toBe("omit");
+  });
+
   it("automatically attaches the current Firebase ID token to /me", async () => {
     const user = { getIdToken: vi.fn(async () => "signed-id-token") };
     const fetcher = vi.fn<typeof fetch>(async () =>

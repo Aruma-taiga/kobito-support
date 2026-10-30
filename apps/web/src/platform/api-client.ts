@@ -1,8 +1,14 @@
 import {
+  type ApplicationReceipt,
+  applicationReceiptSchema,
   type MeResponse,
   meResponseSchema,
   type PublicConfig,
+  type PublicPartner,
+  type PublicPlans,
   publicConfigSchema,
+  publicPartnerSchema,
+  publicPlansSchema,
 } from "@kobito/shared";
 
 export interface ApiAuthUser {
@@ -24,7 +30,9 @@ export class ApiClientError extends Error {
       | "not_found"
       | "network"
       | "server"
-      | "invalid_response",
+      | "invalid_response"
+      | "conditions_changed"
+      | "application_conflict",
   ) {
     super(code);
   }
@@ -90,9 +98,82 @@ export function createApiClient(options: ApiClientOptions) {
     return parsed.data;
   }
 
+  async function postApplication(
+    payload: unknown,
+    idempotencyKey: string,
+  ): Promise<ApplicationReceipt> {
+    const user = options.getCurrentUser();
+    if (!user) throw new ApiClientError("unauthorized");
+    let token: string;
+    try {
+      token = await user.getIdToken();
+    } catch {
+      throw new ApiClientError("unauthorized");
+    }
+    let response: Response;
+    try {
+      response = await fetcher(
+        new URL("/api/v1/applications", options.baseUrl),
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "Idempotency-Key": idempotencyKey,
+          },
+          body: JSON.stringify(payload),
+          credentials: "omit",
+          redirect: "error",
+          cache: "no-store",
+        },
+      );
+    } catch {
+      throw new ApiClientError("network");
+    }
+    if (response.status === 409) {
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        body = undefined;
+      }
+      const code = (body as { error?: { code?: unknown } } | undefined)?.error
+        ?.code;
+      throw new ApiClientError(
+        code === "offer_changed"
+          ? "conditions_changed"
+          : "application_conflict",
+      );
+    }
+    if (!response.ok) {
+      if (response.status === 401) throw new ApiClientError("unauthorized");
+      if (response.status === 403) throw new ApiClientError("forbidden");
+      throw new ApiClientError("server");
+    }
+    let body: unknown;
+    try {
+      body = await response.json();
+    } catch {
+      throw new ApiClientError("invalid_response");
+    }
+    const parsed = applicationReceiptSchema.safeParse(body);
+    if (!parsed.success) throw new ApiClientError("invalid_response");
+    return parsed.data;
+  }
+
   return {
     getPublicConfig: (): Promise<PublicConfig> =>
       getJson("/api/v1/public/config", publicConfigSchema, false),
+    getPublicPlans: (): Promise<PublicPlans> =>
+      getJson("/api/v1/public/plans", publicPlansSchema, false),
+    getPublicPartner: (code: string): Promise<PublicPartner> =>
+      getJson(
+        `/api/v1/public/partners/${encodeURIComponent(code)}`,
+        publicPartnerSchema,
+        false,
+      ),
+    postApplication,
     getMe: (): Promise<MeResponse> =>
       getJson("/api/v1/me", meResponseSchema, true),
   };

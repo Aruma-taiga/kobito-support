@@ -4,8 +4,11 @@ import { type AppDependencies, createApp } from "./app.js";
 type TestAccount = NonNullable<
   Awaited<ReturnType<AppDependencies["accounts"]["findByAuthUserId"]>>
 >;
-type AppOverrides = Partial<Omit<AppDependencies, "accounts">> & {
+type AppOverrides = Partial<
+  Omit<AppDependencies, "accounts" | "applications">
+> & {
   accounts?: Partial<AppDependencies["accounts"]>;
+  applications?: Partial<AppDependencies["applications"]>;
 };
 
 const userForToken = {
@@ -40,6 +43,23 @@ function makeApp(overrides: AppOverrides = {}) {
         contactName: "A user",
       })),
     },
+    applications: {
+      getPublicCatalog: vi.fn(async () => ({
+        plans: [],
+        displayVersion: "a".repeat(64),
+        application: null,
+      })),
+      getPublicPartner: vi.fn(async (code: string) => ({
+        code,
+        name: "Referral partner",
+      })),
+      submit: vi.fn(async () => ({
+        applicationId: "00000000-0000-4000-8000-000000000001",
+        contractId: "00000000-0000-4000-8000-000000000002",
+        status: "under_review" as const,
+        replayed: false,
+      })),
+    },
     publicSettings: { getServiceName: vi.fn(async () => "コビトサポート") },
     logger: { info: vi.fn(), error: vi.fn() },
   };
@@ -47,6 +67,7 @@ function makeApp(overrides: AppOverrides = {}) {
     ...defaults,
     ...overrides,
     accounts: { ...defaults.accounts, ...overrides.accounts },
+    applications: { ...defaults.applications, ...overrides.applications },
   });
 }
 
@@ -59,7 +80,17 @@ describe("API routes and auth pipeline", () => {
 
     const config = await app.request("/api/v1/public/config");
     expect(config.status).toBe(200);
-    expect(await config.json()).toEqual({ serviceName: "コビトサポート" });
+    expect(await config.json()).toEqual({
+      serviceName: "コビトサポート",
+      application: null,
+    });
+
+    const plans = await app.request("/api/v1/public/plans");
+    expect(plans.status).toBe(200);
+    expect(await plans.json()).toEqual({
+      plans: [],
+      displayVersion: "a".repeat(64),
+    });
   });
 
   it.each([
@@ -161,6 +192,18 @@ describe("API routes and auth pipeline", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe(
       "http://localhost:5173",
     );
+    const preflight = await app.request("/api/v1/applications", {
+      method: "OPTIONS",
+      headers: {
+        origin: "http://localhost:5173",
+        "access-control-request-method": "POST",
+        "access-control-request-headers":
+          "Authorization,Content-Type,Idempotency-Key",
+      },
+    });
+    expect(preflight.headers.get("access-control-allow-headers")).toContain(
+      "Idempotency-Key",
+    );
     const logged = JSON.stringify(logger.info.mock.calls);
     expect(logged).not.toContain("query-secret");
     expect(logged).not.toContain("user-value");
@@ -245,5 +288,152 @@ describe("API routes and auth pipeline", () => {
     ]) {
       expect(logs).not.toContain(sentinel);
     }
+  });
+
+  it("verifies an unlinked Firebase identity and passes only the password-free submission to the module", async () => {
+    const identity = { uid: "new-firebase-uid", email: "new@example.test" };
+    const verifier = { verifyIdToken: vi.fn(async () => identity) };
+    const submit = vi.fn(async () => ({
+      applicationId: "00000000-0000-4000-8000-000000000001",
+      contractId: "00000000-0000-4000-8000-000000000002",
+      status: "under_review" as const,
+      replayed: false,
+    }));
+    const app = makeApp({ verifier, applications: { submit } });
+    const response = await app.request("/api/v1/applications", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer verified-token",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-4000-8000-000000000003",
+      },
+      body: JSON.stringify({
+        shopName: "店舗",
+        contactName: "担当者",
+        email: "new@example.test",
+        planCode: "light",
+        billingName: "請求先",
+        billingAddress: "住所",
+        paymentMethod: "bank_transfer",
+        consentBusinessUse: true,
+        consentTerms: true,
+        displayVersion: "a".repeat(64),
+      }),
+    });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      applicationId: "00000000-0000-4000-8000-000000000001",
+      contractId: "00000000-0000-4000-8000-000000000002",
+      status: "under_review",
+      replayed: false,
+    });
+    expect(submit).toHaveBeenCalledWith({
+      identity,
+      idempotencyKey: "00000000-0000-4000-8000-000000000003",
+      submission: expect.objectContaining({ email: "new@example.test" }),
+      requestContext: {},
+    });
+  });
+
+  it("rejects password-bearing and identity-mismatched application submissions without calling the module", async () => {
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const submit = vi.fn();
+    const app = makeApp({
+      verifier: {
+        verifyIdToken: vi.fn(async () => ({
+          uid: "uid",
+          email: "person@example.test",
+        })),
+      },
+      applications: { submit },
+      logger,
+    });
+    const submission = {
+      shopName: "店舗",
+      contactName: "担当者",
+      email: "person@example.test",
+      planCode: "light",
+      billingName: "請求先",
+      billingAddress: "住所",
+      paymentMethod: "bank_transfer",
+      consentBusinessUse: true,
+      consentTerms: true,
+      displayVersion: "a".repeat(64),
+    };
+    const sentPassword = "password-must-not-be-logged-or-stored";
+    const passwordResponse = await app.request("/api/v1/applications", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer verified-token",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-4000-8000-000000000004",
+      },
+      body: JSON.stringify({ ...submission, password: sentPassword }),
+    });
+    expect(passwordResponse.status).toBe(422);
+    expect(submit).not.toHaveBeenCalled();
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(sentPassword);
+
+    const mismatchResponse = await app.request("/api/v1/applications", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer verified-token",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-4000-8000-000000000005",
+      },
+      body: JSON.stringify({ ...submission, email: "other@example.test" }),
+    });
+    expect(mismatchResponse.status).toBe(401);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "auth/id-token-revoked",
+    "auth/user-disabled",
+  ])("checks revoked and disabled Firebase account state before public application writes (%s)", async (providerCode) => {
+    const verifyIdToken = vi.fn(
+      async (_token: string, _checkRevoked?: boolean) => {
+        throw new Error(`${providerCode}:private-provider-detail`);
+      },
+    );
+    const submit = vi.fn();
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const app = makeApp({
+      verifier: { verifyIdToken },
+      applications: { submit },
+      logger,
+    });
+    const response = await app.request("/api/v1/applications", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer revoked-token",
+        "content-type": "application/json",
+        "idempotency-key": "00000000-0000-4000-8000-000000000006",
+      },
+      body: JSON.stringify({
+        shopName: "店舗",
+        contactName: "担当者",
+        email: "person@example.test",
+        planCode: "light",
+        billingName: "請求先",
+        billingAddress: "住所",
+        paymentMethod: "bank_transfer",
+        consentBusinessUse: true,
+        consentTerms: true,
+        displayVersion: "a".repeat(64),
+      }),
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: { code: "unauthorized" },
+    });
+    expect(verifyIdToken).toHaveBeenCalledWith("revoked-token", true);
+    expect(submit).not.toHaveBeenCalled();
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain(
+      "private-provider-detail",
+    );
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain(
+      "private-provider-detail",
+    );
   });
 });

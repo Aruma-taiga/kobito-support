@@ -16,6 +16,7 @@ describe("protected session loading", () => {
         return () => undefined;
       },
       signIn: async () => undefined,
+      signUp: async () => ({ email: null, getIdToken: async () => "token" }),
       signOut: async () => undefined,
     };
 

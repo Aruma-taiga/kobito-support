@@ -30,12 +30,16 @@ body {
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
   outline: 3px solid #8aafcf;
   outline-offset: 2px;
 }
@@ -57,6 +61,13 @@ input:focus-visible {
   color: #1f2e3a;
   font-size: 16px;
   font-weight: 700;
+}
+
+.topbar-link {
+  margin-left: auto;
+  color: #2f5b85;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .page-main {
@@ -200,6 +211,285 @@ button:disabled {
   padding: 48px 24px;
   color: #9b2c2c;
   text-align: center;
+}
+
+.application-card {
+  width: min(100%, 560px);
+}
+
+.application-eyebrow {
+  margin: 0 0 14px;
+  color: #5f6b73;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.application-progress {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 28px;
+}
+
+.application-progress div {
+  min-width: 0;
+  color: #5f6b73;
+  font-size: 11px;
+  text-align: center;
+}
+
+.application-progress div::before {
+  display: block;
+  height: 5px;
+  margin-bottom: 6px;
+  background: #d6dce2;
+  border-radius: 4px;
+  content: "";
+}
+
+.application-progress div.complete::before,
+.application-progress div.current::before {
+  background: #2f5b85;
+}
+
+.application-progress div.current {
+  color: #1f2e3a;
+  font-weight: 700;
+}
+
+.application-progress div span {
+  display: none;
+}
+
+.application-field {
+  margin: 0 0 18px;
+}
+
+.application-field .field-label,
+.application-card > form > .field-label {
+  margin: 0 0 7px;
+}
+
+.required-mark,
+.optional-mark {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  vertical-align: 1px;
+}
+
+.required-mark {
+  color: #fff;
+  background: #c2410c;
+}
+
+.optional-mark {
+  color: #5f6b73;
+  background: #eaedf0;
+}
+
+.application-card textarea {
+  display: block;
+  width: 100%;
+  min-height: 112px;
+  padding: 10px 12px;
+  border: 1px solid #aeb8c1;
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.choice-list {
+  display: grid;
+  gap: 10px;
+}
+
+.choice-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #d6dce2;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.choice-card.selected {
+  background: #eef3f8;
+  border-color: #2f5b85;
+  box-shadow: inset 0 0 0 1px #2f5b85;
+}
+
+.choice-card input {
+  width: 18px;
+  min-height: 18px;
+  margin: 3px 0 0;
+  flex: 0 0 18px;
+}
+
+.application-card .choice-card > span {
+  display: grid;
+  gap: 2px;
+}
+
+.choice-card small,
+.choice-price {
+  color: #5f6b73;
+  font-size: 13px;
+}
+
+.choice-price {
+  color: #1f2e3a;
+  font-weight: 700;
+}
+
+.choice-card.disabled {
+  color: #697780;
+  background: #f4f6f8;
+  cursor: not-allowed;
+}
+
+.field-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 20px;
+  padding: 0;
+  border: 0;
+}
+
+.field-group legend {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.warning-text {
+  color: #9b2c2c;
+}
+
+.application-summary {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.7fr) minmax(0, 1.3fr);
+  min-width: 0;
+  margin: 0 0 20px;
+  border-top: 1px solid #d6dce2;
+}
+
+.application-summary dt,
+.application-summary dd {
+  min-width: 0;
+  margin: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid #d6dce2;
+  overflow-wrap: anywhere;
+}
+
+.application-summary dt {
+  color: #5f6b73;
+}
+
+.application-summary dd {
+  font-weight: 600;
+}
+
+.contract-conditions {
+  min-width: 0;
+  margin: 20px 0;
+  padding: 16px;
+  background: #f4f6f8;
+  border: 1px solid #d6dce2;
+  border-radius: 8px;
+}
+
+.contract-conditions h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.contract-conditions ul {
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding-left: 1.3em;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.application-consent {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 14px 0;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.application-consent input,
+.application-card input[type="checkbox"] {
+  width: 20px;
+  min-height: 20px;
+  margin: 2px 0 0;
+  flex: 0 0 20px;
+}
+
+.legal-links {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: 4px;
+}
+
+.legal-links a {
+  overflow-wrap: anywhere;
+}
+
+.application-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.application-actions .primary-button {
+  margin: 0;
+}
+
+.application-actions .secondary-button {
+  min-width: 104px;
+}
+
+.application-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.receipt-card {
+  text-align: center;
+}
+
+.receipt-card .notice {
+  padding: 12px;
+  background: #d9eee9;
+  border-radius: 8px;
+}
+
+@media (max-width: 520px) {
+  .application-progress {
+    gap: 4px;
+  }
+
+  .application-progress div {
+    font-size: 10px;
+  }
+
+  .application-actions {
+    flex-direction: column-reverse;
+  }
+
+  .application-actions .secondary-button {
+    width: 100%;
+  }
 }
 
 @media (max-width: 520px) {

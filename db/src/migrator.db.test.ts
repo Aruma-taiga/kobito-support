@@ -34,6 +34,9 @@ describe("PostgreSQL migrations and seed", () => {
       new URL("../migrations/001_initial.sql", import.meta.url),
     );
     expect(copied.equals(source)).toBe(true);
+    const secondMigration = await readFile(
+      new URL("../migrations/002_application_submissions.sql", import.meta.url),
+    );
 
     const recorded = await pool.query<{ version: string; checksum: string }>(
       "select version, checksum from schema_migrations order by version",
@@ -42,6 +45,10 @@ describe("PostgreSQL migrations and seed", () => {
       {
         version: "001",
         checksum: createHash("sha256").update(source).digest("hex"),
+      },
+      {
+        version: "002",
+        checksum: createHash("sha256").update(secondMigration).digest("hex"),
       },
     ]);
   });
@@ -164,8 +171,19 @@ describe("PostgreSQL migrations and seed", () => {
     );
     try {
       await writeFile(join(directory, "001_initial.sql"), initial);
+      const secondMigration = await readFile(
+        new URL(
+          "../migrations/002_application_submissions.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
       await writeFile(
-        join(directory, "002_partial_failure.sql"),
+        join(directory, "002_application_submissions.sql"),
+        secondMigration,
+      );
+      await writeFile(
+        join(directory, "003_partial_failure.sql"),
         "create table migration_partial_failure (id integer); select 1 / 0;",
       );
 
@@ -174,7 +192,7 @@ describe("PostgreSQL migrations and seed", () => {
         "select to_regclass('migration_partial_failure')::text as relation",
       );
       const history = await pool.query<{ count: string }>(
-        "select count(*)::text as count from schema_migrations where version = '002'",
+        "select count(*)::text as count from schema_migrations where version = '003'",
       );
       expect(marker.rows[0]?.relation).toBeNull();
       expect(history.rows[0]?.count).toBe("0");
@@ -208,9 +226,17 @@ describe("PostgreSQL migrations and seed", () => {
       new URL("../migrations/001_initial.sql", import.meta.url),
       "utf8",
     );
+    const secondMigration = await readFile(
+      new URL("../migrations/002_application_submissions.sql", import.meta.url),
+      "utf8",
+    );
     const marker = `migration_lock_${process.pid}`;
     try {
       await writeFile(join(directory, "001_initial.sql"), initial);
+      await writeFile(
+        join(directory, "002_application_submissions.sql"),
+        secondMigration,
+      );
       await writeFile(
         join(directory, `999_lock_${process.pid}.sql`),
         `select pg_sleep(0.15); create table ${marker} (id integer primary key); insert into ${marker} values (1);`,

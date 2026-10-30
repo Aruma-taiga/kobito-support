@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import { getApps } from "firebase-admin/app";
 import { getAuth, type UserRecord } from "firebase-admin/auth";
 import { Pool } from "pg";
+import { parseLegalDocuments } from "../src/modules/applications/policy.js";
 import { createFirebaseVerifier } from "../src/platform/auth.js";
 import { loadConfig } from "../src/platform/config.js";
 import { withTransaction } from "../src/platform/db/transaction.js";
@@ -23,6 +24,43 @@ if (
   throw new Error(
     "Dev auth seed requires development mode, a demo project, local auth emulator, and DEV_AUTH_EMAIL/PASSWORD",
   );
+}
+
+const legalEnvironmentKeys = [
+  "LEGAL_TERMS_URL",
+  "LEGAL_TERMS_VERSION",
+  "LEGAL_PRIVACY_URL",
+  "LEGAL_PRIVACY_VERSION",
+  "LEGAL_DISCLOSURE_URL",
+  "LEGAL_DISCLOSURE_VERSION",
+] as const;
+const configuredLegalValues = legalEnvironmentKeys.map((key) =>
+  process.env[key]?.trim(),
+);
+const anyLegalValueProvided = configuredLegalValues.some(Boolean);
+const allLegalValuesProvided = configuredLegalValues.every(Boolean);
+if (anyLegalValueProvided && !allLegalValuesProvided) {
+  throw new Error("Local legal references must include all URLs and versions");
+}
+const draftLegalDocuments = allLegalValuesProvided
+  ? parseLegalDocuments({
+      status: "draft",
+      terms: {
+        url: process.env.LEGAL_TERMS_URL,
+        version: process.env.LEGAL_TERMS_VERSION,
+      },
+      privacy: {
+        url: process.env.LEGAL_PRIVACY_URL,
+        version: process.env.LEGAL_PRIVACY_VERSION,
+      },
+      disclosure: {
+        url: process.env.LEGAL_DISCLOSURE_URL,
+        version: process.env.LEGAL_DISCLOSURE_VERSION,
+      },
+    })
+  : null;
+if (allLegalValuesProvided && !draftLegalDocuments) {
+  throw new Error("Local legal references are invalid");
 }
 const emulator = new URL(`http://${config.authEmulatorHost}`);
 if (!["localhost", "127.0.0.1", "[::1]"].includes(emulator.hostname)) {
@@ -110,6 +148,17 @@ try {
          set customer_id = excluded.customer_id, role = 'customer'`,
       [user.uid, customerId],
     );
+
+    if (draftLegalDocuments) {
+      await client.query(
+        `insert into settings (key, value)
+         values ('application_legal_documents', $1::jsonb)
+         on conflict (key) do update
+           set value = excluded.value, updated_at = now()
+         where settings.value->>'status' = 'draft'`,
+        [JSON.stringify(draftLegalDocuments)],
+      );
+    }
   });
   console.info("Local emulator user is linked to a development customer.");
 } catch {

@@ -1,17 +1,24 @@
 import { webMessages } from "@kobito/shared";
 import { type FormEvent, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import type { AuthClient } from "../auth/session.js";
 import { useAuthSession } from "../auth/session.js";
 
 export function LoginPage({ authClient }: { authClient: AuthClient }) {
   const { state } = useAuthSession();
+  const location = useLocation();
+  const returnTo =
+    new URLSearchParams(location.search).get("next") === "apply"
+      ? "/apply/shop"
+      : "/me";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (state.status === "authenticated") return <Navigate to="/me" replace />;
+  if (state.status === "authenticated") {
+    return <Navigate to={returnTo} replace />;
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
