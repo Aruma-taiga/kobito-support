@@ -6,6 +6,12 @@ The KOMOJU adapter currently verifies webhook signatures against exact raw reque
 
 Payment API and other external-service calls are not implemented yet.
 
+## LINE Login
+
+The LINE ID token verifier posts to the fixed LINE Login verification endpoint and checks the returned subject, channel audience, issuer, and expiration. Outbound redirects are rejected, credentials are omitted, and provider response bytes are capped. The accounts module uses the verified subject to sign in an existing linked customer or link it from an authenticated customer session. Production LINE channel setup and real-provider verification remain outstanding. No LINE message or notification is sent.
+
+Use the API-local `smoke:line-auth` script to exercise the real API composition, PostgreSQL repository, Firebase Admin custom-token creation, Firebase Auth Emulator sign-in, and customer scope. Only the LINE verification HTTP response is mocked; the mock still receives calls at the fixed provider URL.
+
 ## Initial invoice PDF
 
 Invoice PDFs are rendered from escaped, self-contained HTML with Playwright Chromium. JavaScript is disabled, the browser context denies every network request, and the HTML CSP blocks network and embedded content. Configure `INVOICE_CHROMIUM_EXECUTABLE` to an absolute Chromium path; the production image installs Debian Chromium and Noto CJK fonts at `/usr/bin/chromium`. PDF generation has a 15-second browser/page timeout and a 5 MiB output limit.

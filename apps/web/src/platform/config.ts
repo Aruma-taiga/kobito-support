@@ -17,6 +17,14 @@ const webEnvironmentSchema = z.object({
   VITE_FIREBASE_APP_ID: z.string().trim().min(1),
   VITE_API_BASE_URL: z.string().trim().url(),
   VITE_FIREBASE_AUTH_EMULATOR_URL: optionalUrl,
+  VITE_LINE_LIFF_ID: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z
+      .string()
+      .regex(/^\d{10,}-[A-Za-z0-9]+$/)
+      .optional(),
+  ),
 });
 
 export interface WebConfig {
@@ -26,6 +34,7 @@ export interface WebConfig {
   firebaseAppId: string;
   apiBaseUrl: string;
   authEmulatorUrl?: string;
+  lineLiffId?: string;
 }
 
 function isLoopback(hostname: string): boolean {
@@ -109,5 +118,6 @@ export function loadWebConfig(
     firebaseAppId: value.VITE_FIREBASE_APP_ID,
     apiBaseUrl: apiUrl.origin,
     ...(authEmulatorUrl ? { authEmulatorUrl: authEmulatorUrl.origin } : {}),
+    ...(value.VITE_LINE_LIFF_ID ? { lineLiffId: value.VITE_LINE_LIFF_ID } : {}),
   };
 }

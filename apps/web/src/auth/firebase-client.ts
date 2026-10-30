@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  signInWithCustomToken,
   signInWithEmailAndPassword,
   signOut,
   type User,
@@ -54,7 +55,24 @@ export function createFirebaseAuthClient(config: WebConfig): AuthClient {
       };
     },
     signIn: async (email, password) => {
-      await signInWithEmailAndPassword(auth, email, password);
+      const credential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password,
+      );
+      const user = wrapUser(credential.user);
+      if (auth.currentUser?.uid === user.uid) {
+        for (const listener of listeners) listener(user);
+      }
+      return user;
+    },
+    signInWithCustomToken: async (token) => {
+      const credential = await signInWithCustomToken(auth, token);
+      const user = wrapUser(credential.user);
+      if (auth.currentUser?.uid === user.uid) {
+        for (const listener of listeners) listener(user);
+      }
+      return user;
     },
     signUp: async (email, password) => {
       const credential = await createUserWithEmailAndPassword(

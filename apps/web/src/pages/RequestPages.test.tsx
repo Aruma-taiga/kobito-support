@@ -129,7 +129,8 @@ function customerSetup(path: string, overrides: Record<string, unknown> = {}) {
       queueMicrotask(() => listener(user));
       return () => undefined;
     },
-    signIn: vi.fn(async () => undefined),
+    signIn: vi.fn(async () => user),
+    signInWithCustomToken: vi.fn(async () => user),
     signUp: vi.fn(async () => user),
     signOut: vi.fn(async () => undefined),
   };

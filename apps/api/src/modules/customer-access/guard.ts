@@ -17,6 +17,10 @@ export function requireCustomerAccess(
       await next();
       return;
     }
+    if (path === "/api/v1/me/line" || path === "/api/v1/me/line/link") {
+      await next();
+      return;
+    }
 
     const state = await access.getAccess(
       customerScopeFor(context.get("principal")),

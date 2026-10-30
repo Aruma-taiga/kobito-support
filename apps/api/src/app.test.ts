@@ -1,5 +1,11 @@
+import {
+  lineLinkResponseSchema,
+  lineLinkStatusResponseSchema,
+  lineSignInResponseSchema,
+} from "@kobito/shared";
 import { describe, expect, it, vi } from "vitest";
 import { type AppDependencies, createApp } from "./app.js";
+import { LineService } from "./modules/accounts/line/service.js";
 
 type TestAccount = NonNullable<
   Awaited<ReturnType<AppDependencies["accounts"]["findByAuthUserId"]>>
@@ -182,6 +188,128 @@ function makeApp(overrides: AppOverrides = {}) {
 }
 
 describe("API routes and auth pipeline", () => {
+  it("exposes LINE login publicly and scopes linking/status to the verified customer", async () => {
+    const line = {
+      signIn: vi.fn(async () => ({
+        customToken: "firebase-custom",
+        authUserId: "auth-customer-a",
+      })),
+      link: vi.fn(async (scope: { customerId: string }) => {
+        expect(scope.customerId).toBe("customer-a");
+        return { linked: true as const };
+      }),
+      status: vi.fn(async () => ({ linked: false })),
+    };
+    const app = makeApp({ line });
+    const signIn = await app.request("/api/v1/auth/line", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: "line-id-token" }),
+    });
+    expect(signIn.status).toBe(200);
+    expect(lineSignInResponseSchema.parse(await signIn.json())).toEqual({
+      customToken: "firebase-custom",
+      authUserId: "auth-customer-a",
+    });
+    for (const extra of [{ uid: "admin" }, { customerId: "customer-other" }]) {
+      const rejected = await app.request("/api/v1/auth/line", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: "line-id-token", ...extra }),
+      });
+      expect(rejected.status).toBe(400);
+    }
+
+    const anonymous = await app.request("/api/v1/me/line");
+    expect(anonymous.status).toBe(401);
+    const status = await app.request("/api/v1/me/line", {
+      headers: { authorization: "Bearer valid" },
+    });
+    expect(status.status).toBe(200);
+    expect(lineLinkStatusResponseSchema.parse(await status.json())).toEqual({
+      linked: false,
+    });
+    const linked = await app.request("/api/v1/me/line/link", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ idToken: "line-id-token" }),
+    });
+    expect(linked.status).toBe(200);
+    expect(lineLinkResponseSchema.parse(await linked.json())).toEqual({
+      linked: true,
+    });
+  });
+
+  it("rejects oversized LINE token requests before parsing or invoking sign-in", async () => {
+    const line = {
+      signIn: vi.fn(async () => ({
+        customToken: "must-not-mint",
+        authUserId: "uid",
+      })),
+      link: vi.fn(async () => ({ linked: true as const })),
+      status: vi.fn(async () => ({ linked: false })),
+    };
+    const response = await makeApp({ line }).request("/api/v1/auth/line", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: "x".repeat(40_000) }),
+    });
+    expect(response.status).toBe(413);
+    expect(line.signIn).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes an invalid LINE token from Firebase session authentication", async () => {
+    const line = new LineService(
+      {
+        findLinkedAccount: vi.fn(async () => undefined),
+        link: vi.fn(async () => undefined),
+        status: vi.fn(async () => false),
+      },
+      {
+        verify: vi.fn(async () => {
+          throw new Error("invalid LINE ID token");
+        }),
+      },
+      { createCustomToken: vi.fn(async () => "unused") },
+    );
+    const app = makeApp({ line });
+    const link = await app.request("/api/v1/me/line/link", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer valid",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ idToken: "expired-line-token" }),
+    });
+    expect(link.status).toBe(400);
+    expect(await link.json()).toEqual({
+      error: { code: "invalid_line_token" },
+    });
+
+    const unauthenticated = await app.request("/api/v1/me/line/link", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: "expired-line-token" }),
+    });
+    expect(unauthenticated.status).toBe(401);
+    expect(await unauthenticated.json()).toEqual({
+      error: { code: "unauthorized" },
+    });
+
+    const publicLogin = await app.request("/api/v1/auth/line", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: "expired-line-token" }),
+    });
+    expect(publicLogin.status).toBe(401);
+    expect(await publicLogin.json()).toEqual({
+      error: { code: "unauthorized" },
+    });
+  });
+
   it("serves health and only the settings-backed public service name", async () => {
     const app = makeApp();
     const health = await app.request("/healthz");

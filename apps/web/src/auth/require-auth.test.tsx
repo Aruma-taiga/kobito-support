@@ -15,7 +15,16 @@ describe("protected session loading", () => {
         publish = listener;
         return () => undefined;
       },
-      signIn: async () => undefined,
+      signIn: async () => ({
+        uid: "customer-test",
+        email: null,
+        getIdToken: async () => "token",
+      }),
+      signInWithCustomToken: async () => ({
+        uid: "customer-test",
+        email: null,
+        getIdToken: async () => "token",
+      }),
       signUp: async () => ({
         uid: "customer-test",
         email: null,

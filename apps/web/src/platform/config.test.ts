@@ -19,6 +19,27 @@ describe("web public configuration", () => {
     });
   });
 
+  it("keeps LIFF optional and exposes only its public LIFF id", () => {
+    expect(
+      loadWebConfig(localEnvironment, "development").lineLiffId,
+    ).toBeUndefined();
+    expect(
+      loadWebConfig(
+        { ...localEnvironment, VITE_LINE_LIFF_ID: "2000000000-AbCdEfGh" },
+        "development",
+      ).lineLiffId,
+    ).toBe("2000000000-AbCdEfGh");
+  });
+
+  it("does not echo an invalid LIFF id in configuration errors", () => {
+    expect(() =>
+      loadWebConfig(
+        { ...localEnvironment, VITE_LINE_LIFF_ID: "secret-value" },
+        "development",
+      ),
+    ).toThrowError("Invalid web configuration: VITE_LINE_LIFF_ID");
+  });
+
   it("accepts a production build config only with HTTPS and no demo/emulator", () => {
     expect(
       loadWebConfig(

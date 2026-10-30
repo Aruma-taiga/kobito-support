@@ -3,6 +3,9 @@ import { serve } from "@hono/node-server";
 import dotenv from "dotenv";
 import { Pool } from "pg";
 import { createApp } from "./app.js";
+import { LineIdTokenVerifier } from "./integrations/line/verify-id-token.js";
+import { PostgresLineRepository } from "./modules/accounts/line/repository.js";
+import { LineService } from "./modules/accounts/line/service.js";
 import { AccountsRepository } from "./modules/accounts/repository.js";
 import { AdminRepository } from "./modules/admin/repository.js";
 import { AdminService } from "./modules/admin/service.js";
@@ -17,7 +20,10 @@ import { IssuerSettingsRepository } from "./modules/issuer-settings/repository.j
 import { IssuerSettingsService } from "./modules/issuer-settings/service.js";
 import { RequestRepository } from "./modules/requests/repository.js";
 import { RequestService } from "./modules/requests/service.js";
-import { createFirebaseVerifier } from "./platform/auth.js";
+import {
+  createFirebaseCustomTokenIssuer,
+  createFirebaseVerifier,
+} from "./platform/auth.js";
 import { loadConfig } from "./platform/config.js";
 import { consoleLogger } from "./platform/logger.js";
 import { PublicSettingsRepository } from "./platform/settings.js";
@@ -55,6 +61,13 @@ const app = createApp({
   publicSettings: new PublicSettingsRepository(pool),
   logger: consoleLogger,
   komojuInbox: new KomojuInboxRepository(pool),
+  line: new LineService(
+    new PostgresLineRepository(pool),
+    config.lineLoginChannelId
+      ? new LineIdTokenVerifier(config.lineLoginChannelId)
+      : undefined,
+    createFirebaseCustomTokenIssuer(config),
+  ),
 });
 
 const server = serve({

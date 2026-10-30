@@ -299,100 +299,120 @@ afterAll(async () => {
 });
 
 describe("request estimate API integration", () => {
-  it("selects and reserves the Tokyo billing period at the midnight boundary", async () => {
-    const databaseTimezone = await pool.query<{ TimeZone: string }>(
-      "show timezone",
-    );
-    expect(databaseTimezone.rows[0]?.TimeZone.toLowerCase()).toBe("etc/utc");
-    const tokyoMidnight = new Date("2026-01-31T15:30:00.000Z");
-    expect(toTokyoDate(tokyoMidnight)).toBe("2026-02-01");
-
-    const customer = await makeContract("tokyo-period-boundary", "active", 1);
-    const periods = await pool.query<{ id: string; seq: number }>(
-      "select id,seq from billing_periods where contract_id=$1 order by seq",
-      [customer.contractId],
-    );
-    const january = requireRow(periods.rows[0]);
-    await pool.query(
-      "update billing_periods set starts_on='2026-01-01',ends_on='2026-01-31' where id=$1",
-      [january.id],
-    );
-    await pool.query(
-      "update credit_entries set amount=1 where period_id=$1 and kind='grant'",
-      [january.id],
-    );
-    const february = await pool.query<{ id: string }>(
-      "insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_incl_tax,credits) select contract_id,2,'2026-02-01','2026-02-28',plan_id,5000,4 from billing_periods where id=$1 returning id",
-      [january.id],
-    );
-    const februaryId = requireRow(february.rows[0]).id;
-    await pool.query(
-      "insert into credit_entries(contract_id,period_id,kind,amount) values($1,$2,'grant',4)",
-      [customer.contractId, februaryId],
-    );
-
-    const app = makeApp(() => tokyoMidnight);
-    const adminHeaders = {
-      authorization: `Bearer ${adminToken}`,
-      "content-type": "application/json",
-    };
-    const requestResponse = await app.request("/api/v1/admin/requests", {
-      method: "POST",
-      headers: { ...adminHeaders, "idempotency-key": randomUUID() },
-      body: JSON.stringify({
-        contractId: customer.contractId,
-        receivedOn: "2026-02-01",
-        summary: "東京日付境界の確認",
-        urgent: false,
-      }),
+  it.each([
+    "UTC",
+    "Asia/Tokyo",
+  ] as const)("selects and reserves the Tokyo billing period at the midnight boundary with %s DB session time", async (timezone) => {
+    const requestPool = new Pool({
+      connectionString:
+        process.env.TEST_DATABASE_URL ??
+        "postgres://kobito:kobito@127.0.0.1:5432/kobito_support_test",
+      options: `-c timezone=${timezone}`,
     });
-    expect(requestResponse.status).toBe(201);
-    const requestId = ((await requestResponse.json()) as { id: string }).id;
-    requestIds.push(requestId);
-    const estimateResponse = await app.request(
-      `/api/v1/admin/requests/${requestId}/estimates`,
-      {
+    try {
+      const databaseTimezone = await requestPool.query<{ TimeZone: string }>(
+        "show timezone",
+      );
+      const actualTimezone = databaseTimezone.rows[0]?.TimeZone.toLowerCase();
+      if (timezone === "UTC") {
+        expect(["utc", "etc/utc"]).toContain(actualTimezone);
+      } else {
+        expect(actualTimezone).toBe("asia/tokyo");
+      }
+      const tokyoMidnight = new Date("2026-01-31T15:30:00.000Z");
+      expect(toTokyoDate(tokyoMidnight)).toBe("2026-02-01");
+
+      const customer = await makeContract("tokyo-period-boundary", "active", 1);
+      const periods = await pool.query<{ id: string; seq: number }>(
+        "select id,seq from billing_periods where contract_id=$1 order by seq",
+        [customer.contractId],
+      );
+      const january = requireRow(periods.rows[0]);
+      await pool.query(
+        "update billing_periods set starts_on='2026-01-01',ends_on='2026-01-31' where id=$1",
+        [january.id],
+      );
+      await pool.query(
+        "update credit_entries set amount=1 where period_id=$1 and kind='grant'",
+        [january.id],
+      );
+      const february = await pool.query<{ id: string }>(
+        "insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_incl_tax,credits) select contract_id,2,'2026-02-01','2026-02-28',plan_id,5000,4 from billing_periods where id=$1 returning id",
+        [january.id],
+      );
+      const februaryId = requireRow(february.rows[0]).id;
+      await pool.query(
+        "insert into credit_entries(contract_id,period_id,kind,amount) values($1,$2,'grant',4)",
+        [customer.contractId, februaryId],
+      );
+
+      const app = makeApp(() => tokyoMidnight, requestPool);
+      const adminHeaders = {
+        authorization: `Bearer ${adminToken}`,
+        "content-type": "application/json",
+      };
+      const requestResponse = await app.request("/api/v1/admin/requests", {
         method: "POST",
         headers: { ...adminHeaders, "idempotency-key": randomUUID() },
         body: JSON.stringify({
-          credits: 1,
-          dueOn: "2026-01-15",
-          workItems: ["作業"],
-          doneCriteria: "反映済み",
+          contractId: customer.contractId,
+          receivedOn: "2026-02-01",
+          summary: "東京日付境界の確認",
+          urgent: false,
         }),
-      },
-    );
-    expect(estimateResponse.status).toBe(201);
-    const estimateId = ((await estimateResponse.json()) as { id: string }).id;
-
-    const detail = await app.request(`/api/v1/me/requests/${requestId}`, {
-      headers: { authorization: `Bearer ${customer.token}` },
-    });
-    expect(await detail.json()).toMatchObject({
-      currentPeriodId: februaryId,
-      availableCredits: 4,
-      canApprove: true,
-    });
-    const approval = await app.request(
-      `/api/v1/me/estimates/${estimateId}/approve`,
-      {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${customer.token}`,
-          "content-type": "application/json",
+      });
+      expect(requestResponse.status).toBe(201);
+      const requestId = ((await requestResponse.json()) as { id: string }).id;
+      requestIds.push(requestId);
+      const estimateResponse = await app.request(
+        `/api/v1/admin/requests/${requestId}/estimates`,
+        {
+          method: "POST",
+          headers: { ...adminHeaders, "idempotency-key": randomUUID() },
+          body: JSON.stringify({
+            credits: 1,
+            dueOn: "2026-01-15",
+            workItems: ["作業"],
+            doneCriteria: "反映済み",
+          }),
         },
-        body: "{}",
-      },
-    );
-    expect(approval.status).toBe(200);
-    const reservations = await pool.query<{
-      period_id: string;
-      amount: number;
-    }>(
-      "select period_id,amount from credit_entries where request_id=$1 and kind='reserve'",
-      [requestId],
-    );
-    expect(reservations.rows).toEqual([{ period_id: februaryId, amount: -1 }]);
+      );
+      expect(estimateResponse.status).toBe(201);
+      const estimateId = ((await estimateResponse.json()) as { id: string }).id;
+
+      const detail = await app.request(`/api/v1/me/requests/${requestId}`, {
+        headers: { authorization: `Bearer ${customer.token}` },
+      });
+      expect(await detail.json()).toMatchObject({
+        currentPeriodId: februaryId,
+        availableCredits: 4,
+        canApprove: true,
+      });
+      const approval = await app.request(
+        `/api/v1/me/estimates/${estimateId}/approve`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${customer.token}`,
+            "content-type": "application/json",
+          },
+          body: "{}",
+        },
+      );
+      expect(approval.status).toBe(200);
+      const reservations = await pool.query<{
+        period_id: string;
+        amount: number;
+      }>(
+        "select period_id,amount from credit_entries where request_id=$1 and kind='reserve'",
+        [requestId],
+      );
+      expect(reservations.rows).toEqual([
+        { period_id: februaryId, amount: -1 },
+      ]);
+    } finally {
+      await requestPool.end();
+    }
   });
 
   it("creates and sends immutable estimate versions, reserves once, and scopes customer access", async () => {

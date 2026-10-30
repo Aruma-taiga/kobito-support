@@ -1,10 +1,16 @@
 import { webMessages } from "@kobito/shared";
 import { type FormEvent, useState } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import type { AuthClient } from "../auth/session.js";
 import { useAuthSession } from "../auth/session.js";
 
-export function LoginPage({ authClient }: { authClient: AuthClient }) {
+export function LoginPage({
+  authClient,
+  lineLiffId,
+}: {
+  authClient: AuthClient;
+  lineLiffId?: string | undefined;
+}) {
   const { state } = useAuthSession();
   const location = useLocation();
   const returnTo =
@@ -78,6 +84,11 @@ export function LoginPage({ authClient }: { authClient: AuthClient }) {
             {submitting ? webMessages.loginSubmitting : webMessages.loginButton}
           </button>
         </form>
+        {lineLiffId ? (
+          <Link className="secondary-button" to="/liff?to=home">
+            {webMessages.lineLogin}
+          </Link>
+        ) : null}
       </section>
     </main>
   );

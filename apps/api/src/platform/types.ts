@@ -31,7 +31,10 @@ export class ApiError extends Error {
       | "request_conflict"
       | "estimate_conflict"
       | "insufficient_credits"
-      | "settings_revision_conflict",
+      | "settings_revision_conflict"
+      | "conflict"
+      | "service_unavailable"
+      | "invalid_line_token",
   ) {
     super(code);
   }

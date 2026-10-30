@@ -77,7 +77,8 @@ const authClient: AuthClient = {
     queueMicrotask(() => listener(user));
     return () => undefined;
   },
-  signIn: async () => undefined,
+  signIn: async () => user,
+  signInWithCustomToken: async () => user,
   signUp: async () => user,
   signOut: async () => undefined,
 };
