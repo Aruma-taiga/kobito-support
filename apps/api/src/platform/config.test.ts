@@ -1,0 +1,72 @@
+import { describe, expect, it } from "vitest";
+import { loadConfig } from "./config.js";
+
+const validEnvironment = {
+  NODE_ENV: "development",
+  DATABASE_URL: "postgres://kobito:kobito@localhost:5432/kobito_support",
+  FIREBASE_PROJECT_ID: "demo-kobito-support",
+  WEB_ORIGIN: "http://localhost:5173",
+  FIREBASE_AUTH_EMULATOR_HOST: "127.0.0.1:9099",
+};
+
+describe("loadConfig", () => {
+  it("requires the database, Firebase project, and browser origin", () => {
+    expect(() => loadConfig({})).toThrow();
+    expect(() =>
+      loadConfig({ ...validEnvironment, DATABASE_URL: "" }),
+    ).toThrow();
+    expect(() =>
+      loadConfig({ ...validEnvironment, FIREBASE_PROJECT_ID: "" }),
+    ).toThrow();
+    expect(() => loadConfig({ ...validEnvironment, WEB_ORIGIN: "" })).toThrow();
+  });
+
+  it("never includes submitted secret values in startup errors", () => {
+    const secret = "postgres://private-user:very-secret@db.internal/kobito";
+    try {
+      loadConfig({
+        ...validEnvironment,
+        DATABASE_URL: secret,
+        WEB_ORIGIN: "not a URL",
+      });
+      throw new Error("expected configuration error");
+    } catch (error) {
+      expect(String(error)).not.toContain("very-secret");
+      expect(String(error)).toContain("WEB_ORIGIN");
+    }
+  });
+
+  it("accepts local emulator config outside production", () => {
+    expect(loadConfig(validEnvironment).authEmulatorHost).toBe(
+      "127.0.0.1:9099",
+    );
+  });
+
+  it("rejects an auth emulator in production", () => {
+    expect(() =>
+      loadConfig({ ...validEnvironment, NODE_ENV: "production" }),
+    ).toThrow();
+  });
+
+  it("validates port as a safe integer in range", () => {
+    expect(loadConfig({ ...validEnvironment, PORT: "8080" }).port).toBe(8080);
+    expect(() => loadConfig({ ...validEnvironment, PORT: "0" })).toThrow();
+    expect(() => loadConfig({ ...validEnvironment, PORT: "1.5" })).toThrow();
+    expect(() =>
+      loadConfig({ ...validEnvironment, PORT: "9007199254740992" }),
+    ).toThrow();
+  });
+
+  it("provides operational invoice defaults without hardcoding company identity", () => {
+    const config = loadConfig(validEnvironment);
+    expect(config.invoicePrefix).toBe("KS");
+    expect(config.serviceName).toBeUndefined();
+    expect(config.companyName).toBeUndefined();
+  });
+
+  it("uses the invoice prefix default when the example env value is blank", () => {
+    expect(
+      loadConfig({ ...validEnvironment, INVOICE_PREFIX: "" }).invoicePrefix,
+    ).toBe("KS");
+  });
+});
