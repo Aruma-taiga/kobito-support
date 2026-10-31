@@ -284,7 +284,9 @@ describe("application flow", () => {
     ).toBeTruthy();
     expect(signUp).not.toHaveBeenCalled();
     expect(postApplication).not.toHaveBeenCalled();
-    expect(apiClient.getPublicConfig).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(apiClient.getPublicConfig).toHaveBeenCalledTimes(2),
+    );
   });
 
   it("directs an existing Firebase email to controlled login resume", async () => {
@@ -496,14 +498,14 @@ describe("application flow", () => {
     const firstPayload = firstCall[0] as Record<string, unknown>;
     const firstKey = firstCall[1];
     expect(firstPayload).not.toHaveProperty("password");
-    expect(signUp).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(signUp).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: /再試行/ }));
     await waitFor(() => expect(postApplication).toHaveBeenCalledTimes(2));
     const secondCall = postApplication.mock.calls[1];
     if (!secondCall) throw new Error("Expected one retry request");
     const secondKey = secondCall[1];
     expect(secondKey).toBe(firstKey);
-    expect(signUp).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(signUp).toHaveBeenCalledTimes(1));
     await act(async () => undefined);
   });
 
@@ -552,7 +554,7 @@ describe("application flow", () => {
     await waitFor(() =>
       expect(apiClient.getPublicConfig).toHaveBeenCalledTimes(2),
     );
-    expect(postApplication).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(postApplication).toHaveBeenCalledTimes(1));
     expect(
       screen.getByRole("button", { name: /申し込む/ }).hasAttribute("disabled"),
     ).toBe(true);
@@ -563,7 +565,7 @@ describe("application flow", () => {
     const firstCall = postApplication.mock.calls[0];
     const secondCall = postApplication.mock.calls[1];
     expect(secondCall?.[1]).not.toBe(firstCall?.[1]);
-    expect(signUp).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(signUp).toHaveBeenCalledTimes(1));
   });
 });
 

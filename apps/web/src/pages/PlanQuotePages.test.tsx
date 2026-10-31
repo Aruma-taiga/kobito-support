@@ -156,8 +156,12 @@ describe("c12 plan quote page", () => {
     fireEvent.click(approve);
     fireEvent.click(approve);
     await waitFor(() => expect(window.location.pathname).toBe("/me/waiting"));
-    expect(apiClient.approvePlanQuote).toHaveBeenCalledTimes(1);
-    expect(apiClient.approvePlanQuote).toHaveBeenCalledWith(quoteId);
+    await waitFor(() =>
+      expect(apiClient.approvePlanQuote).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() =>
+      expect(apiClient.approvePlanQuote).toHaveBeenCalledWith(quoteId),
+    );
   });
 
   it("explains an expired quote and offers no approval", async () => {

@@ -660,8 +660,10 @@ describe("c11 contract", () => {
     await waitFor(() =>
       expect(createExtraCreditPurchase).toHaveBeenCalledTimes(2),
     );
-    expect(createExtraCreditPurchase.mock.calls[1]).toEqual(
-      createExtraCreditPurchase.mock.calls[0],
+    await waitFor(() =>
+      expect(createExtraCreditPurchase.mock.calls[1]).toEqual(
+        createExtraCreditPurchase.mock.calls[0],
+      ),
     );
   });
 
@@ -673,7 +675,7 @@ describe("c11 contract", () => {
     });
     await screen.findByText("スタンダード");
     expect(screen.queryByRole("spinbutton")).toBeNull();
-    expect(apiClient.getContract).toHaveBeenCalled();
+    await waitFor(() => expect(apiClient.getContract).toHaveBeenCalled());
   });
 
   it("shows the tax-exclusive price first, dates and next billing date", async () => {

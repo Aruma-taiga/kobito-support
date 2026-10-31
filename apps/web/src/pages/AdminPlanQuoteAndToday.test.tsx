@@ -246,8 +246,10 @@ describe("a02 today's tasks", () => {
         .getByRole("link", { name: "審査する" })
         .getAttribute("href"),
     ).toBe(`/admin/customers/${luceId}`);
-    expect(client.getApplications).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "under_review" }),
+    await waitFor(() =>
+      expect(client.getApplications).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "under_review" }),
+      ),
     );
 
     const quote = screen
@@ -528,13 +530,15 @@ describe("a04-2 make a plan quote", () => {
     });
     fireEvent.click(send);
     await waitFor(() => expect(sendPlanQuote).toHaveBeenCalledTimes(1));
-    expect(sendPlanQuote).toHaveBeenCalledWith(aobaId, {
-      expectedVersion: 0,
-      priceExclTax: 25_000,
-      credits: 8,
-      description: "ホームページの更新\n定例の相談",
-      expiresOn: "2026-11-28",
-    });
+    await waitFor(() =>
+      expect(sendPlanQuote).toHaveBeenCalledWith(aobaId, {
+        expectedVersion: 0,
+        priceExclTax: 25_000,
+        credits: 8,
+        description: "ホームページの更新\n定例の相談",
+        expiresOn: "2026-11-28",
+      }),
+    );
     expect(
       await screen.findByText(webMessages.adminPlanQuoteSent),
     ).toBeTruthy();
@@ -581,9 +585,11 @@ describe("a04-2 make a plan quote", () => {
       screen.getByRole("button", { name: webMessages.adminPlanQuoteSend }),
     );
     await waitFor(() => expect(sendPlanQuote).toHaveBeenCalled());
-    expect(sendPlanQuote).toHaveBeenCalledWith(
-      aobaId,
-      expect.objectContaining({ expectedVersion: 1, priceExclTax: 30_000 }),
+    await waitFor(() =>
+      expect(sendPlanQuote).toHaveBeenCalledWith(
+        aobaId,
+        expect.objectContaining({ expectedVersion: 1, priceExclTax: 30_000 }),
+      ),
     );
   });
 

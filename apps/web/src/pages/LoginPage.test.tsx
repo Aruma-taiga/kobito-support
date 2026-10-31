@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthClient, AuthUser } from "../auth/session.js";
@@ -159,7 +165,9 @@ describe("password reset", () => {
     const client = await openForm();
     fill("shop@example.jp");
     expect(await screen.findByText(new RegExp(done))).toBeTruthy();
-    expect(client.sendPasswordReset).toHaveBeenCalledWith("shop@example.jp");
+    await waitFor(() =>
+      expect(client.sendPasswordReset).toHaveBeenCalledWith("shop@example.jp"),
+    );
   });
 
   it("shows the same text for an unregistered email", async () => {
@@ -201,7 +209,9 @@ describe("password reset", () => {
     fireEvent.click(button);
     release();
     await screen.findByText(new RegExp(done));
-    expect(client.sendPasswordReset).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(client.sendPasswordReset).toHaveBeenCalledTimes(1),
+    );
   });
 
   it("shows a generic error on failure", async () => {

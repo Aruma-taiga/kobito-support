@@ -175,10 +175,14 @@ describe("LINE LIFF entry", () => {
     });
 
     expect(await screen.findByText("ホーム")).toBeTruthy();
-    expect(liff.init).toHaveBeenCalledOnce();
-    expect(apiClient.signInWithLine).toHaveBeenCalledWith("line-id-token");
-    expect(authClient.signInWithCustomToken).toHaveBeenCalledWith(
-      "auto-custom-token",
+    await waitFor(() => expect(liff.init).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(apiClient.signInWithLine).toHaveBeenCalledWith("line-id-token"),
+    );
+    await waitFor(() =>
+      expect(authClient.signInWithCustomToken).toHaveBeenCalledWith(
+        "auto-custom-token",
+      ),
     );
   });
 
@@ -197,7 +201,9 @@ describe("LINE LIFF entry", () => {
     });
 
     expect(await screen.findByText("見積")).toBeTruthy();
-    expect(authClient.signInWithCustomToken).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(authClient.signInWithCustomToken).toHaveBeenCalledOnce(),
+    );
   });
 
   it("resolves the return destination from the URL after LIFF initialization", async () => {
@@ -245,8 +251,10 @@ describe("LINE LIFF entry", () => {
     });
 
     expect(await screen.findByText("ホーム")).toBeTruthy();
-    expect(apiClient.signInWithLine).toHaveBeenCalledOnce();
-    expect(exchange).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(apiClient.signInWithLine).toHaveBeenCalledOnce(),
+    );
+    await waitFor(() => expect(exchange).toHaveBeenCalledOnce());
   });
 
   it("initializes and exchanges once under StrictMode effect replay", async () => {
@@ -263,8 +271,10 @@ describe("LINE LIFF entry", () => {
     });
 
     expect(await screen.findByText("ホーム")).toBeTruthy();
-    expect(liff.init).toHaveBeenCalledOnce();
-    expect(apiClient.signInWithLine).toHaveBeenCalledOnce();
+    await waitFor(() => expect(liff.init).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(apiClient.signInWithLine).toHaveBeenCalledOnce(),
+    );
   });
 
   it("does not claim to be configured when the public LIFF ID is absent", async () => {
@@ -284,7 +294,9 @@ describe("LINE LIFF entry", () => {
       await screen.findByRole("button", { name: "LINEでログイン" }),
     );
     await screen.findByText(/メールアドレスとパスワードでログイン/);
-    expect(apiClient.signInWithLine).toHaveBeenCalledWith("line-id-token");
+    await waitFor(() =>
+      expect(apiClient.signInWithLine).toHaveBeenCalledWith("line-id-token"),
+    );
     expect(apiClient.linkLine).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "LINEを連携する" }));
     await waitFor(() =>
@@ -324,9 +336,11 @@ describe("LINE LIFF entry", () => {
         "signed-in-customer",
       ),
     );
-    expect(authClient.signIn).toHaveBeenCalledWith(
-      "customer@example.jp",
-      "correct-password",
+    await waitFor(() =>
+      expect(authClient.signIn).toHaveBeenCalledWith(
+        "customer@example.jp",
+        "correct-password",
+      ),
     );
   });
 
@@ -389,7 +403,9 @@ describe("LINE LIFF entry", () => {
       ),
     );
     expect(await screen.findByText("ホーム")).toBeTruthy();
-    expect(apiClient.signInWithLine).toHaveBeenCalledWith("line-id-token");
+    await waitFor(() =>
+      expect(apiClient.signInWithLine).toHaveBeenCalledWith("line-id-token"),
+    );
   });
 
   it("returns an approved estimate deep link after a matching account is authenticated", async () => {
@@ -523,7 +539,9 @@ describe("LINE LIFF entry", () => {
         "fresh-token",
       ),
     );
-    expect(apiClient.signInWithLine).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(apiClient.signInWithLine).toHaveBeenCalledTimes(2),
+    );
   });
 
   it("does not navigate if another Firebase account becomes current during LINE sign-in", async () => {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { webMessages } from "@kobito/shared";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { type AuthClient, AuthProvider, RequireAuth } from "../auth/session.js";
@@ -194,13 +194,15 @@ describe("customer contract summary", () => {
     expect(next?.textContent).toContain("5,500円");
     expect(next?.textContent).toContain("税抜5,000円＋消費税500円");
     expect(screen.getByText("11月25日")).toBeTruthy();
-    expect(fetcher).toHaveBeenCalledWith(
-      new URL("http://127.0.0.1:3000/api/v1/me/contract"),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer customer-token",
+    await waitFor(() =>
+      expect(fetcher).toHaveBeenCalledWith(
+        new URL("http://127.0.0.1:3000/api/v1/me/contract"),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: "Bearer customer-token",
+          }),
         }),
-      }),
+      ),
     );
   });
 });

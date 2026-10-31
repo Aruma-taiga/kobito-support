@@ -467,11 +467,13 @@ describe("a03 customers", () => {
   it("filters by status with chips and starts from すべて", async () => {
     const { apiClient } = setup("/admin/customers");
     await screen.findByRole("table", { name: "顧客一覧" });
-    expect(apiClient.getApplications).toHaveBeenLastCalledWith({
-      q: "",
-      page: 1,
-      pageSize: 25,
-    });
+    await waitFor(() =>
+      expect(apiClient.getApplications).toHaveBeenLastCalledWith({
+        q: "",
+        page: 1,
+        pageSize: 25,
+      }),
+    );
     const chips = screen.getByRole("group", { name: "状態で絞り込む" });
     expect(
       within(chips)
