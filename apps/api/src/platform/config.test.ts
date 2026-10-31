@@ -143,6 +143,30 @@ describe("loadConfig", () => {
     ).toThrow("LINE_ENABLED");
   });
 
+  it("keeps mail sending disabled unless the development log provider is selected", () => {
+    expect(loadConfig(validEnvironment).mailProvider).toBeUndefined();
+    expect(
+      loadConfig({ ...validEnvironment, MAIL_PROVIDER: "log" }).mailProvider,
+    ).toBe("log");
+  });
+
+  it("rejects unknown mail provider names without echoing submitted values", () => {
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        MAIL_PROVIDER: "private-provider-name",
+      }),
+    ).toThrow("MAIL_PROVIDER");
+    try {
+      loadConfig({
+        ...validEnvironment,
+        MAIL_PROVIDER: "private-provider-name",
+      });
+    } catch (error) {
+      expect(String(error)).not.toContain("private-provider-name");
+    }
+  });
+
   it("provides operational invoice defaults without hardcoding company identity", () => {
     const config = loadConfig(validEnvironment);
     expect(config.invoicePrefix).toBe("KS");

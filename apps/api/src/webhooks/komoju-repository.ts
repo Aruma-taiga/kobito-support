@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { canTransitionInvoice, planCodes } from "@kobito/shared";
 import type { Pool, PoolClient } from "pg";
 import { settleInitialInvoicePayment } from "../modules/invoices/payment-settlement.js";
+import { schedule } from "../modules/notifications/service.js";
 import type {
   KomojuEventProcessorRepository,
   KomojuInbox,
@@ -16,7 +17,10 @@ import {
 export class KomojuInboxRepository
   implements KomojuInbox, KomojuEventProcessorRepository
 {
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool: Pool,
+    private readonly clock: () => Date = () => new Date(),
+  ) {}
 
   async receive(event: KomojuInboxEvent): Promise<KomojuInboxResult> {
     const payload = parseKomojuInboxEvent(event);
@@ -146,6 +150,7 @@ export class KomojuInboxRepository
       const invoiceResult = await client.query<{
         id: string;
         contract_id: string;
+        customer_id: string;
         contract_status: string;
         anchor_date: string | null;
         status: string;
@@ -156,7 +161,7 @@ export class KomojuInboxRepository
         total_excl_tax: number;
         issuer_snapshot: unknown;
       }>(
-        `select i.id,i.contract_id,c.status as contract_status,c.anchor_date::text as anchor_date,
+        `select i.id,i.contract_id,c.customer_id,c.status as contract_status,c.anchor_date::text as anchor_date,
                 i.status,i.payment_method,i.kind,i.period_id,i.total_incl_tax,i.total_excl_tax,i.issuer_snapshot
          from invoices i join contracts c on c.id=i.contract_id
          where i.invoice_no=$1 for update of i`,
@@ -191,6 +196,18 @@ export class KomojuInboxRepository
             "update invoices set status='failed' where id=$1",
             [invoice.id],
           );
+          for (const [label, days] of [
+            ["day1", 1],
+            ["day3", 3],
+          ] as const) {
+            await schedule(client, {
+              customerId: invoice.customer_id,
+              kind: "NT-05",
+              dedupeKey: `NT-05:${invoice.id}:${label}:email`,
+              scheduledAt: tokyoMorningAfter(this.clock(), days),
+              payload: { invoiceId: invoice.id },
+            });
+          }
           await markEvent(client, eventId, `failure:${event.type}`);
         }
         await client.query("commit");
@@ -294,6 +311,7 @@ export class KomojuInboxRepository
         const settlement = await settleInitialInvoicePayment(client, {
           invoiceId: invoice.id,
           contractId: invoice.contract_id,
+          customerId: invoice.customer_id,
           paidOn,
           anchorDate: paidOn,
           amount: event.data.total,
@@ -359,6 +377,26 @@ export class KomojuInboxRepository
       client.release();
     }
   }
+}
+
+function tokyoMorningAfter(now: Date, daysAfter: number): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value;
+  const date = new Date(
+    Date.UTC(
+      Number(part("year")),
+      Number(part("month")) - 1,
+      Number(part("day")) + daysAfter,
+      0,
+    ),
+  );
+  return date;
 }
 
 async function markEvent(

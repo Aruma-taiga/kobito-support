@@ -1,11 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { FakeMailSender } from "../integrations/mail/sender.js";
+import { runNotificationDispatch } from "../jobs/notifications.js";
+import { schedule } from "../modules/notifications/service.js";
 import { KomojuEventProcessor } from "./komoju-processor.js";
 import { KomojuInboxRepository } from "./komoju-repository.js";
 
 const pool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
-const repository = new KomojuInboxRepository(pool);
+const fixturePrefix = "kmj-notification-test";
+const repository = new KomojuInboxRepository(
+  pool,
+  () => new Date("2026-11-01T00:30:00.000Z"),
+);
 const processor = new KomojuEventProcessor(repository);
 
 const customerIds: string[] = [];
@@ -16,33 +23,36 @@ const invoiceIds: string[] = [];
 const eventIds = new Set<string>();
 
 function newEventId(): string {
-  const id = `evt_${randomUUID().replaceAll("-", "")}`;
+  const id = `evt_${fixturePrefix}_${randomUUID().replaceAll("-", "")}`;
   eventIds.add(id);
   return id;
 }
 
 beforeAll(async () => {
   // Remove fixtures left by an interrupted earlier run of this test.
+  await pool.query(`delete from notifications where customer_id in
+    (select id from customers where shop_name like '${fixturePrefix} %')`);
+  await pool.query("delete from komoju_events where id like $1", [
+    `evt_${fixturePrefix}_%`,
+  ]);
   await pool.query(`delete from komoju_events where payload->'data'->>'external_order_num' in
     (select i.invoice_no from invoices i join contracts c on c.id=i.contract_id
-     join plans p on p.id=c.plan_id where p.code like 'kmj-%')`);
-  await pool.query(`delete from komoju_events
-    where payload->'data'->>'external_order_num' like 'KS-TEST-NOT-FOUND-%'`);
+     join plans p on p.id=c.plan_id where p.code like '${fixturePrefix}-%')`);
   await pool.query(`delete from credit_entries where contract_id in
-    (select c.id from contracts c join plans p on p.id=c.plan_id where p.code like 'kmj-%')`);
+    (select c.id from contracts c join plans p on p.id=c.plan_id where p.code like '${fixturePrefix}-%')`);
   await pool.query(`delete from payments where invoice_id in
     (select i.id from invoices i join contracts c on c.id=i.contract_id
-     join plans p on p.id=c.plan_id where p.code like 'kmj-%')`);
+     join plans p on p.id=c.plan_id where p.code like '${fixturePrefix}-%')`);
   await pool.query(`delete from invoices where contract_id in
-    (select c.id from contracts c join plans p on p.id=c.plan_id where p.code like 'kmj-%')`);
+    (select c.id from contracts c join plans p on p.id=c.plan_id where p.code like '${fixturePrefix}-%')`);
   await pool.query(`delete from billing_periods where contract_id in
-    (select c.id from contracts c join plans p on p.id=c.plan_id where p.code like 'kmj-%')`);
+    (select c.id from contracts c join plans p on p.id=c.plan_id where p.code like '${fixturePrefix}-%')`);
   await pool.query(`delete from contracts where plan_id in
-    (select id from plans where code like 'kmj-%')`);
+    (select id from plans where code like '${fixturePrefix}-%')`);
   await pool.query(`delete from applications where plan_id in
-    (select id from plans where code like 'kmj-%')`);
-  await pool.query("delete from plans where code like 'kmj-%'");
-  await pool.query(`delete from customers where shop_name like 'Komoju %'
+    (select id from plans where code like '${fixturePrefix}-%')`);
+  await pool.query(`delete from plans where code like '${fixturePrefix}-%'`);
+  await pool.query(`delete from customers where shop_name like '${fixturePrefix} %'
     and not exists (select 1 from applications a where a.customer_id=customers.id)
     and not exists (select 1 from contracts c where c.customer_id=customers.id)`);
 });
@@ -98,7 +108,7 @@ async function createInvoice(
   const customer = await pool.query<{ id: string }>(
     `insert into customers (shop_name,contact_name,billing_name,billing_address,email)
      values ($1,'Webhook contact','Webhook billing','Address',$2) returning id`,
-    [`Komoju ${suffix}`, `${suffix}@example.test`],
+    [`${fixturePrefix} ${suffix}`, `${suffix}@example.test`],
   );
   const customerId = customer.rows[0]?.id;
   if (!customerId) throw new Error("KOMOJU test customer insert failed");
@@ -106,7 +116,7 @@ async function createInvoice(
   const plan = await pool.query<{ id: string }>(
     `insert into plans (code,name,price_excl_tax,credits,is_custom,valid_from,valid_to)
      values ($1,'Accepted plan',5000,3,false,'2026-01-01','2026-10-31') returning id`,
-    [`kmj-${suffix}`],
+    [`${fixturePrefix}-${suffix}`],
   );
   const planId = plan.rows[0]?.id;
   if (!planId) throw new Error("KOMOJU test plan insert failed");
@@ -192,6 +202,9 @@ async function createInvoice(
 async function cleanup(fixture: Fixture, eventIds: string[]) {
   await pool.query("delete from komoju_events where id=any($1::text[])", [
     eventIds,
+  ]);
+  await pool.query("delete from notifications where customer_id=$1", [
+    fixture.customerId,
   ]);
   await pool.query("delete from credit_entries where contract_id=$1", [
     fixture.contractId,
@@ -399,6 +412,17 @@ describe("KOMOJU event processing database behavior", () => {
         payment_count: "1",
         grant_count: "1",
       });
+      const contractNotice = await pool.query<{ count: number }>(
+        `select count(*)::int count from notifications
+          where customer_id=$1 and kind='NT-02b' and channel='email'
+            and dedupe_key=$2 and payload->>'invoiceId'=$3`,
+        [
+          fixture.customerId,
+          `NT-02b:${fixture.contractId}:email`,
+          fixture.invoiceId,
+        ],
+      );
+      expect(contractNotice.rows[0]?.count).toBe(1);
       expect(untouched).toEqual({
         invoice_no: other.invoiceNo,
         status: "issued",
@@ -459,6 +483,90 @@ describe("KOMOJU event processing database behavior", () => {
         error: `failure:${type}`,
         payment_count: "0",
       });
+      const reminders = await pool.query<{
+        dedupe_key: string;
+        scheduled_at: Date;
+        channel: string;
+      }>(
+        `select dedupe_key,scheduled_at,channel from notifications
+          where customer_id=$1 and kind='NT-05' and payload->>'invoiceId'=$2 order by scheduled_at`,
+        [fixture.customerId, fixture.invoiceId],
+      );
+      expect(reminders.rows).toEqual([
+        {
+          dedupe_key: `NT-05:${fixture.invoiceId}:day1:email`,
+          scheduled_at: new Date("2026-11-02T00:00:00.000Z"),
+          channel: "email",
+        },
+        {
+          dedupe_key: `NT-05:${fixture.invoiceId}:day3:email`,
+          scheduled_at: new Date("2026-11-04T00:00:00.000Z"),
+          channel: "email",
+        },
+      ]);
+    } finally {
+      await cleanup(fixture, [eventId]);
+    }
+  });
+
+  it("skips a scheduled NT-05 reminder when its invoice has since been paid", async () => {
+    const fixture = await createInvoice();
+    const eventId = newEventId();
+    try {
+      await repository.receive(
+        capturedEvent(
+          eventId,
+          fixture.invoiceNo,
+          `pay_paid_${randomUUID().replaceAll("-", "")}`,
+        ),
+      );
+      await expect(repository.processEvent(eventId)).resolves.toBe("processed");
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await schedule(client, {
+          customerId: fixture.customerId,
+          kind: "NT-05",
+          dedupeKey: `NT-05:${fixture.invoiceId}:day1:email`,
+          scheduledAt: new Date("2026-11-02T00:00:00.000Z"),
+          payload: { invoiceId: fixture.invoiceId },
+        });
+        await client.query("commit");
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+      const queued = await pool.query<{ id: string }>(
+        "select id from notifications where dedupe_key=$1",
+        [`NT-05:${fixture.invoiceId}:day1:email`],
+      );
+      const sender = new FakeMailSender();
+      const results = await Promise.all([
+        runNotificationDispatch(new Date("2026-11-02T01:00:00.000Z"), {
+          pool,
+          sender,
+          notificationIds: [queued.rows[0]?.id ?? ""],
+        }),
+        runNotificationDispatch(new Date("2026-11-02T01:00:00.000Z"), {
+          pool,
+          sender,
+          notificationIds: [queued.rows[0]?.id ?? ""],
+        }),
+      ]);
+      expect(results.reduce((total, item) => total + item.skipped, 0)).toBe(1);
+      expect(results.reduce((total, item) => total + item.sent, 0)).toBe(0);
+      expect(sender.messages).toHaveLength(0);
+      const actual = await pool.query<{
+        attempts: number;
+        last_error: string | null;
+      }>("select attempts,last_error from notifications where dedupe_key=$1", [
+        `NT-05:${fixture.invoiceId}:day1:email`,
+      ]);
+      expect(actual.rows).toEqual([
+        { attempts: 3, last_error: "invoice_not_payable" },
+      ]);
     } finally {
       await cleanup(fixture, [eventId]);
     }

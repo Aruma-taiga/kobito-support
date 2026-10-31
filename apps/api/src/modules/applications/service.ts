@@ -35,10 +35,6 @@ export class ApplicationsService implements ApplicationsModule {
       throw new ApiError(401, "unauthorized");
     }
 
-    return this.repository.submit(
-      command,
-      this.config,
-      this.config.operationsEmail,
-    );
+    return this.repository.submit(command, this.config);
   }
 }

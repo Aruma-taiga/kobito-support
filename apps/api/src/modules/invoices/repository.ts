@@ -24,6 +24,7 @@ import type { RuntimeConfig } from "../../platform/config.js";
 import { safePgInteger } from "../../platform/db/integers.js";
 import type { CustomerScope } from "../../platform/scope.js";
 import { ApiError, type Principal } from "../../platform/types.js";
+import { schedule } from "../notifications/service.js";
 import type { InvoiceModule } from "./contracts.js";
 import {
   InvalidInitialInvoiceSnapshot,
@@ -418,6 +419,8 @@ export class InvoiceRepository implements InvoiceModule {
       settlement = await settleInitialInvoicePayment(client, {
         invoiceId,
         contractId,
+        customerId: invoice.customer_id,
+        notificationsEnabled: !preview,
         paidOn: request.paidOn,
         anchorDate: today,
         amount: request.amount,
@@ -435,23 +438,13 @@ export class InvoiceRepository implements InvoiceModule {
     const { paymentId, period } = settlement;
     const periodId = period.id;
     if (!preview) {
-      for (const [kind, targetId] of [
-        ["NT-02b", contractId],
-        ["NT-04", periodId],
-      ] as const) {
-        const payload = JSON.stringify({ contractId, periodId, invoiceId });
-        await client.query(
-          `insert into notifications (customer_id,kind,channel,dedupe_key,scheduled_at,payload)
-           values ($1,$2,'email',$3,now(),$4::jsonb) on conflict (dedupe_key) do nothing`,
-          [invoice.customer_id, kind, `${kind}:${targetId}:email`, payload],
-        );
-        if (invoice.line_user_id)
-          await client.query(
-            `insert into notifications (customer_id,kind,channel,dedupe_key,scheduled_at,payload)
-           values ($1,$2,'line',$3,now(),$4::jsonb) on conflict (dedupe_key) do nothing`,
-            [invoice.customer_id, kind, `${kind}:${targetId}:line`, payload],
-          );
-      }
+      await schedule(client, {
+        customerId: invoice.customer_id,
+        kind: "NT-04",
+        dedupeKey: `NT-04:${periodId}:email`,
+        scheduledAt: new Date(),
+        payload: { contractId, periodId, invoiceId },
+      });
     }
     return confirmBankPaymentResponseSchema.parse({
       invoiceId,
@@ -852,15 +845,13 @@ export class InvoiceRepository implements InvoiceModule {
         [input.contractId, dueOn],
       );
     if (!preview && kind === "initial") {
-      await client.query(
-        `insert into notifications (customer_id, kind, channel, dedupe_key, scheduled_at, payload)
-         values ($1,'NT-02','email',$2,now(),$3::jsonb)`,
-        [
-          input.customerId,
-          `NT-02:invoice:${invoiceId}:customer`,
-          JSON.stringify({ invoiceId }),
-        ],
-      );
+      await schedule(client, {
+        customerId: input.customerId,
+        kind: "NT-02",
+        dedupeKey: `NT-02:invoice:${invoiceId}:customer`,
+        scheduledAt: new Date(),
+        payload: { invoiceId },
+      });
     }
     return this.listItem(details);
   }
