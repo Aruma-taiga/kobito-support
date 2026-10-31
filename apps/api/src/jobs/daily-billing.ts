@@ -1,6 +1,7 @@
 import { creditsToExpire, periodFor } from "@kobito/shared";
 import type { Pool } from "pg";
 import type { InvoiceRepository } from "../modules/invoices/repository.js";
+import { runDailyLifecycle } from "./daily-lifecycle.js";
 
 export interface DailyBillingResult {
   processedContracts: number;
@@ -285,4 +286,14 @@ export function runDailyBilling(
   invoices: InvoiceRepository,
 ) {
   return new DailyBillingJob(pool, invoices).runDailyBilling(today);
+}
+
+export async function runDaily(
+  today: string,
+  pool: Pool,
+  invoices: InvoiceRepository,
+) {
+  const billing = await runDailyBilling(today, pool, invoices);
+  const lifecycle = await runDailyLifecycle(today, pool);
+  return { billing, lifecycle };
 }
