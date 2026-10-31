@@ -954,8 +954,10 @@ describe("application request routes", () => {
         name: webMessages.adminRequestsTitle,
       }),
     ).toBeTruthy();
-    expect(adminApiClient.getSession).toHaveBeenCalledOnce();
-    expect(adminApiClient.getAdminRequests).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(adminApiClient.getSession).toHaveBeenCalledOnce();
+      expect(adminApiClient.getAdminRequests).toHaveBeenCalledOnce();
+    });
   });
 
   it("shows the completion action through the real protected root admin route", async () => {
@@ -964,8 +966,10 @@ describe("application request routes", () => {
     expect(
       screen.getByRole("button", { name: "依頼を完了にする" }),
     ).toBeTruthy();
-    expect(adminApiClient.getSession).toHaveBeenCalledOnce();
-    expect(adminApiClient.getAdminRequest).toHaveBeenCalledWith(requestId);
+    await waitFor(() => {
+      expect(adminApiClient.getSession).toHaveBeenCalledOnce();
+      expect(adminApiClient.getAdminRequest).toHaveBeenCalledWith(requestId);
+    });
   });
 
   it("confirms and records completion through the protected root admin route", async () => {
