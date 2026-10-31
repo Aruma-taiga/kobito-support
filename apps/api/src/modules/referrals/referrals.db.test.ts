@@ -381,19 +381,19 @@ describe("GET /api/v1/admin/referrals", () => {
     "?month=abc",
     "?month=2026-11-01",
     "?month=",
-  ])("rejects an invalid month (%s) with 400", async (query) => {
+  ])("rejects an invalid month (%s) with 422", async (query) => {
     const response = await get(makeApp(), query);
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     expect(await response.json()).toEqual({
-      error: { code: "invalid_request" },
+      error: { code: "validation_error" },
     });
   });
 
-  it("rejects repeated or unknown query parameters with 400", async () => {
+  it("rejects repeated or unknown query parameters with 422", async () => {
     expect((await get(makeApp(), "?month=2026-11&month=2026-10")).status).toBe(
-      400,
+      422,
     );
-    expect((await get(makeApp(), "?foo=1")).status).toBe(400);
+    expect((await get(makeApp(), "?foo=1")).status).toBe(422);
   });
 
   it("returns 403 without the second factor, 401 without a token, 404 for customers", async () => {

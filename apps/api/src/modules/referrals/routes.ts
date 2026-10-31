@@ -9,7 +9,7 @@ export function createReferralAdminRoutes(
   routes.get("/referrals", async (context) => {
     const params = [...new URL(context.req.url).searchParams.entries()];
     if (new Set(params.map(([key]) => key)).size !== params.length)
-      throw new ApiError(400, "invalid_request");
+      throw new ApiError(422, "validation_error");
     return context.json(
       await referrals.getAdmin(
         context.get("principal"),
