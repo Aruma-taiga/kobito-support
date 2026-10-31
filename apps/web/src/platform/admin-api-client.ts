@@ -5,6 +5,7 @@ import {
   type AdminIssuerSettings,
   type AdminIssuerSettingsResponse,
   type AdminPlanQuote,
+  type AdminReferralsResponse,
   type AdminRequestDetail,
   type AdminRequestSummary,
   type AdminSession,
@@ -13,6 +14,8 @@ import {
   adminCustomerDetailSchema,
   adminIssuerSettingsResponseSchema,
   adminPlanQuoteSchema,
+  adminReferralsQuerySchema,
+  adminReferralsResponseSchema,
   adminRequestDetailSchema,
   adminRequestListSchema,
   adminSessionSchema,
@@ -235,6 +238,19 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
           method: "PUT",
           body: JSON.stringify(parsed.data),
         },
+      );
+    },
+    getAdminReferrals(month?: string): Promise<AdminReferralsResponse> {
+      const parsed = adminReferralsQuerySchema.safeParse(
+        month === undefined ? {} : { month },
+      );
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      const search = parsed.data.month
+        ? `?month=${encodeURIComponent(parsed.data.month)}`
+        : "";
+      return request(
+        `/api/v1/admin/referrals${search}`,
+        adminReferralsResponseSchema,
       );
     },
     getApplications(

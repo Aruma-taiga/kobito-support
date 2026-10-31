@@ -10,6 +10,7 @@ const navItems = [
   { to: "/admin/requests", label: webMessages.adminNavRequests },
   { to: "/admin/bank-transfers", label: webMessages.adminNavBankTransfers },
   { to: "/admin/invoices", label: webMessages.adminNavInvoices },
+  { to: "/admin/referrals", label: webMessages.adminNavReferrals },
   { to: "/admin/settings", label: webMessages.adminNavSettings },
 ];
 
