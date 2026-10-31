@@ -652,6 +652,30 @@ export const webMessages = {
   bankTransferAmountHint: "入金額は税込合計 {total}円 と同じ金額を入力します。",
   adminLoginTitle: "管理者ログイン",
   adminLoginDescription: "管理者アカウントでログインしてください。",
+  adminEnrollLink: "初回の2段階認証の登録",
+  adminEnrollTitle: "2段階認証の登録",
+  adminEnrollDescription:
+    "メールアドレスとパスワードでログインし、認証アプリを登録してください。",
+  adminEnrollStart: "登録を開始",
+  adminEnrollManual:
+    "認証アプリで「設定キーを入力」を選び、次の秘密鍵を手入力してください。秘密鍵は画面を閉じると消えます。",
+  adminEnrollSecret: "秘密鍵",
+  adminEnrollUri: "otpauth URI",
+  adminEnrollCode: "認証アプリのコード",
+  adminEnrollSubmit: "登録する",
+  adminEnrollWrongCode:
+    "コードを確認できませんでした。認証アプリの最新の6桁の数字を入力してください。",
+  adminEnrollAlreadyRegistered:
+    "このアカウントにはすでに2段階認証が登録されています。通常の管理者ログインをご利用ください。",
+  adminEnrollRelogin:
+    "セキュリティ確認のため、いったんログアウトし、もう一度ログインしてから登録してください。",
+  adminEnrollMfaUnavailable:
+    "2段階認証の登録を開始できません。管理者に設定状況をご確認ください。",
+  adminEnrollStartError:
+    "登録を開始できませんでした。入力内容を確認し、もう一度お試しください。",
+  adminEnrollSuccess:
+    "2段階認証を登録しました。いったんサインアウトして、通常の管理者ログインから入ってください。",
+  adminEnrollSignOut: "サインアウト",
   adminLoginButton: "管理画面にログイン",
   adminMfaChallengeTitle: "確認コードを入力",
   adminMfaCodeLabel: "認証コード",

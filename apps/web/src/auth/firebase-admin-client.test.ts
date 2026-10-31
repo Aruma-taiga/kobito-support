@@ -18,6 +18,21 @@ const mocks = vi.hoisted(() => ({
     code,
     kind: "totp",
   })),
+  totpGenerateSecret: vi.fn(async () => ({
+    secretKey: "JBSWY3DPEHPK3PXP",
+    generateQrCodeUrl: vi.fn(
+      () => "otpauth://totp/Admin?secret=JBSWY3DPEHPK3PXP",
+    ),
+  })),
+  totpAssertionForEnrollment: vi.fn((secret: unknown, code: string) => ({
+    secret,
+    code,
+  })),
+  multiFactor: vi.fn(() => ({
+    enrolledFactors: [] as unknown[],
+    getSession: vi.fn(async () => ({ session: "enrollment-session" })),
+    enroll: vi.fn(async () => undefined),
+  })),
   phoneVerify: vi.fn(async () => "verification-id"),
   phoneCredential: vi.fn((id: string, code: string) => ({ id, code })),
   phoneAssertion: vi.fn((credential: unknown) => ({
@@ -57,7 +72,10 @@ vi.mock("firebase/auth", () => ({
   TotpMultiFactorGenerator: {
     FACTOR_ID: "totp",
     assertionForSignIn: mocks.totpAssertionForSignIn,
+    generateSecret: mocks.totpGenerateSecret,
+    assertionForEnrollment: mocks.totpAssertionForEnrollment,
   },
+  multiFactor: mocks.multiFactor,
 }));
 
 import { createFirebaseAdminAuthClient } from "./firebase-admin-client.js";
@@ -93,6 +111,11 @@ describe("separate Firebase admin auth client", () => {
     vi.clearAllMocks();
     mocks.getApps.mockReturnValue([]);
     mocks.getAuth.mockReturnValue({ currentUser: null, settings: {} });
+    mocks.multiFactor.mockReturnValue({
+      enrolledFactors: [],
+      getSession: vi.fn(async () => ({ session: "enrollment-session" })),
+      enroll: vi.fn(async () => undefined),
+    });
   });
 
   it("uses an isolated Firebase app name for administrator sign-in", () => {
@@ -101,6 +124,63 @@ describe("separate Firebase admin auth client", () => {
       expect.any(Object),
       "kobito-web-demo-kobito-admin",
     );
+  });
+
+  it("generates a TOTP secret, enrolls it with the code, and clears it", async () => {
+    const currentUser = { email: "root@example.jp" };
+    mocks.getAuth.mockReturnValue({ currentUser, settings: {} });
+    const client = createFirebaseAdminAuthClient(productionConfig);
+    const enrollment = await client.startTotpEnrollment("サービス");
+    expect(enrollment).toEqual({
+      secret: "JBSWY3DPEHPK3PXP",
+      uri: "otpauth://totp/Admin?secret=JBSWY3DPEHPK3PXP",
+    });
+    await client.completeTotpEnrollment(enrollment.secret, "123456");
+    expect(mocks.totpAssertionForEnrollment).toHaveBeenCalledWith(
+      expect.objectContaining({ secretKey: enrollment.secret }),
+      "123456",
+    );
+    expect(mocks.multiFactor).toHaveBeenCalledWith(currentUser);
+  });
+
+  it("refuses enrollment when MFA is already registered or the user must sign in again", async () => {
+    const signedOutClient = createFirebaseAdminAuthClient(productionConfig);
+    await expect(
+      signedOutClient.startTotpEnrollment("サービス"),
+    ).rejects.toMatchObject({ code: "reauth_required" });
+    mocks.getAuth.mockReturnValue({
+      currentUser: { email: "root@example.jp" },
+      settings: {},
+    });
+    mocks.multiFactor.mockReturnValue({
+      enrolledFactors: [{ uid: "existing" }],
+      getSession: vi.fn(),
+      enroll: vi.fn(),
+    });
+    const enrolledClient = createFirebaseAdminAuthClient(productionConfig);
+    await expect(
+      enrolledClient.startTotpEnrollment("サービス"),
+    ).rejects.toMatchObject({ code: "already_enrolled" });
+  });
+
+  it("maps Firebase MFA configuration failures to a safe client error", async () => {
+    mocks.getAuth.mockReturnValue({
+      currentUser: { email: "root@example.jp" },
+      settings: {},
+    });
+    mocks.multiFactor.mockReturnValue({
+      enrolledFactors: [],
+      getSession: vi.fn(async () => {
+        throw Object.assign(new Error("disabled"), {
+          code: "auth/operation-not-allowed",
+        });
+      }),
+      enroll: vi.fn(),
+    });
+    const client = createFirebaseAdminAuthClient(productionConfig);
+    await expect(client.startTotpEnrollment("サービス")).rejects.toMatchObject({
+      code: "mfa_unavailable",
+    });
   });
 
   it("holds a TOTP resolver until a valid second factor is completed", async () => {

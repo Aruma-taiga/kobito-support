@@ -145,6 +145,9 @@ function setup(
       }
       return result;
     }),
+    startTotpEnrollment: vi.fn(async () => ({ secret: "", uri: "" })),
+    completeTotpEnrollment: vi.fn(async () => undefined),
+    clearTotpEnrollment: vi.fn(),
     startSecondFactor:
       options.startSecondFactor ?? vi.fn(async () => undefined),
     completeSecondFactor:
