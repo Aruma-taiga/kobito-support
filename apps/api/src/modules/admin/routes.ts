@@ -43,6 +43,14 @@ export function createAdminRoutes(dependencies: {
   routes.use("*", authenticate, requireAdmin());
 
   routes.get("/session", (context) => context.json({ role: "admin" as const }));
+  routes.get("/payment-reviews", async (context) => {
+    const params = [...new URL(context.req.url).searchParams.entries()];
+    if (new Set(params.map(([key]) => key)).size !== params.length)
+      throw new ApiError(422, "validation_error");
+    return context.json(
+      await dependencies.admin.listPaymentReviews(Object.fromEntries(params)),
+    );
+  });
   if (dependencies.requests)
     createRequestAdminRoutes(routes, dependencies.requests);
   if (dependencies.planQuotes)

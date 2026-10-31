@@ -170,6 +170,12 @@ function setup(path: string, overrides: Record<string, unknown> = {}) {
         },
       ],
     })),
+    getPaymentReviews: vi.fn(async () => ({
+      events: [],
+      failedInvoices: [],
+      eventCount: 0,
+      failedInvoiceCount: 0,
+    })),
     getAdminRequests: vi.fn(async () => ({
       items: [
         adminRequest,

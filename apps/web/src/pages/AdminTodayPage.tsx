@@ -1,5 +1,6 @@
 import {
   type AdminApplicationQueueItem,
+  type AdminPaymentReviewsResponse,
   type AdminRequestSummary,
   daysUntil,
   type InvoiceListItem,
@@ -95,6 +96,7 @@ function Panel({
   note,
   tone = "yellow",
   moreTo,
+  totalCount,
 }: {
   title: string;
   source: Source<unknown>;
@@ -103,10 +105,12 @@ function Panel({
   note?: string;
   tone?: BadgeTone;
   moreTo?: string;
+  totalCount?: number | undefined;
 }) {
+  const itemCount = totalCount ?? rows.length;
   const count =
     source.status === "ready" ? (
-      <Badge tone={rows.length === 0 ? "gray" : tone}>{rows.length}</Badge>
+      <Badge tone={itemCount === 0 ? "gray" : tone}>{itemCount}</Badge>
     ) : null;
   return (
     <Card title={title} action={count}>
@@ -147,12 +151,12 @@ function Panel({
             />
           ))
         : null}
-      {source.status === "ready" && rows.length > visibleRows && moreTo ? (
+      {source.status === "ready" && itemCount > visibleRows && moreTo ? (
         <Hint>
           <Link to={moreTo}>
             {webMessages.adminTodayMore.replace(
               "{count}",
-              String(rows.length - visibleRows),
+              String(itemCount - visibleRows),
             )}
           </Link>
         </Hint>
@@ -186,6 +190,10 @@ export function AdminTodayPage({ apiClient }: { apiClient: AdminApiClient }) {
   const [invoices, retryInvoices] = useSource(
     useCallback(() => apiClient.getInvoices(), [apiClient]),
   );
+  const [paymentReviews, retryPaymentReviews] =
+    useSource<AdminPaymentReviewsResponse>(
+      useCallback(() => apiClient.getPaymentReviews(), [apiClient]),
+    );
   const [requests, retryRequests] = useSource(
     useCallback(() => apiClient.getAdminRequests(), [apiClient]),
   );
@@ -283,6 +291,64 @@ export function AdminTodayPage({ apiClient }: { apiClient: AdminApiClient }) {
             }),
           )
       : [];
+  const paymentReviewRows =
+    paymentReviews.status === "ready"
+      ? paymentReviews.value.events.map(
+          (item): Row => ({
+            key: item.eventId,
+            title:
+              item.shopName ??
+              item.invoiceNo ??
+              webMessages.adminPaymentReviewOther,
+            meta: [
+              item.invoiceNo,
+              formatSlashDate(tokyoDateOf(item.receivedAt)),
+              item.reason === "amount_mismatch"
+                ? webMessages.adminPaymentReviewAmountMismatch
+                : item.reason === "invoice_not_found"
+                  ? webMessages.adminPaymentReviewInvoiceNotFound
+                  : webMessages.adminPaymentReviewOther,
+              item.notificationAmount === null
+                ? null
+                : `${item.notificationAmount.toLocaleString("ja-JP")}円`,
+              item.invoiceTotal === null
+                ? null
+                : `${item.invoiceTotal.toLocaleString("ja-JP")}円（税込）`,
+            ]
+              .filter(Boolean)
+              .join("・"),
+            to: item.invoiceNo ? "/admin/invoices" : "/admin/invoices",
+            action: webMessages.adminTodayPaymentReviewAction,
+          }),
+        )
+      : [];
+  const paymentFailureRows =
+    paymentReviews.status === "ready"
+      ? paymentReviews.value.failedInvoices.map(
+          (item): Row => ({
+            key: item.invoiceId,
+            title: item.shopName,
+            meta: [
+              item.invoiceNo,
+              `${item.totalInclTax.toLocaleString("ja-JP")}円（税込）`,
+              item.dueOn ? formatSlashDate(item.dueOn) : null,
+              item.reasonCode === "payment.expired"
+                ? webMessages.adminPaymentFailureExpired
+                : item.reasonCode === "payment.cancelled"
+                  ? webMessages.adminPaymentFailureCancelled
+                  : item.reasonCode === "subscription.failed"
+                    ? webMessages.adminPaymentFailureSubscription
+                    : item.reasonCode === "payment.failed"
+                      ? webMessages.adminPaymentFailureDeclined
+                      : webMessages.adminPaymentFailureReason,
+            ]
+              .filter(Boolean)
+              .join("・"),
+            to: `/admin/invoices/${encodeURIComponent(item.invoiceId)}`,
+            action: webMessages.adminTodayPaymentFailureAction,
+          }),
+        )
+      : [];
 
   const requestRow =
     (action: string, extra: (request: AdminRequestSummary) => string) =>
@@ -356,6 +422,31 @@ export function AdminTodayPage({ apiClient }: { apiClient: AdminApiClient }) {
             retry={retryTransfers}
             rows={bankRows}
             moreTo="/admin/bank-transfers"
+          />
+          <Panel
+            title={webMessages.adminTodayPaymentReviews}
+            source={paymentReviews}
+            retry={retryPaymentReviews}
+            rows={paymentReviewRows}
+            moreTo="/admin/invoices"
+            totalCount={
+              paymentReviews.status === "ready"
+                ? paymentReviews.value.eventCount
+                : undefined
+            }
+          />
+          <Panel
+            title={webMessages.adminTodayPaymentFailures}
+            source={paymentReviews}
+            retry={retryPaymentReviews}
+            rows={paymentFailureRows}
+            tone="warn"
+            moreTo="/admin/invoices"
+            totalCount={
+              paymentReviews.status === "ready"
+                ? paymentReviews.value.failedInvoiceCount
+                : undefined
+            }
           />
         </div>
         <div>

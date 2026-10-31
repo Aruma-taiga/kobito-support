@@ -97,6 +97,7 @@ function setup(
     declineApplication?: ReturnType<typeof vi.fn>;
     approveApplication?: ReturnType<typeof vi.fn>;
     getInvoices?: ReturnType<typeof vi.fn>;
+    getPaymentReviews?: ReturnType<typeof vi.fn>;
     getInvoice?: ReturnType<typeof vi.fn>;
     getInvoicePdf?: ReturnType<typeof vi.fn>;
     getInvoiceReadiness?: ReturnType<typeof vi.fn>;
@@ -189,6 +190,14 @@ function setup(
         replayed: false,
       })),
     getInvoices: options.getInvoices ?? vi.fn(async () => ({ invoices: [] })),
+    getPaymentReviews:
+      options.getPaymentReviews ??
+      vi.fn(async () => ({
+        events: [],
+        failedInvoices: [],
+        eventCount: 0,
+        failedInvoiceCount: 0,
+      })),
     getInvoice:
       options.getInvoice ??
       vi.fn(async () => ({
