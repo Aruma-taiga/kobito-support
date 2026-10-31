@@ -2,10 +2,15 @@ import type {
   AdminApplicationQueueQuery,
   AdminApplicationQueueResponse,
   AdminCustomerDetail,
+  AdminPaymentReviewsQuery,
+  AdminPaymentReviewsResponse,
   DeclineApplicationRequest,
   DeclineApplicationResponse,
 } from "@kobito/shared";
-import { canTransition } from "@kobito/shared";
+import {
+  adminPaymentReviewsResponseSchema,
+  canTransition,
+} from "@kobito/shared";
 import type { Pool, PoolClient } from "pg";
 import { withAdminAudit } from "../../platform/audit.js";
 import { ApiError, type Principal } from "../../platform/types.js";
@@ -81,6 +86,100 @@ function nullableNonnegativeInteger(value: unknown): value is number | null {
 
 export class AdminRepository implements AdminModule {
   constructor(private readonly pool: Pool) {}
+
+  async listPaymentReviews(
+    query: AdminPaymentReviewsQuery,
+  ): Promise<AdminPaymentReviewsResponse> {
+    const events = await this.pool.query<{
+      event_id: string;
+      event_type: string;
+      invoice_no: string | null;
+      received_at: Date;
+      reason: string;
+      notification_amount: string | null;
+      invoice_total: number | null;
+      shop_name: string | null;
+    }>(
+      `select e.id as event_id, e.type as event_type,
+              e.payload->'data'->>'external_order_num' as invoice_no,
+              e.received_at, split_part(e.error, ':', 2) as reason,
+              case when jsonb_typeof(e.payload->'data'->'total') = 'number'
+                   then e.payload->'data'->>'total' end as notification_amount,
+              i.total_incl_tax as invoice_total, c.shop_name
+         from komoju_events e
+         left join invoices i on i.invoice_no=e.payload->'data'->>'external_order_num'
+         left join contracts co on co.id=i.contract_id
+         left join customers c on c.id=co.customer_id
+        where e.error like 'review:%'
+        order by e.received_at desc, e.id desc limit $1`,
+      [query.limit],
+    );
+    const failedInvoices = await this.pool.query<{
+      invoice_id: string;
+      invoice_no: string;
+      shop_name: string;
+      total_incl_tax: number;
+      reason_code: string | null;
+      due_on: string | null;
+    }>(
+      `select i.id as invoice_id, i.invoice_no, c.shop_name,
+              i.total_incl_tax, failure.reason_code, i.due_on::text as due_on
+         from invoices i
+         join contracts co on co.id=i.contract_id
+         join customers c on c.id=co.customer_id
+         left join lateral (
+           select split_part(e.error, ':', 2) as reason_code
+             from komoju_events e
+            where e.error like 'failure:%'
+              and e.payload->'data'->>'external_order_num'=i.invoice_no
+            order by e.received_at desc, e.id desc limit 1
+         ) failure on true
+        where i.status='failed'
+        order by i.created_at desc, i.id desc limit $1`,
+      [query.limit],
+    );
+    const counts = await this.pool.query<{
+      event_count: number;
+      failed_invoice_count: number;
+    }>(
+      `select (select count(*)::int from komoju_events where error like 'review:%') as event_count,
+              (select count(*)::int from invoices where status='failed') as failed_invoice_count`,
+    );
+    return adminPaymentReviewsResponseSchema.parse({
+      events: events.rows.map((row) => ({
+        eventId: row.event_id,
+        eventType: row.event_type,
+        invoiceNo: row.invoice_no,
+        receivedAt: isoDate(row.received_at),
+        reason: ["amount_mismatch", "invoice_not_found"].includes(row.reason)
+          ? (row.reason as "amount_mismatch" | "invoice_not_found")
+          : "other",
+        notificationAmount:
+          row.notification_amount === null
+            ? null
+            : Number(row.notification_amount),
+        invoiceTotal: row.invoice_total,
+        shopName: row.shop_name,
+      })),
+      failedInvoices: failedInvoices.rows.map((row) => ({
+        invoiceId: row.invoice_id,
+        invoiceNo: row.invoice_no,
+        shopName: row.shop_name,
+        totalInclTax: row.total_incl_tax,
+        reasonCode: [
+          "payment.failed",
+          "payment.expired",
+          "payment.cancelled",
+          "subscription.failed",
+        ].includes(row.reason_code ?? "")
+          ? (row.reason_code as AdminPaymentReviewsResponse["failedInvoices"][number]["reasonCode"])
+          : "unknown",
+        dueOn: row.due_on,
+      })),
+      eventCount: counts.rows[0]?.event_count ?? 0,
+      failedInvoiceCount: counts.rows[0]?.failed_invoice_count ?? 0,
+    });
+  }
 
   async listApplications(
     query: AdminApplicationQueueQuery,

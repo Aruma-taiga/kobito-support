@@ -61,6 +61,12 @@ function makeApp(): ReturnType<typeof createApp> {
       },
     },
     admin: {
+      listPaymentReviews: async () => ({
+        events: [],
+        failedInvoices: [],
+        eventCount: 0,
+        failedInvoiceCount: 0,
+      }),
       listApplications: async () => ({
         items: [],
         page: 1,

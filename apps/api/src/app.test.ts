@@ -78,6 +78,12 @@ function makeApp(overrides: AppOverrides = {}) {
       })),
     },
     admin: {
+      listPaymentReviews: vi.fn(async () => ({
+        events: [],
+        failedInvoices: [],
+        eventCount: 0,
+        failedInvoiceCount: 0,
+      })),
       listApplications: vi.fn(async () => ({
         items: [],
         page: 1,

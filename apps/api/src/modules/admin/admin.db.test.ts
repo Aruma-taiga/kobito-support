@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { adminPaymentReviewsResponseSchema } from "@kobito/shared";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type AppDependencies, createApp } from "../../app.js";
@@ -20,13 +21,18 @@ const config: RuntimeConfig = {
 };
 const adminUid = `${testPrefix}-operator`;
 const adminToken = `${testPrefix}-verified-token`;
+const noFactorUid = `${testPrefix}-operator-no-factor`;
+const noFactorToken = `${testPrefix}-unverified-token`;
 const identities = new Map<string, VerifiedIdentity>([
   [adminToken, { uid: adminUid, firebase: { sign_in_second_factor: "phone" } }],
+  [noFactorToken, { uid: noFactorUid }],
 ]);
 const customerIds: string[] = [];
 const planIds: string[] = [];
 const applicationIds: string[] = [];
 const contractIds: string[] = [];
+const invoiceIds: string[] = [];
+const eventIds: string[] = [];
 const triggerNames: string[] = [];
 const functionNames: string[] = [];
 
@@ -202,6 +208,11 @@ beforeAll(async () => {
      values ($1, null, 'admin')`,
     [adminUid],
   );
+  await pool.query(
+    `insert into user_accounts (auth_user_id, customer_id, role)
+     values ($1, null, 'admin')`,
+    [noFactorUid],
+  );
 });
 
 afterAll(async () => {
@@ -221,6 +232,14 @@ afterAll(async () => {
       [applicationIds],
     );
   }
+  if (eventIds.length)
+    await pool.query("delete from komoju_events where id=any($1::text[])", [
+      eventIds,
+    ]);
+  if (invoiceIds.length)
+    await pool.query("delete from invoices where id=any($1::uuid[])", [
+      invoiceIds,
+    ]);
   if (contractIds.length) {
     await pool.query("delete from contracts where id = any($1::uuid[])", [
       contractIds,
@@ -242,10 +261,136 @@ afterAll(async () => {
   await pool.query("delete from user_accounts where auth_user_id = $1", [
     adminUid,
   ]);
+  await pool.query("delete from user_accounts where auth_user_id = $1", [
+    noFactorUid,
+  ]);
   await pool.end();
 });
 
 describe("admin application review with PostgreSQL", () => {
+  it("returns only review events and failed invoices, validates DTO, caps rows, and requires second factor", async () => {
+    const fixture = await makeReviewCase({
+      shopName: `${testPrefix}-入金店舗`,
+    });
+    const paidInvoiceNo = `KS-2098-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
+    const failedInvoiceNo = `KS-2099-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
+    const unrelatedInvoiceNo = `KS-2100-${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
+    const invoiceNoList = [paidInvoiceNo, failedInvoiceNo, unrelatedInvoiceNo];
+    const inserted = await pool.query<{ id: string }>(
+      `insert into invoices(invoice_no,contract_id,kind,status,payment_method,issued_on,due_on,
+         total_excl_tax,tax_amount,total_incl_tax,billing_name,issuer_snapshot,created_at)
+       select invoice_no,$1,case when status='failed' then 'initial' else 'extra_credit' end,status,'card','2098-01-01','2098-01-08',10000,1000,11000,
+              '非公開請求先','{}'::jsonb,'2099-01-01T00:00:00Z'
+         from unnest($2::text[], $3::text[]) as rows(invoice_no,status)
+       returning id`,
+      [fixture.contractId, invoiceNoList, ["issued", "failed", "issued"]],
+    );
+    invoiceIds.push(...inserted.rows.map((row) => row.id));
+    const ids = [
+      `${testPrefix}-review-amount`,
+      `${testPrefix}-review-missing`,
+      `${testPrefix}-processed`,
+      `${testPrefix}-failure`,
+    ];
+    eventIds.push(...ids);
+    await pool.query(
+      `insert into komoju_events(id,type,payload,error,processed_at,received_at)
+       values
+       ($1,'payment.captured',$5::jsonb,'review:amount_mismatch',now(),'2099-01-01T00:00:00Z'),
+       ($2,'payment.captured',$6::jsonb,'review:invoice_not_found',now(),'2098-12-31T23:59:00Z'),
+       ($3,'payment.captured',$7::jsonb,null,now(),'2099-01-01T00:01:00Z'),
+       ($4,'payment.failed',$8::jsonb,'failure:payment.failed',now(),'2099-01-01T00:02:00Z')`,
+      [
+        ...ids,
+        JSON.stringify({
+          data: {
+            external_order_num: paidInvoiceNo,
+            total: 10000,
+            email: "private@example.test",
+            rawText: "must not escape",
+          },
+        }),
+        JSON.stringify({
+          data: { external_order_num: `KS-2101-00001`, total: 5000 },
+        }),
+        JSON.stringify({
+          data: { external_order_num: paidInvoiceNo, total: 11000 },
+        }),
+        JSON.stringify({ data: { external_order_num: failedInvoiceNo } }),
+      ],
+    );
+    const app = makeApp();
+    try {
+      const forbidden = await app.request("/api/v1/admin/payment-reviews", {
+        headers: { authorization: `Bearer ${noFactorToken}` },
+      });
+      expect(forbidden.status).toBe(403);
+      const response = await app.request(
+        "/api/v1/admin/payment-reviews?limit=1",
+        {
+          headers: { authorization: `Bearer ${adminToken}` },
+        },
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      const parsed = adminPaymentReviewsResponseSchema.parse(body);
+      expect(parsed.events).toHaveLength(1);
+      expect(parsed.events[0]).toMatchObject({
+        eventId: ids[0],
+        reason: "amount_mismatch",
+        invoiceNo: paidInvoiceNo,
+        notificationAmount: 10000,
+        invoiceTotal: 11000,
+        shopName: `${testPrefix}-入金店舗`,
+      });
+      expect(parsed.failedInvoices).toHaveLength(1);
+      expect(parsed.failedInvoices[0]).toMatchObject({
+        invoiceNo: failedInvoiceNo,
+        reasonCode: "payment.failed",
+        totalInclTax: 11000,
+        dueOn: "2098-01-08",
+      });
+      expect(JSON.stringify(body)).not.toContain("private@example.test");
+      expect(JSON.stringify(body)).not.toContain("must not escape");
+      expect(JSON.stringify(body)).not.toContain("非公開請求先");
+      expect(JSON.stringify(body)).not.toContain(ids[1]);
+      const full = adminPaymentReviewsResponseSchema.parse(
+        await (
+          await app.request("/api/v1/admin/payment-reviews?limit=50", {
+            headers: { authorization: `Bearer ${adminToken}` },
+          })
+        ).json(),
+      );
+      const returnedEventIds = full.events.map((event) => event.eventId);
+      expect(returnedEventIds).toContain(ids[0]);
+      expect(returnedEventIds).toContain(ids[1]);
+      expect(returnedEventIds).not.toContain(ids[2]);
+      const returnedInvoiceNos = full.failedInvoices.map(
+        (invoice) => invoice.invoiceNo,
+      );
+      expect(returnedInvoiceNos).toContain(failedInvoiceNo);
+      expect(returnedInvoiceNos).not.toContain(paidInvoiceNo);
+      expect(returnedInvoiceNos).not.toContain(unrelatedInvoiceNo);
+      const invalidLimit = await app.request(
+        "/api/v1/admin/payment-reviews?limit=101",
+        {
+          headers: { authorization: `Bearer ${adminToken}` },
+        },
+      );
+      expect(invalidLimit.status).toBe(422);
+    } finally {
+      await pool.query("delete from komoju_events where id=any($1::text[])", [
+        ids,
+      ]);
+      await pool.query(
+        "delete from invoices where invoice_no=any($1::text[])",
+        [invoiceNoList],
+      );
+      eventIds.splice(0, ids.length);
+      invoiceIds.splice(0, inserted.rows.length);
+    }
+  });
+
   it("filters and paginates the review queue and returns the selected customer's profile", async () => {
     const first = await makeReviewCase({ shopName: `${testPrefix}-対象店舗` });
     await makeReviewCase({

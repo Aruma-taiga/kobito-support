@@ -121,6 +121,12 @@ function adminClient(over: Record<string, unknown> = {}) {
         },
       ],
     })),
+    getPaymentReviews: vi.fn(async () => ({
+      events: [],
+      failedInvoices: [],
+      eventCount: 0,
+      failedInvoiceCount: 0,
+    })),
     getInvoices: vi.fn(async () => ({
       invoices: [invoice({}), lateInvoice, farInvoice, paidInvoice],
     })),
@@ -271,6 +277,77 @@ describe("a02 today's tasks", () => {
       .closest("section") as HTMLElement;
     expect(started.textContent).toContain("Googleマップの営業時間");
     expect(text()).not.toContain("完了済み");
+  });
+
+  it("shows safe payment review and failed invoice summaries, and friendly empty states", async () => {
+    const client = adminClient({
+      getPaymentReviews: vi.fn(async () => ({
+        events: [
+          {
+            eventId: "evt_hidden",
+            eventType: "payment.captured",
+            invoiceNo: "KS-2026-0088",
+            receivedAt: "2026-11-14T01:00:00.000Z",
+            reason: "amount_mismatch",
+            notificationAmount: 10000,
+            invoiceTotal: 11000,
+            shopName: "喫茶こびと",
+          },
+        ],
+        failedInvoices: [
+          {
+            invoiceId: "12121212-1212-4212-8212-121212121212",
+            invoiceNo: "KS-2026-0077",
+            shopName: "美容室みどり",
+            totalInclTax: 5500,
+            reasonCode: "payment.failed",
+            dueOn: "2026-11-20",
+          },
+        ],
+        eventCount: 1,
+        failedInvoiceCount: 1,
+      })),
+    });
+    setup("/admin", client);
+    await waitFor(() => expect(client.getPaymentReviews).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(
+        screen.getByText("入金の要確認").closest("section")?.textContent,
+      ).not.toContain("読み込んでいます"),
+    );
+    await screen.findByText("喫茶こびと");
+    const review = (await screen.findByText("入金の要確認")).closest(
+      "section",
+    ) as HTMLElement;
+    expect(review.textContent).toContain("喫茶こびと");
+    expect(review.textContent).toContain("入金額が請求書と一致しません");
+    expect(review.textContent).toContain("KS-2026-0088");
+    expect(review.textContent).not.toContain("evt_hidden");
+    const failed = (await screen.findByText("お支払いの失敗")).closest(
+      "section",
+    ) as HTMLElement;
+    expect(failed.textContent).toContain("美容室みどり");
+    expect(failed.textContent).toContain("KS-2026-0077");
+    expect(failed.textContent).toContain("お支払いが完了しませんでした");
+    expect(failed.textContent).not.toContain("payment_declined");
+
+    cleanup();
+    setup(
+      "/admin",
+      adminClient({
+        getPaymentReviews: vi.fn(async () => ({
+          events: [],
+          failedInvoices: [],
+          eventCount: 0,
+          failedInvoiceCount: 0,
+        })),
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(webMessages.adminTodayEmpty).length,
+      ).toBeGreaterThanOrEqual(2),
+    );
   });
 
   it("flags unpaid invoices due within 7 days or overdue, and ignores paid or distant ones", async () => {

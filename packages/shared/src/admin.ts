@@ -6,6 +6,63 @@ const contractStatusSchema = z.enum(contractStatuses);
 const paymentMethodSchema = z.enum(["card", "konbini", "bank_transfer"]);
 const reviewResultSchema = z.enum(["approved", "declined"]).nullable();
 
+export const adminPaymentReviewsQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+  })
+  .strict();
+export type AdminPaymentReviewsQuery = z.infer<
+  typeof adminPaymentReviewsQuerySchema
+>;
+
+const paymentReviewReasonSchema = z.enum([
+  "amount_mismatch",
+  "invoice_not_found",
+  "other",
+]);
+export const adminPaymentReviewEventSchema = z
+  .object({
+    eventId: z.string().min(1).max(128),
+    eventType: z.string().min(1).max(128),
+    invoiceNo: z.string().max(64).nullable(),
+    receivedAt: z.iso.datetime(),
+    reason: paymentReviewReasonSchema,
+    notificationAmount: z.number().int().safe().nonnegative().nullable(),
+    invoiceTotal: z.number().int().safe().positive().nullable(),
+    shopName: z.string().nullable(),
+  })
+  .strict();
+export const adminFailedInvoiceReviewSchema = z
+  .object({
+    invoiceId: z.uuid(),
+    invoiceNo: z.string().min(1).max(64),
+    shopName: z.string(),
+    totalInclTax: z.number().int().safe().positive(),
+    reasonCode: z.enum([
+      "payment.failed",
+      "payment.expired",
+      "payment.cancelled",
+      "subscription.failed",
+      "unknown",
+    ]),
+    dueOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
+  })
+  .strict();
+export const adminPaymentReviewsResponseSchema = z
+  .object({
+    events: z.array(adminPaymentReviewEventSchema),
+    failedInvoices: z.array(adminFailedInvoiceReviewSchema),
+    eventCount: z.number().int().nonnegative(),
+    failedInvoiceCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type AdminPaymentReviewsResponse = z.infer<
+  typeof adminPaymentReviewsResponseSchema
+>;
+
 export const adminSessionSchema = z
   .object({ role: z.literal("admin") })
   .strict();

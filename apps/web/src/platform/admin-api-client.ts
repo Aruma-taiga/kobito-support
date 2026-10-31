@@ -4,6 +4,7 @@ import {
   type AdminCustomerDetail,
   type AdminIssuerSettings,
   type AdminIssuerSettingsResponse,
+  type AdminPaymentReviewsResponse,
   type AdminPlanQuote,
   type AdminReferralsResponse,
   type AdminRequestDetail,
@@ -13,6 +14,7 @@ import {
   adminApplicationQueueResponseSchema,
   adminCustomerDetailSchema,
   adminIssuerSettingsResponseSchema,
+  adminPaymentReviewsResponseSchema,
   adminPlanQuoteSchema,
   adminReferralsQuerySchema,
   adminReferralsResponseSchema,
@@ -367,6 +369,12 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
     },
     getInvoices(): Promise<InvoiceList> {
       return request("/api/v1/admin/invoices", invoiceListSchema);
+    },
+    getPaymentReviews(): Promise<AdminPaymentReviewsResponse> {
+      return request(
+        "/api/v1/admin/payment-reviews",
+        adminPaymentReviewsResponseSchema,
+      );
     },
     getPendingBankTransfers() {
       return request(

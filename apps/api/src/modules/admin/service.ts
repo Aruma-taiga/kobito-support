@@ -2,6 +2,10 @@ import type {
   AdminApplicationQueueQuery,
   DeclineApplicationRequest,
 } from "@kobito/shared";
+import {
+  adminPaymentReviewsQuerySchema,
+  adminPaymentReviewsResponseSchema,
+} from "@kobito/shared";
 import { z } from "zod";
 import { ApiError, type Principal } from "../../platform/types.js";
 import type { AdminModule } from "./contracts.js";
@@ -11,6 +15,14 @@ const uuidSchema = z.uuid();
 
 export class AdminService implements AdminModule {
   constructor(private readonly repository: AdminRepository) {}
+
+  async listPaymentReviews(query: unknown) {
+    const parsed = adminPaymentReviewsQuerySchema.safeParse(query);
+    if (!parsed.success) throw new ApiError(422, "validation_error");
+    return adminPaymentReviewsResponseSchema.parse(
+      await this.repository.listPaymentReviews(parsed.data),
+    );
+  }
 
   listApplications(query: AdminApplicationQueueQuery) {
     return this.repository.listApplications(query);
