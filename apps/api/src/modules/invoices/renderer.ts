@@ -101,7 +101,10 @@ export class ChromiumInvoicePdfRenderer implements InvoicePdfRenderer {
     const browser = await chromium.launch({
       executablePath: this.executablePath,
       headless: true,
-      chromiumSandbox: true,
+      // コンテナ（Cloud Run など）では、非特権のユーザー名前空間が使えず Chromium のサンドボックスが起動しない。
+      // コンテナ側が隔離環境なので、Dockerfile で INVOICE_CHROMIUM_SANDBOX=false を設定する。それ以外は有効のまま。
+      // この Chromium は、JavaScript 無効・外部通信を遮断・当方が作ったエスケープ済みの HTML だけを描画する。
+      chromiumSandbox: process.env.INVOICE_CHROMIUM_SANDBOX !== "false",
       timeout: 15_000,
       args: ["--disable-dev-shm-usage"],
     });
