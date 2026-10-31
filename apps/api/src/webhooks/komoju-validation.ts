@@ -40,6 +40,24 @@ export function parseKomojuInboxEvent(
       return;
     data.amount = value.data.amount;
   }
+  if (value.data.total !== undefined) {
+    if (
+      typeof value.data.total !== "number" ||
+      !Number.isSafeInteger(value.data.total) ||
+      value.data.total < 0
+    )
+      return;
+    data.total = value.data.total;
+  }
+  if (value.data.tax !== undefined) {
+    if (
+      typeof value.data.tax !== "number" ||
+      !Number.isSafeInteger(value.data.tax) ||
+      value.data.tax < 0
+    )
+      return;
+    data.tax = value.data.tax;
+  }
   if (value.data.currency !== undefined) {
     if (
       typeof value.data.currency !== "string" ||
@@ -55,6 +73,21 @@ export function parseKomojuInboxEvent(
     )
       return;
     data.external_order_num = value.data.external_order_num;
+  }
+  if (value.data.captured_at !== undefined) {
+    if (value.data.captured_at === null) {
+      data.captured_at = null;
+    } else {
+      if (
+        typeof value.data.captured_at !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(
+          value.data.captured_at,
+        ) ||
+        !Number.isFinite(Date.parse(value.data.captured_at))
+      )
+        return;
+      data.captured_at = value.data.captured_at;
+    }
   }
   return { id: value.id, type: value.type, data };
 }

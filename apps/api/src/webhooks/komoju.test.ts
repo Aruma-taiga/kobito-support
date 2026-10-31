@@ -12,8 +12,10 @@ const event = {
     id: "pay_123",
     status: "captured",
     amount: 2500,
+    total: 2500,
     currency: "JPY",
     external_order_num: "KS-2026-00001",
+    captured_at: "2026-01-01T10:00:00Z",
     metadata: { planted: "METADATA_SENTINEL" },
     payment_details: {
       expiry_month: "EXPIRY_SENTINEL",
@@ -85,8 +87,10 @@ describe("KOMOJU webhook HTTP boundary", () => {
           id: "pay_123",
           status: "captured",
           amount: 2500,
+          total: 2500,
           currency: "JPY",
           external_order_num: "KS-2026-00001",
+          captured_at: "2026-01-01T10:00:00Z",
         },
       }),
     );
@@ -102,6 +106,28 @@ describe("KOMOJU webhook HTTP boundary", () => {
     });
     expect(replay.status).toBe(200);
     expect(receive).toHaveBeenCalledTimes(2);
+  });
+
+  it("acknowledges immediately after persistence even when the async processor fails", async () => {
+    const receive = vi.fn(async () => "accepted" as const);
+    const triggerProcessing = vi.fn(async () => {
+      throw new Error("private processing failure");
+    });
+    const app = makeApp({
+      komojuInbox: { receive },
+      komojuTriggerProcessing: triggerProcessing,
+    });
+    const body = JSON.stringify(event);
+    const response = await app.request("/webhooks/komoju", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-komoju-signature": signed(body),
+      },
+      body,
+    });
+    expect(response.status).toBe(200);
+    expect(triggerProcessing).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -278,10 +304,18 @@ describe("KOMOJU signature and payload allowlist", () => {
         id: "pay_123",
         status: "captured",
         amount: 2500,
+        total: 2500,
         currency: "JPY",
         external_order_num: "KS-2026-00001",
+        captured_at: "2026-01-01T10:00:00Z",
       },
     });
+    expect(
+      parseKomojuInboxEvent({
+        ...event,
+        data: { ...event.data, captured_at: "not-a-timestamp" },
+      }),
+    ).toBeUndefined();
     expect(
       parseKomojuInboxEvent({
         ...event,

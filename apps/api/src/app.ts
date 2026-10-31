@@ -56,6 +56,7 @@ export interface AppDependencies {
   };
   logger: ApiLogger;
   komojuInbox: KomojuInbox;
+  komojuTriggerProcessing?: () => Promise<unknown>;
   line?: LineModule;
 }
 
@@ -92,6 +93,9 @@ export function createApp(dependencies: AppDependencies) {
     createKomojuWebhookRoutes({
       secret: dependencies.config.komojuWebhookSecret,
       inbox: dependencies.komojuInbox,
+      ...(dependencies.komojuTriggerProcessing
+        ? { triggerProcessing: dependencies.komojuTriggerProcessing }
+        : {}),
     }),
   );
   const lineRoutesEnabled =

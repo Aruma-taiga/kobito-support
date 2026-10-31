@@ -16,7 +16,6 @@ import {
   customerContractResponseSchema,
   invoiceDetailSchema,
   invoiceTotals,
-  periodFor,
   planCodes,
 } from "@kobito/shared";
 import type { Pool, PoolClient } from "pg";
@@ -26,6 +25,10 @@ import { safePgInteger } from "../../platform/db/integers.js";
 import type { CustomerScope } from "../../platform/scope.js";
 import { ApiError, type Principal } from "../../platform/types.js";
 import type { InvoiceModule } from "./contracts.js";
+import {
+  InvalidInitialInvoiceSnapshot,
+  settleInitialInvoicePayment,
+} from "./payment-settlement.js";
 import type { InvoicePdfRenderer } from "./renderer.js";
 
 const maxPdfBytes = 5 * 1024 * 1024;
@@ -339,68 +342,27 @@ export class InvoiceRepository implements InvoiceModule {
       throw new ApiError(409, "application_conflict");
     if (contract.anchor_date) throw new ApiError(409, "application_conflict");
 
-    const accepted = safeObject(snapshot.acceptedPlan);
-    const planId =
-      typeof accepted.planId === "string" &&
-      /^[0-9a-f-]{36}$/i.test(accepted.planId)
-        ? accepted.planId
-        : undefined;
-    const planName =
-      typeof accepted.planName === "string" ? accepted.planName.trim() : "";
-    const price = accepted.monthlyPriceExclTax;
-    const credits = accepted.credits;
-    const planCode = accepted.planCode;
-    if (
-      !planId ||
-      !planName ||
-      typeof planCode !== "string" ||
-      !planCodes.includes(planCode as (typeof planCodes)[number]) ||
-      !Number.isSafeInteger(price) ||
-      price !== invoice.total_excl_tax ||
-      !Number.isSafeInteger(credits) ||
-      (credits as number) <= 0
-    )
-      throw new ApiError(409, "application_conflict");
-    const period = periodFor(today, 0);
-    const periodId = randomUUID();
-    const paymentId = randomUUID();
-    await client.query(
-      `insert into billing_periods (id,contract_id,seq,starts_on,ends_on,plan_id,price_excl_tax,credits)
-       values ($1,$2,1,$3,$4,$5,$6,$7)`,
-      [
-        periodId,
-        contractId,
-        period.startsOn,
-        period.endsOn,
-        planId,
-        price,
-        credits,
-      ],
-    );
-    await client.query(
-      `insert into payments (id,invoice_id,method,amount,paid_on,confirmed_via,confirmed_by)
-       values ($1,$2,'bank_transfer',$3,$4,'manual',$5)`,
-      [
-        paymentId,
+    let settlement: Awaited<ReturnType<typeof settleInitialInvoicePayment>>;
+    try {
+      settlement = await settleInitialInvoicePayment(client, {
         invoiceId,
-        request.amount,
-        request.paidOn,
-        principal.authUserId,
-      ],
-    );
-    await client.query(
-      "update invoices set status='paid', period_id=$2 where id=$1",
-      [invoiceId, periodId],
-    );
-    await client.query(
-      "update contracts set status='active',anchor_date=$2 where id=$1",
-      [contractId, today],
-    );
-    await client.query(
-      `insert into credit_entries (contract_id,period_id,kind,amount,invoice_id,note)
-       values ($1,$2,'grant',$3,$4,'初月請求の入金確認')`,
-      [contractId, periodId, credits, invoiceId],
-    );
+        contractId,
+        paidOn: request.paidOn,
+        anchorDate: today,
+        amount: request.amount,
+        paymentMethod: "bank_transfer",
+        confirmedVia: "manual",
+        confirmedBy: principal.authUserId,
+        issuerSnapshot: snapshot,
+        totalExclTax: invoice.total_excl_tax,
+      });
+    } catch (error) {
+      if (error instanceof InvalidInitialInvoiceSnapshot)
+        throw new ApiError(409, "application_conflict");
+      throw error;
+    }
+    const { paymentId, period } = settlement;
+    const periodId = period.id;
     if (!preview) {
       for (const [kind, targetId] of [
         ["NT-02b", contractId],
@@ -427,7 +389,7 @@ export class InvoiceRepository implements InvoiceModule {
       paidOn: request.paidOn,
       contractId,
       anchorDate: today,
-      period: { id: periodId, seq: 1, ...period, priceExclTax: price, credits },
+      period,
       preview,
       replayed: false,
     });
