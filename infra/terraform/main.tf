@@ -502,6 +502,40 @@ resource "google_cloud_run_v2_job" "retention" {
   depends_on = [google_storage_bucket_iam_member.run_pdf_objects]
 }
 
+resource "google_cloud_run_v2_job" "migrate" {
+  project  = var.gcp_project_id
+  name     = "${var.name_prefix}-migrate"
+  location = var.region
+  template {
+    template {
+      service_account = google_service_account.run.email
+      volumes {
+        name = "cloudsql"
+        cloud_sql_instance {
+          instances = [google_sql_database_instance.main.connection_name]
+        }
+      }
+      containers {
+        image = var.migrate_image
+        env {
+          name = "DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.app["DATABASE_URL"].secret_id
+              version = "latest"
+            }
+          }
+        }
+        volume_mounts {
+          name       = "cloudsql"
+          mount_path = "/cloudsql"
+        }
+      }
+    }
+  }
+  depends_on = [google_project_service.enabled]
+}
+
 resource "google_project_iam_member" "scheduler_run_jobs" {
   project = var.gcp_project_id
   role    = "roles/run.developer"

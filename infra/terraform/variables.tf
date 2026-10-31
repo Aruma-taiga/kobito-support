@@ -25,6 +25,10 @@ variable "domain_name" {
 variable "api_image" {
   type = string
 }
+variable "migrate_image" {
+  description = "docker build --target migrate で作成した DB 初期化用イメージ"
+  type        = string
+}
 variable "database_password_secret_version" {
   description = "事前登録した DB パスワード Secret のバージョン番号"
   type        = string

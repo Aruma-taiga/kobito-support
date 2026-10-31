@@ -7,6 +7,7 @@ cloudflare_zone_id                    = "YOUR_CLOUDFLARE_ZONE_ID"
 cloudflare_account_id                 = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 domain_name                           = "example.invalid"
 api_image                             = "asia-northeast1-docker.pkg.dev/PROJECT/REPOSITORY/API_IMAGE:TAG"
+migrate_image                         = "asia-northeast1-docker.pkg.dev/PROJECT/REPOSITORY/MIGRATE_IMAGE:TAG"
 database_password_secret_version      = "1"
 scheduler_paused                      = true
 web_firebase_api_key                   = ""

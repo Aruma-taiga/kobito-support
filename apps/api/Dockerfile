@@ -6,6 +6,10 @@ RUN pnpm install --frozen-lockfile
 RUN pnpm build:shared && pnpm build:api
 RUN pnpm --filter @kobito/api deploy --prod --legacy /prod/api
 
+FROM build AS migrate
+USER node
+CMD ["sh", "-c", "pnpm --filter @kobito/db migrate && pnpm --filter @kobito/db seed"]
+
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=8080
 RUN apt-get update && apt-get install -y --no-install-recommends chromium fonts-noto-cjk && rm -rf /var/lib/apt/lists/*

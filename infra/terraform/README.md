@@ -6,7 +6,7 @@ GCP の本番相当環境（東京 `asia-northeast1`）と Cloudflare Pages/DNS 
 
 - `versions.tf`: Terraform / Google / Cloudflare provider の制約、GCS backend のコメントアウト雛形。
 - `variables.tf`, `terraform.tfvars.example`: 環境固有値。
-- `main.tf`: API 有効化、Artifact Registry、実行・Scheduler 用サービスアカウント、Cloud SQL、Secret Manager、Cloud Run API/Jobs、Scheduler、非公開 GCS、Cloudflare Pages/DNS、監視アラート。
+- `main.tf`: API 有効化、Artifact Registry、実行・Scheduler 用サービスアカウント、Cloud SQL、Secret Manager、Cloud Run API/Jobs（手動の migrate を含む）、Scheduler、非公開 GCS、Cloudflare Pages/DNS、監視アラート。
 - `outputs.tf`: API URL、DB 接続名、Artifact Registry。
 
 Cloud Run API は Webhook を受けるため未認証呼び出しを許可します。顧客認証・管理者の二段階認証は API が検証します。Cloud SQL は PostgreSQL 16、東京の最小 `db-f1-micro`、自動バックアップ/PITR、削除保護を設定しています。Cloud Run の DB 接続は Cloud SQL 接続機能を使います。
@@ -27,11 +27,27 @@ Cloud Storage は請求書 PDF 用の非公開バケットと 2,555 日（約7�
 ## 初回有効化の順序
 
 1. GCP/Cloudflare、請求、権限、Identity Platform、Secret Manager の前提を整える。
-2. DB パスワード Secret を用意し、Cloud SQL と DB/User を作る。マイグレーションは別途、承認済みの手順で実行する。
-3. Artifact Registry に Dockerfile から API イメージをビルド・登録する。Terraform に `api_image` を渡す。
+2. DB パスワード Secret を用意し、Cloud SQL と DB/User を作る。`kobito_app` はマイグレーションが `public` schema にテーブルを作成できる権限を必要とします。必要に応じて DB 管理者として `GRANT USAGE, CREATE ON SCHEMA public TO kobito_app;` を実行してください。
+3. Artifact Registry に Dockerfile から API と migrate のイメージをビルド・登録する。Terraform に `api_image` と `migrate_image` を渡す。
 4. アプリ Secret の必要な版を登録してから Cloud Run API を起動し、ヘルスチェック・認証・Webhook の疎通を確認する。
 5. Web をビルド/Pages へ接続し、API CORS と Firebase 設定を確認する。
 6. メール送信、決済、バックアップ復元、各 Job の dry run 相当の手順を検証する。最後に `scheduler_paused=false` として Scheduler を有効化する。初期値は `true` です。
+
+### DB マイグレーションと seed
+
+DB 初期化用イメージは API Dockerfile の `migrate` ターゲットから作ります。`.dockerignore` により `.env` などのローカル環境ファイルはビルドコンテキストに含みません。
+
+```sh
+docker build -f apps/api/Dockerfile --target migrate -t <名前> .
+```
+
+Terraform の `migrate_image` に登録済みイメージを設定して適用した後、初回またはリリースに伴う DB 更新時に手動実行します（実環境では未検証です）。Cloud Run Job は `DATABASE_URL` Secret と Cloud SQL 接続を使い、マイグレーション完了後に seed を実行します。どちらかが失敗すれば Job は失敗します。実行コマンド:
+
+```sh
+gcloud run jobs execute <prefix>-migrate --region <region> --wait
+```
+
+seed はプランと settings の既定値のみを追加し、既存の plan/settings 行を `ON CONFLICT DO NOTHING` で保持します。管理者が編集した `service_name` などは再実行で上書きされません。顧客・請求書など開発用の架空データは作成しません。
 
 ### Job の実行コマンドと制約
 
