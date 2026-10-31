@@ -198,15 +198,14 @@ export class ApplicationsRepository implements ApplicationsRepositoryPort {
         [referralCode],
       );
       const partnerRow = partnerResult.rows[0];
-      if (!partnerRow || command.submission.consentPartnerShare !== true) {
-        throw new ApiError(422, "validation_error");
+      if (partnerRow && command.submission.consentPartnerShare === true) {
+        partnerId = partnerRow.id;
+        partner = { code: partnerRow.code, name: partnerRow.name };
+        partnerReward = {
+          type: partnerRow.reward_type,
+          rate: partnerRow.reward_rate,
+        };
       }
-      partnerId = partnerRow.id;
-      partner = { code: partnerRow.code, name: partnerRow.name };
-      partnerReward = {
-        type: partnerRow.reward_type,
-        rate: partnerRow.reward_rate,
-      };
     }
 
     const accountResult = await client.query<{
@@ -280,7 +279,7 @@ export class ApplicationsRepository implements ApplicationsRepositoryPort {
         customerId,
         plan.id,
         command.submission.paymentMethod,
-        referralCode ?? null,
+        partner ? (referralCode ?? null) : null,
         partnerId,
         command.submission.freeText ?? null,
         applicationConfig.terms.version,

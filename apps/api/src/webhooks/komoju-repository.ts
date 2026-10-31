@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { canTransitionInvoice, planCodes } from "@kobito/shared";
 import type { Pool, PoolClient } from "pg";
+import { recordPartnerReward } from "../modules/invoices/partner-rewards.js";
 import { settleInitialInvoicePayment } from "../modules/invoices/payment-settlement.js";
 import { schedule } from "../modules/notifications/service.js";
 import type {
@@ -416,11 +417,20 @@ export class KomojuInboxRepository
         }
         credits = period.credits;
       }
-      await client.query(
+      const paymentResult = await client.query<{ id: string }>(
         `insert into payments (invoice_id,method,amount,paid_on,confirmed_via,komoju_payment_id)
-         values ($1,'card',$2,$3,'webhook',$4)`,
+         values ($1,'card',$2,$3,'webhook',$4) returning id`,
         [invoice.id, event.data.total, paidOn, paymentId],
       );
+      const paymentRowId = paymentResult.rows[0]?.id;
+      if (!paymentRowId)
+        throw new Error("KOMOJU payment insert returned no ID");
+      await recordPartnerReward(client, {
+        contractId: invoice.contract_id,
+        invoiceId: invoice.id,
+        paymentId: paymentRowId,
+        paidOn,
+      });
       await client.query(
         "update invoices set status='paid',period_id=$2 where id=$1",
         [invoice.id, periodId],

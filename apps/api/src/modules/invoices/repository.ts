@@ -31,6 +31,7 @@ import type { CustomerScope } from "../../platform/scope.js";
 import { ApiError, type Principal } from "../../platform/types.js";
 import { schedule } from "../notifications/service.js";
 import type { InvoiceModule } from "./contracts.js";
+import { recordPartnerReward } from "./partner-rewards.js";
 import {
   InvalidInitialInvoiceSnapshot,
   settleInitialInvoicePayment,
@@ -486,6 +487,12 @@ export class InvoiceRepository implements InvoiceModule {
       await client.query("update invoices set status='paid' where id=$1", [
         invoiceId,
       ]);
+      await recordPartnerReward(client, {
+        contractId,
+        invoiceId,
+        paymentId,
+        paidOn: request.paidOn,
+      });
       await client.query(
         `insert into credit_entries (contract_id,period_id,kind,amount,invoice_id,note)
          values ($1,$2,'grant',$3,$4,'月額請求の入金確認') on conflict (period_id) where kind='grant' do nothing`,

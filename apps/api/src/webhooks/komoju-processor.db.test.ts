@@ -219,6 +219,13 @@ async function cleanup(fixture: Fixture, eventIds: string[]) {
   await pool.query("delete from notifications where customer_id=$1", [
     fixture.customerId,
   ]);
+  await pool.query(
+    "delete from partner_rewards where referral_id in (select id from referrals where contract_id=$1)",
+    [fixture.contractId],
+  );
+  await pool.query("delete from referrals where contract_id=$1", [
+    fixture.contractId,
+  ]);
   await pool.query("delete from credit_entries where contract_id=$1", [
     fixture.contractId,
   ]);
@@ -674,6 +681,17 @@ describe("KOMOJU event processing database behavior", () => {
   it("serializes simultaneous deliveries for one invoice and only grants a monthly period once", async () => {
     const fixture = await createInvoice("active");
     if (!fixture.periodId) throw new Error("Monthly period fixture is missing");
+    const partner = await pool.query<{ id: string }>(
+      `insert into partners(name,referral_code,reward_type,reward_rate,active)
+       values('KOMOJU reward test',$1,'appointment',0.100,true) returning id`,
+      [`${fixturePrefix}-${randomUUID()}`],
+    );
+    const partnerId = partner.rows[0]?.id;
+    if (!partnerId) throw new Error("Partner fixture was not created");
+    await pool.query(
+      "insert into referrals(partner_id,contract_id,reward_type,reward_rate) values($1,$2,'appointment',0.100)",
+      [partnerId, fixture.contractId],
+    );
     const eventIds = [0, 1].map(() => newEventId());
     try {
       await Promise.all(
@@ -704,8 +722,28 @@ describe("KOMOJU event processing database behavior", () => {
         grants: "1",
         notices: "1",
       });
+      const rewards = await pool.query<{
+        count: string;
+        month_index: number;
+        base_amount: number;
+        reward_amount: number;
+        tax_amount: number;
+      }>(
+        `select count(*)::text as count,min(month_index) as month_index,
+                min(base_amount) as base_amount,min(reward_amount) as reward_amount,min(tax_amount) as tax_amount
+           from partner_rewards where payment_id in (select id from payments where invoice_id=$1)`,
+        [fixture.invoiceId],
+      );
+      expect(rewards.rows[0]).toEqual({
+        count: "1",
+        month_index: 1,
+        base_amount: 5000,
+        reward_amount: 500,
+        tax_amount: 50,
+      });
     } finally {
       await cleanup(fixture, eventIds);
+      await pool.query("delete from partners where id=$1", [partnerId]);
     }
   });
 

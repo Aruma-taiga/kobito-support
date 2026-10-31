@@ -3,6 +3,7 @@ import {
   adminReferralsQuerySchema,
   adminReferralsResponseSchema,
   buildReferralReport,
+  calculatePartnerReward,
   type ReferralRewardRow,
   rewardPayableYen,
 } from "./referrals.js";
@@ -47,6 +48,20 @@ describe("referral month query", () => {
 });
 
 describe("buildReferralReport", () => {
+  it.each([
+    [5000, 0.2, 1000, 100],
+    [10000, 0.1, 1000, 100],
+    [15000, 0.2, 3000, 300],
+    [12345, 0.2, 2469, 246],
+    [9, 0.1, 0, 0],
+  ])("calculates reward and tax for %i at %f", (base, rate, reward, tax) => {
+    expect(calculatePartnerReward(base, rate)).toEqual({
+      baseAmount: base,
+      rewardAmount: reward,
+      taxAmount: tax,
+    });
+  });
+
   it("pays reward plus the stored tax without recomputing it", () => {
     expect(rewardPayableYen(1000, 100)).toBe(1100);
     // 税額は DB の値を信頼する（500円の10%は50円だが、保存値0円を使う）
