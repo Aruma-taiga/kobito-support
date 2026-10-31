@@ -21,6 +21,7 @@ import { createReferralAdminRoutes } from "../referrals/routes.js";
 import type { RequestModule } from "../requests/contracts.js";
 import { createRequestAdminRoutes } from "../requests/routes.js";
 import type { AdminModule } from "./contracts.js";
+import type { RetentionModule } from "./retention-contracts.js";
 
 const maxDeclineBodyBytes = 16 * 1024;
 const maxApproveBodyBytes = 4 * 1024;
@@ -33,6 +34,7 @@ export function createAdminRoutes(dependencies: {
   requests?: RequestModule;
   planQuotes?: PlanQuoteModule;
   referrals?: ReferralModule;
+  retention?: RetentionModule;
 }) {
   const routes = new Hono<{ Variables: ApiVariables }>();
   const authenticate = createAuthenticate(
@@ -43,6 +45,11 @@ export function createAdminRoutes(dependencies: {
   routes.use("*", authenticate, requireAdmin());
 
   routes.get("/session", (context) => context.json({ role: "admin" as const }));
+  if (dependencies.retention) {
+    routes.get("/retention", async (context) =>
+      context.json(await dependencies.retention?.listRetention()),
+    );
+  }
   routes.get("/payment-reviews", async (context) => {
     const params = [...new URL(context.req.url).searchParams.entries()];
     if (new Set(params.map(([key]) => key)).size !== params.length)

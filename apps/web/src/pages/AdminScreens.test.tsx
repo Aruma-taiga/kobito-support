@@ -244,6 +244,7 @@ describe("admin shell (mock a03〜a08)", () => {
       "入金確認",
       "請求書",
       "紹介・報酬",
+      "削除予定",
       "設定",
     ]);
     const current = within(nav).getByRole("link", { name: "顧客" });

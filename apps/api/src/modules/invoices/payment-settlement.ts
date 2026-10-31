@@ -84,6 +84,9 @@ export async function settleInitialInvoicePayment(
     "update contracts set status='active',anchor_date=$2 where id=$1",
     [input.contractId, input.anchorDate],
   );
+  await client.query("update customers set deletion_due_on=null where id=$1", [
+    input.customerId,
+  ]);
   await client.query(
     `insert into credit_entries (contract_id,period_id,kind,amount,invoice_id,note)
      values ($1,$2,'grant',$3,$4,$5)`,

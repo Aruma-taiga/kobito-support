@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { addCalendarYear, previousCalendarDay } from "./retention.js";
 import { contractStatuses } from "./states.js";
 
 export const customerLandingPaths = [
@@ -24,14 +25,6 @@ export const welcomeSeenResponseSchema = z.object({
   seenAt: z.iso.datetime(),
 });
 export type WelcomeSeenResponse = z.infer<typeof welcomeSeenResponseSchema>;
-
-function nextCalendarYear(date: string): string {
-  const [year, month, day] = date.split("-").map(Number);
-  if (!year || !month || !day) throw new RangeError("Invalid calendar date");
-  const nextYear = year + 1;
-  const maxDay = new Date(Date.UTC(nextYear, month, 0)).getUTCDate();
-  return `${String(nextYear).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(Math.min(day, maxDay)).padStart(2, "0")}`;
-}
 
 export function customerAccessFor(input: {
   status: (typeof contractStatuses)[number] | null;
@@ -82,7 +75,9 @@ export function customerAccessFor(input: {
     };
   }
   if (status === "ended" && input.endedOnTokyoDate !== null) {
-    const invoiceAccessUntil = nextCalendarYear(input.endedOnTokyoDate);
+    const invoiceAccessUntil = previousCalendarDay(
+      addCalendarYear(input.endedOnTokyoDate),
+    );
     if (input.todayTokyoDate <= invoiceAccessUntil) {
       return {
         contractStatus: status,

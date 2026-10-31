@@ -16,6 +16,7 @@ import {
   AdminRequestDetailPage,
   AdminRequestListPage,
 } from "./AdminRequestPages.js";
+import { AdminRetentionPage } from "./AdminRetentionPage.js";
 import { AdminTodayPage } from "./AdminTodayPage.js";
 import { AdminBankTransferPage } from "./BankTransferPage.js";
 import {
@@ -64,6 +65,10 @@ export function AdminApp({
           <Route
             path="customers/:id/plan-quote"
             element={<AdminPlanQuotePage apiClient={apiClient} />}
+          />
+          <Route
+            path="retention"
+            element={<AdminRetentionPage apiClient={apiClient} />}
           />
           <Route
             path="referrals"

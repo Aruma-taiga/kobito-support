@@ -1,4 +1,8 @@
-import { canTransitionContract, canTransitionInvoice } from "@kobito/shared";
+import {
+  canTransitionContract,
+  canTransitionInvoice,
+  retentionDueDate,
+} from "@kobito/shared";
 import type { Pool } from "pg";
 
 export interface DailyLifecycleResult {
@@ -104,8 +108,8 @@ export class DailyLifecycleJob {
             [row.initial_invoice_id],
           );
         }
-        const changed = await client.query(
-          "update contracts set status='lapsed' where id=$1 and status=$2",
+        const changed = await client.query<{ customer_id: string }>(
+          "update contracts set status='lapsed' where id=$1 and status=$2 returning customer_id",
           [row.id, row.status],
         );
         if (changed.rowCount !== 1) {
@@ -113,6 +117,25 @@ export class DailyLifecycleJob {
           result.skipped++;
           continue;
         }
+        const transitionedCustomer = changed.rows[0];
+        if (!transitionedCustomer)
+          throw new Error("lapsed customer id missing");
+        await client.query(
+          "update customers set deletion_due_on=coalesce(deletion_due_on,$2::date) where id=$1",
+          [transitionedCustomer.customer_id, retentionDueDate("lapsed", today)],
+        );
+        await client.query(
+          `insert into audit_logs (action,target_type,target_id,detail)
+           values ('contract.lapsed','contract',$1,$2::jsonb)`,
+          [
+            row.id,
+            JSON.stringify({
+              fromStatus: row.status,
+              toStatus: "lapsed",
+              transitionDate: today,
+            }),
+          ],
+        );
         await client.query("commit");
         result.lapsed++;
       } catch (error) {

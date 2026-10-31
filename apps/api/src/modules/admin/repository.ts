@@ -10,6 +10,7 @@ import type {
 import {
   adminPaymentReviewsResponseSchema,
   canTransition,
+  retentionDueDate,
 } from "@kobito/shared";
 import type { Pool, PoolClient } from "pg";
 import { withAdminAudit } from "../../platform/audit.js";
@@ -344,11 +345,13 @@ export class AdminRepository implements AdminModule {
       contract_id: string;
       customer_id: string;
       contract_status: AdminCustomerDetail["contract"]["status"];
+      transition_date: string;
       review_result: "approved" | "declined" | null;
       rejection_note: string | null;
     }>(
       `select a.id as application_id, c.id as contract_id, c.customer_id,
-              c.status as contract_status, a.review_result, a.rejection_note
+              c.status as contract_status, a.review_result, a.rejection_note,
+              to_char(transaction_timestamp() at time zone 'Asia/Tokyo','YYYY-MM-DD') transition_date
          from applications a
          join contracts c on c.application_id = a.id
         where a.id = $1
@@ -388,6 +391,10 @@ export class AdminRepository implements AdminModule {
     await client.query(
       "update contracts set status = 'declined' where id = $1",
       [row.contract_id],
+    );
+    await client.query(
+      "update customers set deletion_due_on=coalesce(deletion_due_on,$2::date) where id=$1",
+      [row.customer_id, retentionDueDate("declined", row.transition_date)],
     );
     await client.query(
       `insert into notifications (customer_id, kind, channel, dedupe_key, scheduled_at, payload)
