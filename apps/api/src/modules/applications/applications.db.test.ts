@@ -233,6 +233,12 @@ async function cleanupApplicants() {
     [uids],
   );
   await pool.query(
+    `delete from notifications where payload->>'applicationId' in
+       (select a.id::text from applications a join user_accounts u on u.customer_id=a.customer_id
+        where u.auth_user_id=any($1::text[]))`,
+    [uids],
+  );
+  await pool.query(
     "delete from application_submission_keys where auth_user_id = any($1::text[])",
     [uids],
   );
@@ -337,6 +343,20 @@ describe("public application submission with PostgreSQL", () => {
       key_count: "1",
       queued_receipt_count: "1",
     });
+    const operationsNotice = await pool.query<{
+      customer_id: string | null;
+      dedupe_key: string;
+    }>(
+      `select customer_id,dedupe_key
+         from notifications where kind='S-03' and payload->>'applicationId'=$1`,
+      [receipt.applicationId],
+    );
+    expect(operationsNotice.rows).toEqual([
+      {
+        customer_id: null,
+        dedupe_key: `S-03:application:${receipt.applicationId}:operations:email`,
+      },
+    ]);
 
     const rows = await pool.query<{
       contract_status: string;

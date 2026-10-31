@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { periodFor, planCodes } from "@kobito/shared";
 import type { PoolClient } from "pg";
+import { schedule } from "../notifications/service.js";
 
 export interface InitialInvoiceSettlementInput {
   invoiceId: string;
   contractId: string;
+  customerId: string;
+  notificationsEnabled?: boolean;
   paidOn: string;
   anchorDate: string;
   amount: number;
@@ -92,6 +95,15 @@ export async function settleInitialInvoicePayment(
       "初月請求の入金確認",
     ],
   );
+  if (input.notificationsEnabled !== false) {
+    await schedule(client, {
+      customerId: input.customerId,
+      kind: "NT-02b",
+      dedupeKey: `NT-02b:${input.contractId}:email`,
+      scheduledAt: new Date(),
+      payload: { contractId: input.contractId, invoiceId: input.invoiceId },
+    });
+  }
   return {
     paymentId,
     period: {

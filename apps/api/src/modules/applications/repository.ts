@@ -10,6 +10,7 @@ import {
 import type { Pool, PoolClient } from "pg";
 import type { RuntimeConfig } from "../../platform/config.js";
 import { ApiError } from "../../platform/types.js";
+import { schedule } from "../notifications/service.js";
 import type {
   PublicApplicationCatalog,
   SubmitApplicationCommand,
@@ -35,7 +36,6 @@ export interface ApplicationsRepositoryPort {
   submit(
     command: SubmitApplicationCommand,
     config: RuntimeConfig,
-    operationsEmail?: string,
   ): Promise<ApplicationReceipt>;
 }
 
@@ -81,7 +81,6 @@ export class ApplicationsRepository implements ApplicationsRepositoryPort {
   async submit(
     command: SubmitApplicationCommand,
     config: RuntimeConfig,
-    operationsEmail?: string,
   ): Promise<ApplicationReceipt> {
     const requestHash = createSubmissionHash(command.submission);
     const client = await this.pool.connect();
@@ -92,7 +91,6 @@ export class ApplicationsRepository implements ApplicationsRepositoryPort {
         command,
         requestHash,
         config,
-        operationsEmail,
       );
       await client.query("commit");
       return result;
@@ -113,7 +111,6 @@ export class ApplicationsRepository implements ApplicationsRepositoryPort {
     command: SubmitApplicationCommand,
     requestHash: string,
     config: RuntimeConfig,
-    operationsEmail?: string,
   ): Promise<ApplicationReceipt> {
     const identityUid = command.identity.uid;
     await client.query(
@@ -323,14 +320,19 @@ export class ApplicationsRepository implements ApplicationsRepositoryPort {
       [command.idempotencyKey, identityUid, applicationId, requestHash],
     );
 
-    await this.queueReceiptNotification(client, customerId, applicationId);
-    if (operationsEmail) {
-      await this.queueOperationsNotification(
-        client,
-        applicationId,
-        operationsEmail,
-      );
-    }
+    await schedule(client, {
+      customerId,
+      kind: "NT-01",
+      dedupeKey: `NT-01:application:${applicationId}:customer:email`,
+      scheduledAt: new Date(),
+      payload: { applicationId },
+    });
+    await schedule(client, {
+      kind: "S-03",
+      dedupeKey: `S-03:application:${applicationId}:operations:email`,
+      scheduledAt: new Date(),
+      payload: { applicationId },
+    });
 
     return {
       applicationId,
@@ -413,37 +415,6 @@ export class ApplicationsRepository implements ApplicationsRepositoryPort {
         submission.lineDisplayName ?? null,
         submission.invoiceRegistrationNo ?? null,
         submission.consentMarketing,
-      ],
-    );
-  }
-
-  private async queueReceiptNotification(
-    client: PoolClient,
-    customerId: string,
-    applicationId: string,
-  ): Promise<void> {
-    await client.query(
-      `insert into notifications (customer_id, kind, channel, dedupe_key, scheduled_at, payload)
-       values ($1, 'NT-01', 'email', $2, now(), $3::jsonb)`,
-      [
-        customerId,
-        `NT-01:application:${applicationId}:customer`,
-        JSON.stringify({ applicationId, recipient: "customer" }),
-      ],
-    );
-  }
-
-  private async queueOperationsNotification(
-    client: PoolClient,
-    applicationId: string,
-    recipient: string,
-  ): Promise<void> {
-    await client.query(
-      `insert into notifications (customer_id, kind, channel, dedupe_key, scheduled_at, payload)
-       values (null, 'S-03', 'email', $1, now(), $2::jsonb)`,
-      [
-        `S-03:application:${applicationId}:operations`,
-        JSON.stringify({ applicationId, recipient }),
       ],
     );
   }

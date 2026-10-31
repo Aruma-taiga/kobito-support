@@ -57,6 +57,11 @@ const environmentSchema = z
         typeof value === "string" && value.trim() === "" ? undefined : value,
       z.enum(["true", "false"]).default("false"),
     ),
+    MAIL_PROVIDER: z.preprocess(
+      (value) =>
+        typeof value === "string" && value.trim() === "" ? undefined : value,
+      z.enum(["log"]).optional(),
+    ),
     LINE_LOGIN_CHANNEL_ID: optionalText,
   })
   .superRefine((environment, context) => {
@@ -104,6 +109,7 @@ export interface RuntimeConfig {
   cardPaymentEnabled?: boolean;
   lineEnabled?: boolean;
   lineLoginChannelId?: string;
+  mailProvider?: "log";
 }
 
 export function loadConfig(
@@ -171,5 +177,8 @@ export function loadConfig(
     ...(value.LINE_LOGIN_CHANNEL_ID === undefined
       ? {}
       : { lineLoginChannelId: value.LINE_LOGIN_CHANNEL_ID }),
+    ...(value.MAIL_PROVIDER === undefined
+      ? {}
+      : { mailProvider: value.MAIL_PROVIDER }),
   };
 }
