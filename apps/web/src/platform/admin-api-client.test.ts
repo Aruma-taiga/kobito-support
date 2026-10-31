@@ -286,7 +286,7 @@ describe("admin API client", () => {
           seq: 1,
           startsOn: "2026-10-26",
           endsOn: "2026-11-25",
-          priceInclTax: 5500,
+          priceExclTax: 5000,
           credits: 3,
         },
         preview: true,

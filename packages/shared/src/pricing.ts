@@ -4,25 +4,25 @@ export const planCatalog = {
   light: {
     code: "light",
     label: planLabels.light,
-    monthlyGrossYen: 5_500,
+    monthlyExclYen: 5_000,
     monthlyCredits: 1,
   },
   standard: {
     code: "standard",
     label: planLabels.standard,
-    monthlyGrossYen: 11_000,
+    monthlyExclYen: 10_000,
     monthlyCredits: 3,
   },
   premium: {
     code: "premium",
     label: planLabels.premium,
-    monthlyGrossYen: 16_500,
+    monthlyExclYen: 15_000,
     monthlyCredits: 5,
   },
   custom: {
     code: "custom",
     label: planLabels.custom,
-    monthlyGrossYen: null,
+    monthlyExclYen: null,
     monthlyCredits: null,
   },
 } as const;
@@ -35,45 +35,57 @@ export const planCodes = [
   "premium",
   "custom",
 ] as const satisfies readonly PlanCode[];
-export const extraCreditGrossYen = 4_400;
+export const extraCreditExclYen = 4_000;
+
+/** Consumption tax rate as a ratio of the exclusive subtotal (10%). */
+const TAX_PERCENT = 10n;
 
 export interface TaxBreakdown {
-  grossYen: number;
+  /** Subtotal excluding tax (sum of line amounts). */
+  exclYen: number;
+  /** Consumption tax: floor(subtotal x 10%), computed once per invoice. */
   taxYen: number;
-  netYen: number;
+  /** Amount the customer pays: subtotal + tax. */
+  inclYen: number;
 }
 
-function assertGrossYen(value: number): void {
+function assertExclYen(value: number): void {
   if (!Number.isSafeInteger(value) || value < 0) {
-    throw new RangeError("Gross yen must be a non-negative safe integer");
+    throw new RangeError("Amount must be a non-negative safe integer");
   }
 }
 
-/** Splits a 10% tax-inclusive amount once, rounding tax down to whole yen. */
-export function splitTax(grossYen: number): TaxBreakdown {
-  assertGrossYen(grossYen);
-  const gross = BigInt(grossYen);
-  const taxYen = Number((gross * 10n) / 110n);
-  return {
-    grossYen,
-    taxYen,
-    netYen: grossYen - taxYen,
-  };
+/** The single place consumption tax is computed: floor(excl x 10%). */
+export function taxOnExcl(exclYen: number): number {
+  assertExclYen(exclYen);
+  return Number((BigInt(exclYen) * TAX_PERCENT) / 100n);
 }
 
-/** Sums line gross amounts safely, then rounds tax once for the invoice. */
+/** Tax-inclusive display amount for a single exclusive price (one-line invoice). */
+export function inclYenFor(exclYen: number): number {
+  return exclYen + taxOnExcl(exclYen);
+}
+
+/**
+ * Sums tax-exclusive line amounts, then rounds tax down once for the whole
+ * invoice. Never compute tax per line.
+ */
 export function invoiceTotals(
-  lineGrossAmountsYen: readonly number[],
+  lineExclAmountsYen: readonly number[],
 ): TaxBreakdown {
-  let gross = 0n;
-  for (const amount of lineGrossAmountsYen) {
-    assertGrossYen(amount);
-    gross += BigInt(amount);
-    if (gross > BigInt(Number.MAX_SAFE_INTEGER)) {
-      throw new RangeError(
-        "Invoice gross total exceeds the safe integer range",
-      );
+  let excl = 0n;
+  for (const amount of lineExclAmountsYen) {
+    assertExclYen(amount);
+    excl += BigInt(amount);
+    if (excl > BigInt(Number.MAX_SAFE_INTEGER)) {
+      throw new RangeError("Invoice subtotal exceeds the safe integer range");
     }
   }
-  return splitTax(Number(gross));
+  const exclYen = Number(excl);
+  const taxYen = taxOnExcl(exclYen);
+  const inclYen = exclYen + taxYen;
+  if (!Number.isSafeInteger(inclYen)) {
+    throw new RangeError("Invoice total exceeds the safe integer range");
+  }
+  return { exclYen, taxYen, inclYen };
 }

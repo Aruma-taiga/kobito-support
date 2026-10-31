@@ -29,7 +29,7 @@ const config = {
     displayVersion: "a".repeat(64),
     conditions: {
       initialDueDays: 7,
-      extraCreditGrossYen: 4000,
+      extraCreditExclYen: 4000,
       monthlyPrepaid: true,
       periodBasis: "contract_anchor" as const,
       rollover: false,
@@ -44,7 +44,7 @@ const plans = {
       id: "00000000-0000-4000-8000-000000000001",
       code: "light",
       name: "ライト",
-      priceInclTax: 5000,
+      priceExclTax: 5000,
       credits: 1,
       isCustom: false,
     },
@@ -52,7 +52,7 @@ const plans = {
       id: "00000000-0000-4000-8000-000000000002",
       code: "standard",
       name: "スタンダード",
-      priceInclTax: 10000,
+      priceExclTax: 10000,
       credits: 3,
       isCustom: false,
     },
@@ -60,7 +60,7 @@ const plans = {
       id: "00000000-0000-4000-8000-000000000003",
       code: "premium",
       name: "プレミアム",
-      priceInclTax: 15000,
+      priceExclTax: 15000,
       credits: 5,
       isCustom: false,
     },
@@ -68,7 +68,7 @@ const plans = {
       id: "00000000-0000-4000-8000-000000000004",
       code: "custom",
       name: "個別見積り",
-      priceInclTax: null,
+      priceExclTax: null,
       credits: null,
       isCustom: true,
     },
@@ -352,18 +352,18 @@ describe("application flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "申込み内容の確認" });
     expect(
-      screen.getByText(/月額4,546円（税抜）・5,000円（税込）/),
+      screen.getByText(/月額5,000円（税抜）（5,500円（税込））/),
     ).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /申し込む/ }).hasAttribute("disabled"),
     ).toBe(true);
   });
 
-  it("shows public tax-exclusive monthly prices beside accepted gross prices", async () => {
+  it("shows public tax-exclusive monthly prices with tax-inclusive amounts alongside", async () => {
     const publicPlans = {
       ...plans,
       plans: plans.plans.map((item) =>
-        item.code === "light" ? { ...item, priceInclTax: 5500 } : item,
+        item.code === "light" ? { ...item, priceExclTax: 5000 } : item,
       ),
     };
     const publicConfig = {
@@ -372,7 +372,7 @@ describe("application flow", () => {
         ...config.application,
         conditions: {
           ...config.application.conditions,
-          extraCreditGrossYen: 4400,
+          extraCreditExclYen: 4000,
         },
       },
     };
@@ -397,9 +397,9 @@ describe("application flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "申込み内容の確認" });
 
-    expect(screen.getByText(/5,000円（税抜）・5,500円（税込）/)).toBeTruthy();
+    expect(screen.getByText(/5,000円（税抜）（5,500円（税込））/)).toBeTruthy();
     expect(
-      screen.getByText(/追加クレジットは1C 4,000円（税抜）・4,400円（税込）/),
+      screen.getByText(/追加クレジットは1C 4,000円（税抜）（4,400円（税込））/),
     ).toBeTruthy();
   });
 

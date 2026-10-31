@@ -49,12 +49,6 @@ describe("PostgreSQL migrations and seed", () => {
     const sixthMigration = await readFile(
       new URL("../migrations/006_request_completion.sql", import.meta.url),
     );
-    const seventhMigration = await readFile(
-      new URL(
-        "../migrations/007_public_tax_exclusive_pricing.sql",
-        import.meta.url,
-      ),
-    );
 
     const recorded = await pool.query<{ version: string; checksum: string }>(
       "select version, checksum from schema_migrations order by version",
@@ -83,10 +77,6 @@ describe("PostgreSQL migrations and seed", () => {
       {
         version: "006",
         checksum: createHash("sha256").update(sixthMigration).digest("hex"),
-      },
-      {
-        version: "007",
-        checksum: createHash("sha256").update(seventhMigration).digest("hex"),
       },
     ]);
   });
@@ -127,50 +117,8 @@ describe("PostgreSQL migrations and seed", () => {
     await seedDatabase(pool);
     await seedDatabase(pool);
 
-    const historicalPlans = await pool.query(
-      `select code, price_incl_tax, credits, valid_to::text as valid_to
-         from plans
-        where code in ('light', 'standard', 'premium')
-          and valid_from <= date '2026-10-30'
-        order by code`,
-    );
-    expect(historicalPlans.rows).toEqual([
-      {
-        code: "light",
-        price_incl_tax: 5000,
-        credits: 1,
-        valid_to: "2026-10-30",
-      },
-      {
-        code: "premium",
-        price_incl_tax: 15000,
-        credits: 5,
-        valid_to: "2026-10-30",
-      },
-      {
-        code: "standard",
-        price_incl_tax: 10000,
-        credits: 3,
-        valid_to: "2026-10-30",
-      },
-    ]);
-
-    const historicalCatalog = await pool.query(
-      `select distinct on (code) code, price_incl_tax
-         from plans
-        where code in ('light', 'standard', 'premium')
-          and valid_from <= date '2026-10-30'
-          and (valid_to is null or valid_to >= date '2026-10-30')
-        order by code, valid_from desc, id desc`,
-    );
-    expect(historicalCatalog.rows).toEqual([
-      { code: "light", price_incl_tax: 5000 },
-      { code: "premium", price_incl_tax: 15000 },
-      { code: "standard", price_incl_tax: 10000 },
-    ]);
-
     const plans = await pool.query(
-      `select distinct on (code) code, name, price_incl_tax, credits, is_custom
+      `select distinct on (code) code, name, price_excl_tax, credits, is_custom
          from plans
         where valid_from <= date '2026-10-31'
           and (valid_to is null or valid_to >= date '2026-10-31')
@@ -180,28 +128,28 @@ describe("PostgreSQL migrations and seed", () => {
       {
         code: "custom",
         name: "個別見積り",
-        price_incl_tax: null,
+        price_excl_tax: null,
         credits: null,
         is_custom: true,
       },
       {
         code: "light",
         name: "ライト",
-        price_incl_tax: 5500,
+        price_excl_tax: 5000,
         credits: 1,
         is_custom: false,
       },
       {
         code: "premium",
         name: "プレミアム",
-        price_incl_tax: 16500,
+        price_excl_tax: 15000,
         credits: 5,
         is_custom: false,
       },
       {
         code: "standard",
         name: "スタンダード",
-        price_incl_tax: 11000,
+        price_excl_tax: 10000,
         credits: 3,
         is_custom: false,
       },
@@ -209,7 +157,7 @@ describe("PostgreSQL migrations and seed", () => {
     const currentVersionCount = await pool.query<{ count: string }>(
       `select count(*)::text as count from plans
         where code in ('light', 'standard', 'premium')
-          and valid_from = date '2026-10-31'`,
+          and valid_to is null`,
     );
     expect(currentVersionCount.rows[0]?.count).toBe("3");
 
@@ -228,6 +176,7 @@ describe("PostgreSQL migrations and seed", () => {
       },
       company_address: "",
       company_name: "",
+      contact_email: "info@cingulata.jp",
       invoice_prefix: "KS",
       invoice_registration_no: "",
       konbini_fee_yen: null,
@@ -330,7 +279,6 @@ async function copyAppliedMigrations(directory: string): Promise<void> {
     ["004", "komoju_webhook_inbox"],
     ["005", "requests_estimates"],
     ["006", "request_completion"],
-    ["007", "public_tax_exclusive_pricing"],
   ]) {
     const filename = `${version}_${name}.sql`;
     const sql = await readFile(

@@ -34,7 +34,7 @@ const applicationConfig = {
   displayVersion: "a".repeat(64),
   conditions: {
     initialDueDays: 7,
-    extraCreditGrossYen: 4400,
+    extraCreditExclYen: 4000,
     monthlyPrepaid: true,
     periodBasis: "contract_anchor",
     rollover: false,
@@ -55,7 +55,7 @@ describe("password-free application boundary contracts", () => {
       "password",
       "authUserId",
       "termsVersion",
-      "priceInclTax",
+      "priceExclTax",
       "cardNumber",
       "cvc",
     ]) {
@@ -159,7 +159,7 @@ describe("password-free application boundary contracts", () => {
             id: "00000000-0000-4000-8000-000000000001",
             code: "light",
             name: "ライト",
-            priceInclTax: 5000,
+            priceExclTax: 5000,
             credits: 1,
             isCustom: false,
           },
@@ -167,7 +167,7 @@ describe("password-free application boundary contracts", () => {
             id: "00000000-0000-4000-8000-000000000002",
             code: "custom",
             name: "個別見積り",
-            priceInclTax: null,
+            priceExclTax: null,
             credits: null,
             isCustom: true,
           },
@@ -182,7 +182,7 @@ describe("password-free application boundary contracts", () => {
             id: "00000000-0000-4000-8000-000000000001",
             code: "light",
             name: "ライト",
-            priceInclTax: 1,
+            priceExclTax: 1,
             credits: 1,
             isCustom: false,
           },
@@ -228,7 +228,7 @@ describe("password-free application boundary contracts", () => {
   it("exports server-owned application conditions and Japanese copy needed for the confirmation screen", () => {
     expect(applicationPolicyConditions).toEqual({
       initialDueDays: 7,
-      extraCreditGrossYen: 4400,
+      extraCreditExclYen: 4000,
       monthlyPrepaid: true,
       periodBasis: "contract_anchor",
       rollover: false,
