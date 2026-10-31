@@ -482,7 +482,10 @@ describe("authenticated web API client", () => {
   it("fetches public configuration without reading or sending a user token", async () => {
     const getCurrentUser = vi.fn(() => ({ getIdToken: vi.fn() }));
     const fetcher = vi.fn<typeof fetch>(async () =>
-      Response.json({ serviceName: "Configured service" }),
+      Response.json({
+        serviceName: "Configured service",
+        cardPaymentEnabled: false,
+      }),
     );
     const client = createApiClient({
       baseUrl: "https://api.example.invalid",
@@ -493,6 +496,7 @@ describe("authenticated web API client", () => {
 
     await expect(client.getPublicConfig()).resolves.toEqual({
       serviceName: "Configured service",
+      cardPaymentEnabled: false,
     });
     expect(getCurrentUser).not.toHaveBeenCalled();
     expect(fetcher.mock.calls[0]?.[1]?.headers).not.toHaveProperty(

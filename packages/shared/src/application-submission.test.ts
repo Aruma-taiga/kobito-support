@@ -110,27 +110,44 @@ describe("password-free application boundary contracts", () => {
   });
 
   it("keeps old public config readers compatible while validating the optional application offer", () => {
-    expect(publicConfigSchema.parse({ serviceName: "サービス" })).toEqual({
-      serviceName: "サービス",
-    });
-    expect(
-      publicConfigSchema.parse({ serviceName: "サービス", application: null }),
-    ).toEqual({ serviceName: "サービス", application: null });
     expect(
       publicConfigSchema.parse({
         serviceName: "サービス",
+        cardPaymentEnabled: false,
+      }),
+    ).toEqual({
+      serviceName: "サービス",
+      cardPaymentEnabled: false,
+    });
+    expect(
+      publicConfigSchema.parse({
+        serviceName: "サービス",
+        cardPaymentEnabled: false,
+        application: null,
+      }),
+    ).toEqual({
+      serviceName: "サービス",
+      cardPaymentEnabled: false,
+      application: null,
+    });
+    expect(
+      publicConfigSchema.parse({
+        serviceName: "サービス",
+        cardPaymentEnabled: false,
         application: applicationConfig,
       }).application,
     ).toEqual(applicationConfig);
     expect(
       publicConfigSchema.safeParse({
         serviceName: "サービス",
+        cardPaymentEnabled: false,
         application: { ...applicationConfig, terms: { version: "案v2" } },
       }).success,
     ).toBe(false);
     expect(
       publicConfigSchema.safeParse({
         serviceName: "サービス",
+        cardPaymentEnabled: false,
         application: {
           ...applicationConfig,
           terms: { url: "http://example.test/terms", version: "案v2" },
@@ -140,6 +157,7 @@ describe("password-free application boundary contracts", () => {
     expect(
       publicConfigSchema.safeParse({
         serviceName: "サービス",
+        cardPaymentEnabled: false,
         application: {
           ...applicationConfig,
           terms: {

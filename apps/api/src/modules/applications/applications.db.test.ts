@@ -283,6 +283,29 @@ afterAll(async () => {
 });
 
 describe("public application submission with PostgreSQL", () => {
+  it("accepts card submissions only when the Komoju key enables cards", async () => {
+    const enabled = makeApp({
+      ...config,
+      komojuSecretKey: "test-key",
+      cardPaymentEnabled: true,
+    });
+    const cardApplicant = createApplicant({ paymentMethod: "card" });
+    cardApplicant.payload.displayVersion = await currentDisplayVersion(enabled);
+    const submitted = await submit(enabled, cardApplicant);
+    expect(submitted.status).toBe(201);
+    const row = await pool.query<{ payment_method: string }>(
+      "select payment_method from applications where id=$1",
+      [((await submitted.json()) as { applicationId: string }).applicationId],
+    );
+    expect(row.rows[0]?.payment_method).toBe("card");
+
+    const disabled = makeApp();
+    const blockedApplicant = createApplicant({ paymentMethod: "card" });
+    blockedApplicant.payload.displayVersion =
+      await currentDisplayVersion(disabled);
+    expect((await submit(disabled, blockedApplicant)).status).toBe(422);
+  });
+
   it("publishes an offer snapshot and creates the full customer submission atomically", async () => {
     const app = makeApp();
     const applicant = createApplicant();

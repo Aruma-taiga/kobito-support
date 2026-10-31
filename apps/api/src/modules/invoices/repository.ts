@@ -77,6 +77,7 @@ export interface InitialInvoiceInput {
   customerId: string;
   billingName: string;
   billingAddress: string;
+  paymentMethod?: "card" | "bank_transfer";
   plan: {
     planId: string;
     planCode: string;
@@ -564,7 +565,9 @@ export class InvoiceRepository implements InvoiceModule {
     const terms = safeObject(row.shown_terms);
     if (
       terms.paymentMethod !== row.payment_method ||
-      row.payment_method !== "bank_transfer"
+      (row.payment_method !== "bank_transfer" &&
+        (row.payment_method !== "card" ||
+          this.config.cardPaymentEnabled !== true))
     )
       throw new ApiError(409, "application_conflict");
     if (
@@ -615,6 +618,7 @@ export class InvoiceRepository implements InvoiceModule {
       customerId: row.customer_id,
       billingName: row.billing_name,
       billingAddress: row.billing_address,
+      paymentMethod: row.payment_method as "card" | "bank_transfer",
       plan: {
         planId,
         planCode,
@@ -694,7 +698,7 @@ export class InvoiceRepository implements InvoiceModule {
       totalInclTax: total.inclYen,
       totalExclTax: total.exclYen,
       taxAmount: total.taxYen,
-      paymentMethod: "bank_transfer",
+      paymentMethod: input.paymentMethod ?? "bank_transfer",
       preview,
       billingName: input.billingName,
       billingAddress: input.billingAddress,
@@ -734,7 +738,7 @@ export class InvoiceRepository implements InvoiceModule {
       `insert into invoices (id, invoice_no, contract_id, kind, status, payment_method,
          issued_on, due_on, total_incl_tax, total_excl_tax, tax_amount, billing_name,
          billing_address_snapshot, issuer_snapshot, pdf_path)
-       values ($1,$2,$3,'initial','issued','bank_transfer',$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+       values ($1,$2,$3,'initial','issued',$13,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
         invoiceId,
         invoiceNo,
@@ -748,6 +752,7 @@ export class InvoiceRepository implements InvoiceModule {
         input.billingAddress,
         JSON.stringify(issuerSnapshot),
         `invoice_documents:${invoiceId}`,
+        input.paymentMethod ?? "bank_transfer",
       ],
     );
     await client.query(

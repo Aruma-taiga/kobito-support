@@ -83,6 +83,18 @@ describe("loadConfig", () => {
     }
   });
 
+  it("enables card payment only when KOMOJU_SECRET_KEY is nonblank", () => {
+    expect(loadConfig(validEnvironment).cardPaymentEnabled).toBe(false);
+    expect(
+      loadConfig({ ...validEnvironment, KOMOJU_SECRET_KEY: "key" })
+        .cardPaymentEnabled,
+    ).toBe(true);
+    expect(
+      loadConfig({ ...validEnvironment, KOMOJU_SECRET_KEY: "  " })
+        .cardPaymentEnabled,
+    ).toBe(false);
+  });
+
   it("does not echo an invalid KOMOJU secret value", () => {
     const secret = "SECRET_SENTINEL";
     expect(() =>

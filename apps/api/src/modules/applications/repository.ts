@@ -169,7 +169,7 @@ export class ApplicationsRepository implements ApplicationsRepositoryPort {
     }
     if (
       !applicationConfig.availablePaymentMethods.includes(
-        command.submission.paymentMethod as "bank_transfer",
+        command.submission.paymentMethod as "card" | "bank_transfer",
       )
     ) {
       throw new ApiError(422, "validation_error");

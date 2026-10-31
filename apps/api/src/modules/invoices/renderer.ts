@@ -78,8 +78,8 @@ export function invoiceHtml(invoice: InvoiceDetail): string {
     <div class="totals">小計（税抜）：${yen(invoice.totalExclTax)}<br>消費税（10%）：${yen(invoice.taxAmount)}<br><strong>ご請求金額（税込）：${yen(invoice.totalInclTax)}</strong></div>
     <div class="columns"><section class="panel"><h2>請求先</h2>${escapeHtml(invoice.billingName)}<br>${escapeHtml(invoice.billingAddress)}</section>
       <section class="panel"><h2>発行者</h2>${escapeHtml(issuer.companyName)}<br>${escapeHtml(issuer.companyAddress)}<br>登録番号：${escapeHtml(issuer.invoiceRegistrationNo ?? "未設定")}<br>${escapeHtml(issuer.serviceName)}</section></div>
-    <div class="payment"><h2>銀行振込</h2>銀行：${escapeHtml(bank[0] ?? "未設定")}　支店：${escapeHtml(bank[1] ?? "未設定")}<br>口座種別：${escapeHtml(bank[2] ?? "未設定")}　口座番号：${escapeHtml(bank[3] ?? "未設定")}<br>振込手数料はお客様にてご負担ください。</div>
-    <p class="small">${preview ? "この書類はレイアウト確認用のサンプルです。お支払いに使用できません。" : "お支払い期限までにお振込みください。"}</p>
+    <div class="payment">${invoice.paymentMethod === "card" ? "<h2>クレジットカード</h2>マイページのお支払いページからカードでお支払いください。" : `<h2>銀行振込</h2>銀行：${escapeHtml(bank[0] ?? "未設定")}　支店：${escapeHtml(bank[1] ?? "未設定")}<br>口座種別：${escapeHtml(bank[2] ?? "未設定")}　口座番号：${escapeHtml(bank[3] ?? "未設定")}<br>振込手数料はお客様にてご負担ください。`}</div>
+    <p class="small">${preview ? "この書類はレイアウト確認用のサンプルです。お支払いに使用できません。" : invoice.paymentMethod === "card" ? "お支払い期限までにマイページからお支払いください。" : "お支払い期限までにお振込みください。"}</p>
     </body></html>`;
 }
 

@@ -1486,7 +1486,7 @@ describe("initial invoice approval and customer access", () => {
   it.each([
     "card",
     "konbini",
-  ])("rejects unimplemented %s payment and does not mark it approved", async (paymentMethod) => {
+  ])("rejects %s payment when card payments are disabled and does not mark it approved", async (paymentMethod) => {
     const fixture = await makeApplication({ paymentMethod });
     expect((await approve(makeApp(), fixture.applicationId)).status).toBe(409);
     const state = await pool.query<{
@@ -1499,6 +1499,48 @@ describe("initial invoice approval and customer access", () => {
     expect(state.rows[0]).toEqual({
       status: "under_review",
       review_result: null,
+    });
+  });
+
+  it("approves an enabled card application and issues the inclusive initial invoice", async () => {
+    const fixture = await makeApplication({
+      paymentMethod: "card",
+      price: 5000,
+    });
+    const enabledConfig = {
+      ...config,
+      komojuSecretKey: "test-key",
+      cardPaymentEnabled: true,
+    };
+    const response = await approve(
+      makeApp(enabledConfig),
+      fixture.applicationId,
+    );
+    expect(response.status).toBe(200);
+    const body = approveApplicationResponseSchema.parse(await response.json());
+    expect(body).toMatchObject({
+      status: "awaiting_payment",
+      invoice: {
+        paymentMethod: "card",
+        totalExclTax: 5000,
+        taxAmount: 500,
+        totalInclTax: 5500,
+      },
+    });
+    const persisted = await pool.query<{
+      payment_method: string;
+      total_excl_tax: number;
+      tax_amount: number;
+      total_incl_tax: number;
+    }>(
+      "select payment_method,total_excl_tax,tax_amount,total_incl_tax from invoices where contract_id=$1",
+      [fixture.contractId],
+    );
+    expect(persisted.rows[0]).toEqual({
+      payment_method: "card",
+      total_excl_tax: 5000,
+      tax_amount: 500,
+      total_incl_tax: 5500,
     });
   });
 

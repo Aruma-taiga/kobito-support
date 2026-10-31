@@ -20,6 +20,7 @@ import { LoginPage } from "./LoginPage.js";
 
 const config = {
   serviceName: "コビトサポート",
+  cardPaymentEnabled: false,
   application: {
     mode: "preview" as const,
     terms: { url: "https://example.test/terms", version: "draft-1" },
@@ -420,6 +421,16 @@ describe("application flow", () => {
     expect(
       screen.getByText(/追加クレジットは1C 4,000円（税抜）（4,400円（税込））/),
     ).toBeTruthy();
+  });
+
+  it("enables card selection only when public config enables card payments", async () => {
+    setup({ configSequence: [{ ...config, cardPaymentEnabled: true }] });
+    await completeShopStep();
+    fireEvent.click(screen.getByRole("radio", { name: /ライト/ }));
+    fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
+    await screen.findByRole("heading", { name: "お支払い方法" });
+    const card = screen.getByRole("radio", { name: /クレジットカード/ });
+    expect(card.hasAttribute("disabled")).toBe(false);
   });
 
   it("requires C04 when a referral code is present", async () => {

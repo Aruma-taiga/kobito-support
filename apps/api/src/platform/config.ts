@@ -101,6 +101,7 @@ export interface RuntimeConfig {
   devInvoicePreview?: boolean;
   komojuWebhookSecret?: string;
   komojuSecretKey?: string;
+  cardPaymentEnabled?: boolean;
   lineEnabled?: boolean;
   lineLoginChannelId?: string;
 }
@@ -165,6 +166,7 @@ export function loadConfig(
     ...(value.KOMOJU_SECRET_KEY === undefined
       ? {}
       : { komojuSecretKey: value.KOMOJU_SECRET_KEY }),
+    cardPaymentEnabled: value.KOMOJU_SECRET_KEY !== undefined,
     lineEnabled: value.LINE_ENABLED === "true",
     ...(value.LINE_LOGIN_CHANNEL_ID === undefined
       ? {}
