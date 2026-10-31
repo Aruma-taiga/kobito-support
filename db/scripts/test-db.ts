@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { loadRootEnvironment, repositoryRoot } from "../src/load-env.js";
 import { resetDatabase } from "../src/reset.js";
 
@@ -40,7 +39,8 @@ try {
   throw new Error("Database test setup failed");
 }
 
-const vitestCli = fileURLToPath(import.meta.resolve("vitest/vitest.mjs"));
+// Vitest 4 は "vitest/vitest.mjs" を exports に公開していないため、ルートの node_modules から直接解決する。
+const vitestCli = resolve(repositoryRoot, "node_modules/vitest/vitest.mjs");
 const child = spawn(
   process.execPath,
   [

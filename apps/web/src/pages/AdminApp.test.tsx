@@ -111,9 +111,9 @@ function setup(
     getAdminRequest?: ReturnType<typeof vi.fn>;
     createRequest?: ReturnType<typeof vi.fn>;
     sendEstimate?: ReturnType<typeof vi.fn>;
-    completeSecondFactor?: ReturnType<typeof vi.fn>;
-    startSecondFactor?: ReturnType<typeof vi.fn>;
-    signOut?: ReturnType<typeof vi.fn>;
+    completeSecondFactor?: AdminAuthClient["completeSecondFactor"];
+    startSecondFactor?: AdminAuthClient["startSecondFactor"];
+    signOut?: AdminAuthClient["signOut"];
   } = {},
 ) {
   let signedIn = options.signedIn ?? false;
