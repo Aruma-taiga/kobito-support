@@ -767,9 +767,9 @@ describe("application request routes", () => {
       await screen.findByRole("heading", { name: webMessages.homeTitle }),
     ).toBeTruthy();
     expect(window.location.pathname).toBe("/me");
-    expect(markWelcomeSeen).toHaveBeenCalledOnce();
-    expect(getCustomerAccess).toHaveBeenCalledTimes(3);
-    expect(apiClient.getMe).toHaveBeenCalledOnce();
+    await waitFor(() => expect(markWelcomeSeen).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getCustomerAccess).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(apiClient.getMe).toHaveBeenCalledOnce());
   });
 
   it("does not show welcome again when the active customer's welcome was already seen", async () => {
