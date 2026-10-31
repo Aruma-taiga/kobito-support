@@ -178,16 +178,15 @@ export const webMessages = {
   logoutError: "ログアウトできませんでした。もう一度お試しください。",
   configurationError: "画面の設定を確認できませんでした。",
   applicationTitle: "お申し込み",
-  applicationDescription:
-    "内容を入力してお申し込みください。申込み後に当社で審査します。",
-  applicationProgressShop: "店舗",
+  applicationDescription: "お申込みは5つの手順です。5分ほどで入力できます。",
+  applicationProgressShop: "お店",
   applicationProgressPlan: "プラン",
   applicationProgressPayment: "お支払い",
   applicationProgressNotes: "ご要望",
   applicationProgressConfirm: "確認",
   applicationNext: "次へ",
   applicationPrevious: "戻る",
-  applicationSubmit: "申し込む",
+  applicationSubmit: "同意して申し込む",
   applicationSubmitting: "申し込みを送信しています…",
   applicationPlansLoading: "プランを読み込んでいます。",
   applicationPlansError: "プランを読み込めませんでした。",
@@ -214,9 +213,8 @@ export const webMessages = {
     "紹介者がいる場合は、紹介者への情報提供について同意が必要です。",
   applicationReceiptPendingReview:
     "お申し込みを受け付けました。現在、審査中です。",
-  applicationContractNotFormed:
-    "申込みの受付時点では、契約は成立していません。",
-  applicationStepShop: "店舗",
+  applicationContractNotFormed: "契約は、まだ成立していません",
+  applicationStepShop: "お店",
   applicationStepPlan: "プラン",
   applicationStepPayment: "お支払い",
   applicationStepNotes: "ご要望",
@@ -225,24 +223,57 @@ export const webMessages = {
   applicationShopHeading: "店舗情報",
   applicationPlanHeading: "プランを選ぶ",
   applicationPaymentHeading: "お支払い方法",
-  applicationNotesHeading: "ご要望",
-  applicationConfirmHeading: "申込み内容の確認",
+  applicationNotesHeading: "ご要望など",
+  applicationConfirmHeading: "お申込み内容の確認",
   applicationConfirmDescription:
-    "表示内容をご確認ください。申込み後、当社で審査します。",
+    "次の内容をご確認のうえ、同意いただける場合は、同意事項にチェックして「同意して申し込む」を押してください。この時点では、契約は成立しません。",
   applicationContactName: "ご担当者のお名前",
   applicationPhone: "電話番号",
   applicationPlanLabel: "プラン",
   applicationPaymentMethod: "お支払い方法",
-  applicationBillingName: "請求先の名称",
-  applicationBillingAddress: "請求先の住所",
+  applicationBillingName: "請求書の宛名",
+  applicationBillingAddress: "請求書の住所",
   applicationInvoiceRegistrationNo: "インボイス登録番号",
   applicationReferralCode: "紹介コード",
   applicationReferralInvalid:
     "紹介コードを確認できませんでした。入力内容を確認してください。",
   applicationReferralChecking: "紹介コードを確認しています。",
+  applicationShopTitle: "お店とご担当者",
+  applicationShopNameLabel: "店舗名・会社名",
+  applicationNextToPlan: "次へ　プランを選ぶ",
+  applicationNextToPayment: "次へ　お支払い方法を選ぶ",
+  applicationNextToNotes: "次へ　ご要望など",
+  applicationNextToConfirm: "次へ　内容を確認する",
+  applicationTaxExclLabel: "月額料金（税抜）",
+  applicationTaxLabel: "消費税",
+  applicationTaxInclLabel: "月額料金（税込）",
+  applicationCardDescription:
+    "毎月自動でお支払い。カード情報は決済会社が管理し、当社には残りません",
+  applicationInvoiceHint:
+    "Tから始まる13桁の番号です。お持ちの場合のみ入力してください。",
+  applicationEmailHint:
+    "控えと請求書をお送りします。マイページのログインにも使います。",
+  applicationPasswordRuleHint: "8文字以上で入力してください。",
+  applicationSummaryHeading: "お申込み内容",
+  applicationEdit: "修正する",
+  applicationConsentHeading: "同意事項",
+  applicationContactGuidanceBefore: "ご不明な点は、メール（",
+  applicationContactGuidanceAfter: "）までご連絡ください。",
+  applicationReceiptFlowTitle: "このあとの流れ",
+  applicationFlowApplied: "お申込み",
+  applicationFlowAppliedNote: "いま完了しました",
+  applicationFlowReview: "当社でお申込み内容を審査します",
+  applicationFlowNotice: "審査完了のご連絡と、請求書をお送りします",
+  applicationFlowNoticeNote: "メールでお送りします",
+  applicationFlowPayment: "請求書のお支払い",
+  applicationFlowPaymentNote: "発行から{days}日以内",
+  applicationFlowContract: "契約の成立",
+  applicationFlowContractNote:
+    "お支払いを確認した時点で成立し、クレジットが使えます",
+  applicationMypageLink: "マイページで状況を見る",
   applicationPartnerNamePrefix: "紹介者：",
   applicationLineDisplayName: "LINEの表示名",
-  applicationFreeText: "ご要望",
+  applicationFreeText: "ご相談したいこと・ご要望",
   applicationRequired: "必須",
   applicationOptional: "任意",
   applicationValidationError: "入力内容を確認してください。",
@@ -251,8 +282,7 @@ export const webMessages = {
   applicationUnavailableTitle: "現在、お申し込みいただけません",
   applicationUnavailableDescription:
     "必要な案内を確認できないため、申込みを受け付けていません。",
-  applicationUnavailablePayment:
-    "現在ご利用いただけるお支払い方法がありません。",
+  applicationUnavailablePayment: "現在ご利用いただけません。",
   applicationExistingEmail:
     "このメールアドレスは登録済みです。ログインしてからお申し込みください。",
   applicationAlreadySubmittedGuidance:
@@ -261,23 +291,24 @@ export const webMessages = {
     "認証したメールアドレスと申込メールアドレスが一致しません。",
   applicationLoginResume: "ログインして申込みを続ける",
   applicationSignedInEmail: "ログイン中のメールアドレス",
-  applicationPlanDescription: "ご希望の月額プランを選択してください。",
-  applicationNotesDescription: "紹介コードや連絡事項があれば入力してください。",
+  applicationPlanDescription:
+    "毎月のクレジットの数で選びます。あとから変えることもできます。",
+  applicationNotesDescription:
+    "この手順の入力はすべて任意です。何も入れずに進めます。",
   applicationPaymentDescription:
-    "お支払い方法を選択してください。今ご利用いただける方法を表示します。",
+    "料金は前払いです。申込みのあと、請求書でご案内します。",
   applicationPlanPriceHint:
-    "月額料金は税抜金額を基準に表示し、消費税を含む税込金額を併記しています。申込内容の税抜金額が契約時の料金として記録されます。",
-  applicationPlanChoiceExclPrice: "月額{price}円（税抜）",
+    "金額はすべて月額・税抜です（税込の金額も併記しています）。1クレジット＝30分程度の相談、または小さな作業1件。複雑な作業は複数のクレジットを使います。初期費用はかかりません。",
+  applicationPlanChoiceExclPrice: "{price}円（税抜）",
   applicationPlanChoiceInclPrice: "{price}円（税込）",
   applicationPlanSummaryFixed:
     "{name}：月額{exclPrice}円（税抜）（{inclPrice}円（税込））、毎月{credits}クレジット",
   applicationCustomDescription:
-    "個別の条件はお申し込みの審査後にご案内します。",
-  applicationCustomPrice: "お見積り",
+    "お店に合わせて、月額とクレジットの数をお見積りします。審査のあと、見積りをお送りします",
+  applicationCustomPrice: "ご相談のうえ",
   applicationCustomQuoteAfterReview: "審査のあとにお見積りをご案内します。",
   applicationBankTransfer: "銀行振込",
-  applicationBankTransferDescription:
-    "振込先は審査後にお送りする請求書でご案内します。",
+  applicationBankTransferDescription: "毎月、請求書に記載の口座へお振込み",
   applicationCardPayment: "クレジットカード",
   historicalKonbiniPayment: "コンビニ払い",
   applicationTermsLink: "利用規約",
@@ -286,7 +317,7 @@ export const webMessages = {
   applicationTermsVersion: "利用規約の版",
   applicationPrivacyVersion: "プライバシーポリシーの版",
   applicationDisclosureVersion: "特商法表記の版",
-  applicationContractHeading: "お申し込みの条件",
+  applicationContractHeading: "契約の内容",
   applicationMonthlyPrepaid: "月額料金は前払いです。",
   applicationDueDays:
     "初月分は請求書の発行から{days}日以内にお支払いください。",
@@ -297,20 +328,21 @@ export const webMessages = {
     "解約は契約期間の末日に適用され、日割り計算はありません。",
   applicationExtraCredit:
     "追加クレジットは1C {exclAmount}円（税抜）（{inclAmount}円（税込））です。",
-  applicationReceiptTitle: "お申し込みを受け付けました",
-  applicationReceiptDescription: "入力内容を確認し、審査を進めます。",
+  applicationReceiptTitle: "お申込みを受け付けました",
+  applicationReceiptDescription:
+    "当社で、お申込み内容の審査を行います。審査が完了しましたら、審査完了のご連絡と請求書をメールでお送りします。",
   applicationReceiptReview:
-    "審査後に初月分の請求書をご案内します。入金の確認で契約が成立します。",
+    "審査のあと請求書をお送りします。入金を確認できた時点で契約が成立し、クレジットが使えます。",
   applicationReconfirmRequired:
     "最新の条件を確認し、内容に同意してから再送信してください。",
   applicationSensitiveInfoWarning:
-    "患者さま・お客さまの個人情報は入力しないでください。",
+    "お客さまの個人情報や、病気などの情報は書かないでください。",
   applicationConsentBusiness: "本サービスを事業のために利用します。",
   applicationConsentTerms:
     "利用規約およびプライバシーポリシーを確認し、同意します。",
   applicationConsentMarketing: "サービスの案内やお知らせを受け取る（任意）",
   applicationConsentPartner:
-    "紹介者に、契約の有無・開始と解約の月・支払いの有無を知らせることに同意します。",
+    "申込者は、当社が紹介者に対し、契約の有無、契約の開始月および終了月、ならびに料金の支払いの有無を通知することに同意します。",
   adminLoginTitle: "管理者ログイン",
   adminLoginDescription: "管理者アカウントでログインしてください。",
   adminLoginButton: "管理画面にログイン",

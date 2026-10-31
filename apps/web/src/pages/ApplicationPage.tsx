@@ -27,6 +27,16 @@ import type { AuthClient, AuthUser } from "../auth/session.js";
 import { useAuthSession } from "../auth/session.js";
 import { ApiClientError } from "../platform/api-client.js";
 import { useContact } from "../platform/contact.js";
+import {
+  Button,
+  Card,
+  CheckOption,
+  DefinitionList,
+  Field,
+  Notice,
+  RadioOption,
+  Steps,
+} from "../ui/index.js";
 
 type ApiClient = {
   getPublicConfig(): Promise<PublicConfig>;
@@ -61,13 +71,11 @@ function formatMonthlyPrice(priceExclTax: number | null) {
   if (priceExclTax === null) return null;
   return (
     <>
-      <span className="choice-price-segment">
-        {webMessages.applicationPlanChoiceExclPrice.replace(
-          "{price}",
-          priceExclTax.toLocaleString("ja-JP"),
-        )}
-      </span>
-      <small className="choice-price-segment">
+      {webMessages.applicationPlanChoiceExclPrice.replace(
+        "{price}",
+        priceExclTax.toLocaleString("ja-JP"),
+      )}
+      <small>
         {webMessages.applicationPlanChoiceInclPrice.replace(
           "{price}",
           inclYenFor(priceExclTax).toLocaleString("ja-JP"),
@@ -152,7 +160,7 @@ export function ApplicationPage({
   authClient: AuthClient;
 }) {
   const { state: session } = useAuthSession();
-  const { lineEnabled } = useContact();
+  const { lineEnabled, contactEmail } = useContact();
   const location = useLocation();
   const navigate = useNavigate();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -480,72 +488,124 @@ export function ApplicationPage({
     }
   }
 
+  const stepsView = (
+    <Steps
+      labels={stepNames}
+      current={activeStep}
+      label={webMessages.applicationProgressLabel}
+    />
+  );
+  const pageShell = (children: React.ReactNode) => (
+    <main className="ui-page">{children}</main>
+  );
+
   if (loading)
-    return (
-      <main className="page-main">
-        <output className="status-message">
-          {webMessages.applicationLoading}
-        </output>
-      </main>
+    return pageShell(
+      <output className="status-message">
+        {webMessages.applicationLoading}
+      </output>,
     );
   if (loadError)
-    return (
-      <main className="page-main">
-        <section className="card application-card">
-          <p role="alert" className="error-message">
-            {webMessages.applicationLoadError}
-          </p>
-          <button
-            className="secondary-button"
-            onClick={() => void loadPublicData()}
-            type="button"
-          >
-            {webMessages.retry}
-          </button>
-        </section>
-      </main>
+    return pageShell(
+      <Card>
+        <Notice tone="warn">{webMessages.applicationLoadError}</Notice>
+        <Button
+          variant="ghost"
+          onClick={() => void loadPublicData()}
+          type="button"
+        >
+          {webMessages.retry}
+        </Button>
+      </Card>,
     );
   if (session.status === "loading" && !authClient.currentUser())
-    return (
-      <main className="page-main">
-        <output className="status-message">{webMessages.sessionLoading}</output>
-      </main>
+    return pageShell(
+      <output className="status-message">{webMessages.sessionLoading}</output>,
     );
   if (activeStep < 0) return null;
   if (activeStep === 5)
-    return receiptRef.current ? (
-      <main className="page-main">
-        <section className="card application-card receipt-card">
-          <div className="done-mark" aria-hidden="true">
-            ✓
-          </div>
-          <h1>{webMessages.applicationReceiptTitle}</h1>
-          <p>{webMessages.applicationReceiptDescription}</p>
-          <p>{webMessages.applicationContractNotFormed}</p>
-          <p className="notice info">{webMessages.applicationReceiptReview}</p>
-          <a className="secondary-button application-link" href="/login">
-            {webMessages.loginTitle}
-          </a>
-        </section>
-      </main>
-    ) : null;
+    return receiptRef.current
+      ? pageShell(
+          <>
+            <Steps
+              labels={stepNames}
+              current={stepNames.length}
+              label={webMessages.applicationProgressLabel}
+            />
+            <div className="ui-done-mark" aria-hidden="true">
+              ✓
+            </div>
+            <h1 className="ui-title ui-center">
+              {webMessages.applicationReceiptTitle}
+            </h1>
+            <Notice
+              tone="yellow"
+              title={webMessages.applicationContractNotFormed}
+            >
+              {webMessages.applicationReceiptDescription}
+            </Notice>
+            <Card title={webMessages.applicationReceiptFlowTitle}>
+              <ol className="ui-timeline">
+                <li className="ui-timeline__done">
+                  {webMessages.applicationFlowApplied}
+                  <span className="ui-timeline__note">
+                    {webMessages.applicationFlowAppliedNote}
+                  </span>
+                </li>
+                <li className="ui-timeline__now" aria-current="step">
+                  {webMessages.applicationFlowReview}
+                </li>
+                <li>
+                  {webMessages.applicationFlowNotice}
+                  <span className="ui-timeline__note">
+                    {webMessages.applicationFlowNoticeNote}
+                  </span>
+                </li>
+                <li>
+                  {webMessages.applicationFlowPayment}
+                  <span className="ui-timeline__note">
+                    {webMessages.applicationFlowPaymentNote.replace(
+                      "{days}",
+                      String(policy?.conditions.initialDueDays ?? 7),
+                    )}
+                  </span>
+                </li>
+                <li>
+                  {webMessages.applicationFlowContract}
+                  <span className="ui-timeline__note">
+                    {webMessages.applicationFlowContractNote}
+                  </span>
+                </li>
+              </ol>
+            </Card>
+            <Button fullWidth variant="ghost" href="/me">
+              {webMessages.applicationMypageLink}
+            </Button>
+            {contactEmail ? (
+              <p className="ui-hint ui-center" style={{ marginTop: 14 }}>
+                {webMessages.applicationContactGuidanceBefore}
+                <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+                {webMessages.applicationContactGuidanceAfter}
+              </p>
+            ) : null}
+          </>,
+        )
+      : null;
   if (!policy)
-    return (
-      <main className="page-main">
-        <section className="card application-card">
-          <h1>{webMessages.applicationUnavailableTitle}</h1>
-          <p className="muted-text">
-            {webMessages.applicationUnavailableDescription}
-          </p>
-          <button
-            className="secondary-button"
-            onClick={() => void loadPublicData()}
-            type="button"
-          >
-            {webMessages.retry}
-          </button>
-        </section>
-      </main>
+    return pageShell(
+      <Card>
+        <h1 className="ui-title">{webMessages.applicationUnavailableTitle}</h1>
+        <p className="ui-lead">
+          {webMessages.applicationUnavailableDescription}
+        </p>
+        <Button
+          variant="ghost"
+          onClick={() => void loadPublicData()}
+          type="button"
+        >
+          {webMessages.retry}
+        </Button>
+      </Card>,
     );
 
   const currentVersion =
@@ -553,55 +613,124 @@ export function ApplicationPage({
       ? plans.displayVersion
       : null;
   const legalLinks = (
-    <span className="legal-links">
+    <>
       <a href={policy.terms.url} target="_blank" rel="noopener noreferrer">
         {webMessages.applicationTermsLink}
-      </a>{" "}
+      </a>
+      {" ・ "}
       <a href={policy.privacy.url} target="_blank" rel="noopener noreferrer">
         {webMessages.applicationPrivacyLink}
-      </a>{" "}
+      </a>
+      {" ・ "}
       <a href={policy.disclosure.url} target="_blank" rel="noopener noreferrer">
         {webMessages.applicationDisclosureLink}
       </a>
-    </span>
+    </>
   );
-  const steps = (
-    <nav
-      className="application-progress"
-      aria-label={webMessages.applicationProgressLabel}
-    >
-      {stepNames.map((name, index) => (
-        <div
-          className={
-            index === activeStep
-              ? "current"
-              : index < activeStep
-                ? "complete"
-                : ""
-          }
-          aria-current={index === activeStep ? "step" : undefined}
-          key={name}
-        >
-          <span>{index + 1}</span>
-          {name}
-        </div>
-      ))}
-    </nav>
+  const exclPrice = plan?.priceExclTax ?? null;
+  const inclPrice = exclPrice === null ? null : inclYenFor(exclPrice);
+  const yen = (value: number) => `${value.toLocaleString("ja-JP")}円`;
+  const summaryItems: Array<{ term: string; description: React.ReactNode }> = [
+    { term: webMessages.shopNameLabel, description: draft.shopName },
+    {
+      term: webMessages.applicationContactName,
+      description: draft.contactName,
+    },
+    { term: webMessages.emailLabel, description: draft.email },
+  ];
+  if (draft.phone.trim())
+    summaryItems.push({
+      term: webMessages.applicationPhone,
+      description: draft.phone,
+    });
+  summaryItems.push({
+    term: webMessages.applicationPlanLabel,
+    description: plan?.isCustom
+      ? webMessages.applicationCustomQuoteAfterReview
+      : webMessages.applicationPlanSummaryFixed
+          .replace("{name}", plan?.name ?? "")
+          .replace("{exclPrice}", exclPrice?.toLocaleString("ja-JP") ?? "")
+          .replace("{inclPrice}", inclPrice?.toLocaleString("ja-JP") ?? "")
+          .replace("{credits}", String(plan?.credits ?? "")),
+  });
+  if (exclPrice !== null && inclPrice !== null)
+    summaryItems.push(
+      {
+        term: webMessages.applicationTaxExclLabel,
+        description: yen(exclPrice),
+      },
+      {
+        term: webMessages.applicationTaxLabel,
+        description: yen(inclPrice - exclPrice),
+      },
+      {
+        term: webMessages.applicationTaxInclLabel,
+        description: yen(inclPrice),
+      },
+    );
+  summaryItems.push(
+    {
+      term: webMessages.applicationPaymentMethod,
+      description: webMessages.applicationBankTransfer,
+    },
+    {
+      term: webMessages.applicationBillingName,
+      description: draft.billingName,
+    },
+    {
+      term: webMessages.applicationBillingAddress,
+      description: draft.billingAddress,
+    },
   );
+  if (draft.invoiceRegistrationNo.trim())
+    summaryItems.push({
+      term: webMessages.applicationInvoiceRegistrationNo,
+      description: draft.invoiceRegistrationNo,
+    });
+  if (lineEnabled && draft.lineDisplayName.trim())
+    summaryItems.push({
+      term: webMessages.applicationLineDisplayName,
+      description: draft.lineDisplayName,
+    });
+  if (draft.referralCode.trim())
+    summaryItems.push({
+      term: webMessages.applicationReferralCode,
+      description: `${draft.referralCode}（${verifiedPartner?.name ?? ""}）`,
+    });
+  if (draft.freeText.trim())
+    summaryItems.push({
+      term: webMessages.applicationFreeText,
+      description: draft.freeText,
+    });
+
+  const nextLabels = [
+    webMessages.applicationNextToPlan,
+    webMessages.applicationNextToPayment,
+    webMessages.applicationNextToNotes,
+    webMessages.applicationNextToConfirm,
+  ];
+  const titles = [
+    webMessages.applicationShopTitle,
+    webMessages.applicationPlanHeading,
+    webMessages.applicationPaymentHeading,
+    webMessages.applicationNotesHeading,
+    webMessages.applicationConfirmHeading,
+  ];
+  const leads = [
+    webMessages.applicationDescription,
+    webMessages.applicationPlanDescription,
+    webMessages.applicationPaymentDescription,
+    webMessages.applicationNotesDescription,
+    webMessages.applicationConfirmDescription,
+  ];
 
   return (
-    <main className="page-main">
-      <section
-        className="card application-card"
-        aria-labelledby="application-title"
-      >
+    <main className="ui-page">
+      <section aria-labelledby="application-title">
         {policy.mode === "preview" ? (
-          <p className="notice yellow">
-            {webMessages.applicationPreviewWarning}
-          </p>
+          <Notice tone="yellow">{webMessages.applicationPreviewWarning}</Notice>
         ) : null}
-        <p className="application-eyebrow">{webMessages.applicationTitle}</p>
-        {steps}
+        {stepsView}
         <form
           noValidate
           onSubmit={
@@ -613,27 +742,27 @@ export function ApplicationPage({
                 }
           }
         >
+          <h1 className="ui-title" id="application-title">
+            {titles[activeStep]}
+          </h1>
+          <p className="ui-lead">{leads[activeStep]}</p>
           {activeStep === 0 ? (
             <>
-              <h1 id="application-title">
-                {webMessages.applicationShopHeading}
-              </h1>
-              <p className="muted-text">{webMessages.applicationDescription}</p>
-              <Field
-                label={webMessages.shopNameLabel}
+              <TextField
+                label={webMessages.applicationShopNameLabel}
                 id="application-shop"
                 value={draft.shopName}
                 onChange={(value) => update("shopName", value)}
                 required
               />
-              <Field
+              <TextField
                 label={webMessages.applicationContactName}
                 id="application-contact"
                 value={draft.contactName}
                 onChange={(value) => update("contactName", value)}
                 required
               />
-              <Field
+              <TextField
                 label={webMessages.emailLabel}
                 id="application-email"
                 type="email"
@@ -642,11 +771,13 @@ export function ApplicationPage({
                 onChange={(value) => update("email", value)}
                 required
                 readOnly={isAuthenticated}
+                hint={
+                  isAuthenticated
+                    ? webMessages.applicationSignedInEmail
+                    : webMessages.applicationEmailHint
+                }
               />
-              {isAuthenticated ? (
-                <p className="hint">{webMessages.applicationSignedInEmail}</p>
-              ) : null}
-              <Field
+              <TextField
                 label={webMessages.applicationPhone}
                 id="application-phone"
                 type="tel"
@@ -654,124 +785,98 @@ export function ApplicationPage({
                 onChange={(value) => update("phone", value)}
               />
               {!isAuthenticated ? (
-                <>
-                  <Field
-                    label={webMessages.passwordLabel}
-                    id="application-password"
-                    type="password"
-                    autoComplete="new-password"
-                    value={draft.password}
-                    onChange={(value) => update("password", value)}
-                    required
-                  />
-                  <p className="hint">{webMessages.applicationPasswordHint}</p>
-                </>
+                <TextField
+                  label={webMessages.passwordLabel}
+                  id="application-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={draft.password}
+                  onChange={(value) => update("password", value)}
+                  required
+                  hint={`${webMessages.applicationPasswordRuleHint}${webMessages.applicationPasswordHint}`}
+                />
               ) : null}
             </>
           ) : null}
           {activeStep === 1 ? (
             <>
-              <h1 id="application-title">
-                {webMessages.applicationPlanHeading}
-              </h1>
-              <p className="muted-text">
-                {webMessages.applicationPlanDescription}
-              </p>
-              <div className="choice-list">
+              <div className="ui-radio-list">
                 {(plans?.plans ?? []).map((item) => (
-                  <label
-                    className={`choice-card ${draft.planCode === item.code ? "selected" : ""}`}
+                  <RadioOption
                     key={item.id}
-                  >
-                    <input
-                      type="radio"
-                      name="plan"
-                      value={item.code}
-                      checked={draft.planCode === item.code}
-                      onChange={() => update("planCode", item.code)}
-                    />
-                    <span>
-                      <strong>{item.name}</strong>
-                      <span className="choice-price">
-                        {item.isCustom
-                          ? webMessages.applicationCustomPrice
-                          : formatMonthlyPrice(item.priceExclTax)}
-                      </span>
-                      <small>
-                        {item.isCustom
-                          ? webMessages.applicationCustomDescription
-                          : `${item.credits}クレジット / 月`}
-                      </small>
-                    </span>
-                  </label>
+                    name="plan"
+                    value={item.code}
+                    checked={draft.planCode === item.code}
+                    onChange={() => update("planCode", item.code)}
+                    title={item.name}
+                    price={
+                      item.isCustom
+                        ? webMessages.applicationCustomPrice
+                        : formatMonthlyPrice(item.priceExclTax)
+                    }
+                    description={
+                      item.isCustom
+                        ? webMessages.applicationCustomDescription
+                        : `毎月${item.credits}クレジット`
+                    }
+                  />
                 ))}
               </div>
-              <p className="hint">{webMessages.applicationPlanPriceHint}</p>
+              <p className="ui-hint" style={{ margin: "10px 0 20px" }}>
+                {webMessages.applicationPlanPriceHint}
+              </p>
             </>
           ) : null}
           {activeStep === 2 ? (
             <>
-              <h1 id="application-title">
-                {webMessages.applicationPaymentHeading}
-              </h1>
-              <p className="muted-text">
-                {webMessages.applicationPaymentDescription}
-              </p>
-              <fieldset className="field-group">
-                <legend>{webMessages.applicationPaymentMethod}</legend>
-                <label className="choice-card selected">
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={draft.paymentMethod === "bank_transfer"}
-                    onChange={() => update("paymentMethod", "bank_transfer")}
-                  />
-                  <span>
-                    <strong>{webMessages.applicationBankTransfer}</strong>
-                    <small>
-                      {webMessages.applicationBankTransferDescription}
-                    </small>
-                  </span>
-                </label>
-                <label className="choice-card disabled">
-                  <input type="radio" disabled />
-                  <span>
-                    <strong>{webMessages.applicationCardPayment}</strong>
-                    <small>{webMessages.applicationUnavailablePayment}</small>
-                  </span>
-                </label>
+              <fieldset className="ui-radio-list">
+                <legend className="visually-hidden">
+                  {webMessages.applicationPaymentMethod}
+                </legend>
+                <RadioOption
+                  name="payment"
+                  checked={false}
+                  disabled
+                  readOnly
+                  title={webMessages.applicationCardPayment}
+                  description={`${webMessages.applicationCardDescription}（${webMessages.applicationUnavailablePayment}）`}
+                />
+                <RadioOption
+                  name="payment"
+                  checked={draft.paymentMethod === "bank_transfer"}
+                  onChange={() => update("paymentMethod", "bank_transfer")}
+                  title={webMessages.applicationBankTransfer}
+                  description={webMessages.applicationBankTransferDescription}
+                />
               </fieldset>
-              <Field
-                label={webMessages.applicationBillingName}
-                id="application-billing-name"
-                value={draft.billingName}
-                onChange={(value) => update("billingName", value)}
-                required
-              />
-              <Field
-                label={webMessages.applicationBillingAddress}
-                id="application-billing-address"
-                value={draft.billingAddress}
-                onChange={(value) => update("billingAddress", value)}
-                required
-              />
-              <Field
-                label={webMessages.applicationInvoiceRegistrationNo}
-                id="application-invoice"
-                value={draft.invoiceRegistrationNo}
-                onChange={(value) => update("invoiceRegistrationNo", value)}
-              />
+              <div style={{ marginTop: 18 }}>
+                <TextField
+                  label={webMessages.applicationBillingName}
+                  id="application-billing-name"
+                  value={draft.billingName}
+                  onChange={(value) => update("billingName", value)}
+                  required
+                />
+                <TextField
+                  label={webMessages.applicationBillingAddress}
+                  id="application-billing-address"
+                  value={draft.billingAddress}
+                  onChange={(value) => update("billingAddress", value)}
+                  required
+                />
+                <TextField
+                  label={webMessages.applicationInvoiceRegistrationNo}
+                  id="application-invoice"
+                  value={draft.invoiceRegistrationNo}
+                  onChange={(value) => update("invoiceRegistrationNo", value)}
+                  placeholder="T0000000000000"
+                />
+              </div>
             </>
           ) : null}
           {activeStep === 3 ? (
             <>
-              <h1 id="application-title">
-                {webMessages.applicationNotesHeading}
-              </h1>
-              <p className="muted-text">
-                {webMessages.applicationNotesDescription}
-              </p>
-              <Field
+              <TextField
                 label={webMessages.applicationReferralCode}
                 id="application-referral"
                 value={draft.referralCode}
@@ -782,127 +887,75 @@ export function ApplicationPage({
                   setReferralInvalid(false);
                 }}
                 onBlur={() => void validateReferral(draft.referralCode)}
+                hint={
+                  validatingReferral
+                    ? webMessages.applicationReferralChecking
+                    : undefined
+                }
               />
-              {validatingReferral ? (
-                <p className="hint">
-                  {webMessages.applicationReferralChecking}
-                </p>
-              ) : null}
               {referralInvalid ? (
-                <p role="alert" className="error-message">
+                <Notice tone="warn">
                   {webMessages.applicationReferralInvalid}
-                </p>
+                </Notice>
               ) : null}
               {verifiedPartner ? (
-                <p className="notice info">
+                <Notice>
                   {webMessages.applicationPartnerNamePrefix}
                   {verifiedPartner.name}
-                </p>
+                </Notice>
               ) : null}
               {lineEnabled ? (
-                <Field
+                <TextField
                   label={webMessages.applicationLineDisplayName}
                   id="application-line-name"
                   value={draft.lineDisplayName}
                   onChange={(value) => update("lineDisplayName", value)}
                 />
               ) : null}
-              <label className="field-label" htmlFor="application-free-text">
-                {webMessages.applicationFreeText}
-              </label>
-              <textarea
-                id="application-free-text"
-                value={draft.freeText}
-                maxLength={2000}
-                onChange={(event) =>
-                  update("freeText", event.currentTarget.value)
+              <Field
+                label={webMessages.applicationFreeText}
+                optional
+                hint={
+                  <span className="ui-hint--warn">
+                    {webMessages.applicationSensitiveInfoWarning}
+                  </span>
                 }
-              />
-              <p className="hint warning-text">
-                {webMessages.applicationSensitiveInfoWarning}
-              </p>
+              >
+                <textarea
+                  id="application-free-text"
+                  value={draft.freeText}
+                  maxLength={2000}
+                  onChange={(event) =>
+                    update("freeText", event.currentTarget.value)
+                  }
+                />
+              </Field>
             </>
           ) : null}
           {activeStep === 4 ? (
             <>
-              <h1 id="application-title">
-                {webMessages.applicationConfirmHeading}
-              </h1>
-              <p className="muted-text">
-                {webMessages.applicationConfirmDescription}
-              </p>
-              <p className="notice yellow">
-                {webMessages.applicationContractNotFormed}
-              </p>
-              <dl className="application-summary">
-                <dt>{webMessages.shopNameLabel}</dt>
-                <dd>{draft.shopName}</dd>
-                <dt>{webMessages.applicationContactName}</dt>
-                <dd>{draft.contactName}</dd>
-                <dt>{webMessages.emailLabel}</dt>
-                <dd>{draft.email}</dd>
-                {draft.phone.trim() ? (
-                  <>
-                    <dt>{webMessages.applicationPhone}</dt>
-                    <dd>{draft.phone}</dd>
-                  </>
-                ) : null}
-                <dt>{webMessages.applicationPlanLabel}</dt>
-                <dd>
-                  {plan?.isCustom
-                    ? webMessages.applicationCustomQuoteAfterReview
-                    : webMessages.applicationPlanSummaryFixed
-                        .replace("{name}", plan?.name ?? "")
-                        .replace(
-                          "{exclPrice}",
-                          plan?.priceExclTax?.toLocaleString("ja-JP") ?? "",
-                        )
-                        .replace(
-                          "{inclPrice}",
-                          plan?.priceExclTax === null ||
-                            plan?.priceExclTax === undefined
-                            ? ""
-                            : inclYenFor(plan.priceExclTax).toLocaleString(
-                                "ja-JP",
-                              ),
-                        )
-                        .replace("{credits}", String(plan?.credits ?? ""))}
-                </dd>
-                <dt>{webMessages.applicationPaymentMethod}</dt>
-                <dd>{webMessages.applicationBankTransfer}</dd>
-                <dt>{webMessages.applicationBillingName}</dt>
-                <dd>{draft.billingName}</dd>
-                <dt>{webMessages.applicationBillingAddress}</dt>
-                <dd>{draft.billingAddress}</dd>
-                {draft.invoiceRegistrationNo.trim() ? (
-                  <>
-                    <dt>{webMessages.applicationInvoiceRegistrationNo}</dt>
-                    <dd>{draft.invoiceRegistrationNo}</dd>
-                  </>
-                ) : null}
-                {lineEnabled && draft.lineDisplayName.trim() ? (
-                  <>
-                    <dt>{webMessages.applicationLineDisplayName}</dt>
-                    <dd>{draft.lineDisplayName}</dd>
-                  </>
-                ) : null}
-                {draft.referralCode.trim() ? (
-                  <>
-                    <dt>{webMessages.applicationReferralCode}</dt>
-                    <dd>
-                      {draft.referralCode}（{verifiedPartner?.name ?? ""}）
-                    </dd>
-                  </>
-                ) : null}
-                {draft.freeText.trim() ? (
-                  <>
-                    <dt>{webMessages.applicationFreeText}</dt>
-                    <dd>{draft.freeText}</dd>
-                  </>
-                ) : null}
-              </dl>
+              <Notice
+                tone="yellow"
+                title={webMessages.applicationContractNotFormed}
+              >
+                {webMessages.applicationReceiptReview}
+              </Notice>
+              <Card
+                title={webMessages.applicationSummaryHeading}
+                action={
+                  <button
+                    type="button"
+                    className="ui-linkbtn"
+                    onClick={() => navigate(stepPaths[0])}
+                  >
+                    {webMessages.applicationEdit}
+                  </button>
+                }
+              >
+                <DefinitionList items={summaryItems} />
+              </Card>
               {currentVersion ? (
-                <p className="hint">
+                <p className="ui-hint" style={{ marginBottom: 14 }}>
                   {webMessages.applicationTermsVersion}: {policy.terms.version}{" "}
                   ／ {webMessages.applicationPrivacyVersion}:{" "}
                   {policy.privacy.version} ／{" "}
@@ -910,90 +963,111 @@ export function ApplicationPage({
                   {policy.disclosure.version}
                 </p>
               ) : (
-                <div role="alert" className="error-message">
+                <Notice tone="warn">
                   <p>{webMessages.applicationConditionsChanged}</p>
-                  <button
-                    className="secondary-button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => void loadPublicData()}
                     type="button"
                   >
                     {webMessages.retry}
-                  </button>
-                </div>
+                  </Button>
+                </Notice>
               )}
-              <section className="contract-conditions">
-                <h2>{webMessages.applicationContractHeading}</h2>
-                <ul>
-                  <li>
-                    {plan?.isCustom
-                      ? webMessages.applicationCustomQuoteAfterReview
-                      : webMessages.applicationMonthlyPrepaid}
-                  </li>
-                  <li>
-                    {webMessages.applicationDueDays.replace(
-                      "{days}",
-                      String(policy.conditions.initialDueDays),
-                    )}
-                  </li>
-                  <li>{webMessages.applicationContractStartsOnPayment}</li>
-                  <li>{webMessages.applicationAnchorPeriod}</li>
-                  <li>{webMessages.applicationNoRollover}</li>
-                  <li>{webMessages.applicationCancelPeriodEnd}</li>
-                  <li>
-                    {webMessages.applicationExtraCredit
-                      .replace(
-                        "{exclAmount}",
-                        policy.conditions.extraCreditExclYen.toLocaleString(
-                          "ja-JP",
-                        ),
-                      )
-                      .replace(
-                        "{inclAmount}",
-                        inclYenFor(
-                          policy.conditions.extraCreditExclYen,
-                        ).toLocaleString("ja-JP"),
-                      )}
-                  </li>
-                </ul>
-              </section>
-              <Consent
-                checked={draft.consentBusinessUse}
-                onChange={(value) => update("consentBusinessUse", value)}
-                text={webMessages.applicationConsentBusiness}
-                id="consent-business"
-              />
-              <Consent
-                checked={draft.consentTerms}
-                onChange={(value) => update("consentTerms", value)}
-                id="consent-terms"
+              <Card
+                title={webMessages.applicationContractHeading}
+                className="ui-card--accent"
               >
-                {webMessages.applicationConsentTerms} {legalLinks}
-              </Consent>
-              {draft.referralCode.trim() ? (
-                <Consent
-                  checked={draft.consentPartnerShare}
-                  onChange={(value) => update("consentPartnerShare", value)}
-                  text={`${webMessages.applicationConsentPartner}（${verifiedPartner?.name ?? ""}）`}
-                  id="consent-partner"
-                />
-              ) : null}
-              <Consent
-                checked={draft.consentMarketing}
-                onChange={(value) => update("consentMarketing", value)}
-                text={webMessages.applicationConsentMarketing}
-                id="consent-marketing"
-                required={false}
-              />
-              <p className="hint">{webMessages.applicationReceiptReview}</p>
+                <div className="ui-clause">
+                  {plan?.isCustom
+                    ? webMessages.applicationCustomQuoteAfterReview
+                    : webMessages.applicationMonthlyPrepaid}
+                </div>
+                <div className="ui-clause">
+                  {webMessages.applicationDueDays.replace(
+                    "{days}",
+                    String(policy.conditions.initialDueDays),
+                  )}
+                </div>
+                <div className="ui-clause">
+                  {webMessages.applicationContractStartsOnPayment}
+                </div>
+                <div className="ui-clause">
+                  {webMessages.applicationAnchorPeriod}
+                </div>
+                <div className="ui-clause">
+                  {webMessages.applicationNoRollover}
+                </div>
+                <div className="ui-clause">
+                  {webMessages.applicationCancelPeriodEnd}
+                </div>
+                <div className="ui-clause">
+                  {webMessages.applicationExtraCredit
+                    .replace(
+                      "{exclAmount}",
+                      policy.conditions.extraCreditExclYen.toLocaleString(
+                        "ja-JP",
+                      ),
+                    )
+                    .replace(
+                      "{inclAmount}",
+                      inclYenFor(
+                        policy.conditions.extraCreditExclYen,
+                      ).toLocaleString("ja-JP"),
+                    )}
+                </div>
+              </Card>
+              <Card title={webMessages.applicationConsentHeading}>
+                <CheckOption
+                  id="consent-business"
+                  required
+                  checked={draft.consentBusinessUse}
+                  onChange={(event) =>
+                    update("consentBusinessUse", event.currentTarget.checked)
+                  }
+                >
+                  {webMessages.applicationConsentBusiness}
+                </CheckOption>
+                <CheckOption
+                  id="consent-terms"
+                  required
+                  checked={draft.consentTerms}
+                  onChange={(event) =>
+                    update("consentTerms", event.currentTarget.checked)
+                  }
+                >
+                  {webMessages.applicationConsentTerms} {legalLinks}
+                </CheckOption>
+                {draft.referralCode.trim() ? (
+                  <CheckOption
+                    id="consent-partner"
+                    required
+                    checked={draft.consentPartnerShare}
+                    onChange={(event) =>
+                      update("consentPartnerShare", event.currentTarget.checked)
+                    }
+                  >
+                    {webMessages.applicationConsentPartner}
+                    {`（${verifiedPartner?.name ?? ""}）`}
+                  </CheckOption>
+                ) : null}
+                <CheckOption
+                  id="consent-marketing"
+                  optional
+                  checked={draft.consentMarketing}
+                  onChange={(event) =>
+                    update("consentMarketing", event.currentTarget.checked)
+                  }
+                >
+                  {webMessages.applicationConsentMarketing}
+                </CheckOption>
+              </Card>
             </>
           ) : null}
-          {fieldError ? (
-            <p role="alert" className="error-message">
-              {fieldError}
-            </p>
-          ) : null}
+          {fieldError ? <Notice tone="warn">{fieldError}</Notice> : null}
           {submitError ? (
-            <div role="alert" className="error-message">
+            <Notice tone="warn">
               <p>{submitError}</p>
               {submitError === webMessages.applicationExistingEmail ? (
                 <a
@@ -1015,37 +1089,29 @@ export function ApplicationPage({
               submitError !== webMessages.applicationExistingEmail &&
               submitError !==
                 webMessages.applicationAlreadySubmittedGuidance ? (
-                <button
-                  className="secondary-button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   type="button"
                   onClick={() => void submit()}
                 >
                   {webMessages.retry}
-                </button>
+                </Button>
               ) : null}
-            </div>
+            </Notice>
           ) : null}
-          <div className="application-actions">
-            {activeStep > 0 ? (
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => movePrevious(activeStep)}
-              >
-                {webMessages.applicationPrevious}
-              </button>
-            ) : null}
+          <div className="ui-actions">
             {activeStep < 4 ? (
-              <button
-                className="primary-button"
+              <Button
+                fullWidth
                 type="submit"
                 disabled={activeStep === 3 && validatingReferral}
               >
-                {webMessages.applicationNext}
-              </button>
+                {nextLabels[activeStep]}
+              </Button>
             ) : (
-              <button
-                className="primary-button"
+              <Button
+                fullWidth
                 type="submit"
                 disabled={
                   submitting ||
@@ -1060,8 +1126,18 @@ export function ApplicationPage({
                 {submitting
                   ? webMessages.applicationSubmitting
                   : webMessages.applicationSubmit}
-              </button>
+              </Button>
             )}
+            {activeStep > 0 ? (
+              <Button
+                fullWidth
+                variant="ghost"
+                type="button"
+                onClick={() => movePrevious(activeStep)}
+              >
+                {webMessages.applicationPrevious}
+              </Button>
+            ) : null}
           </div>
         </form>
       </section>
@@ -1069,7 +1145,7 @@ export function ApplicationPage({
   );
 }
 
-function Field({
+function TextField({
   label,
   id,
   value,
@@ -1079,6 +1155,8 @@ function Field({
   readOnly = false,
   autoComplete,
   onBlur,
+  hint,
+  placeholder,
 }: {
   label: string;
   id: string;
@@ -1089,21 +1167,11 @@ function Field({
   readOnly?: boolean;
   autoComplete?: string;
   onBlur?: () => void;
+  hint?: React.ReactNode;
+  placeholder?: string;
 }) {
   return (
-    <div className="application-field">
-      <label className="field-label" htmlFor={id}>
-        {label}
-        {required ? (
-          <span className="required-mark">
-            {webMessages.applicationRequired}
-          </span>
-        ) : (
-          <span className="optional-mark">
-            {webMessages.applicationOptional}
-          </span>
-        )}
-      </label>
+    <Field label={label} required={required} optional={!required} hint={hint}>
       <input
         id={id}
         name={id}
@@ -1112,48 +1180,10 @@ function Field({
         required={required}
         readOnly={readOnly}
         autoComplete={autoComplete}
+        placeholder={placeholder}
         onBlur={onBlur}
         onChange={(event) => onChange(event.currentTarget.value)}
       />
-    </div>
-  );
-}
-function Consent({
-  checked,
-  onChange,
-  text,
-  id,
-  required = true,
-  children,
-}: {
-  checked: boolean;
-  onChange(value: boolean): void;
-  text?: string;
-  id: string;
-  required?: boolean;
-  children?: React.ReactNode;
-}) {
-  return (
-    <label className="application-consent" htmlFor={id}>
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        required={required}
-        onChange={(event) => onChange(event.currentTarget.checked)}
-      />
-      <span>
-        {children ?? text}
-        {required ? (
-          <span className="required-mark">
-            {webMessages.applicationRequired}
-          </span>
-        ) : (
-          <span className="optional-mark">
-            {webMessages.applicationOptional}
-          </span>
-        )}
-      </span>
-    </label>
+    </Field>
   );
 }

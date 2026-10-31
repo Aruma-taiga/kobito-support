@@ -347,3 +347,251 @@ textarea.ui-input {
   font-family: var(--en);
   white-space: nowrap;
 }
+
+/* ---------- 画面の骨組み（1列・スマホ幅から PC まで） ---------- */
+.ui-page {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 20px 16px 48px;
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--font-ui);
+  line-height: 1.75;
+}
+@media (min-width: 521px) {
+  .ui-page {
+    padding: 32px 24px 64px;
+  }
+}
+.ui-title {
+  margin: 0 0 6px;
+  font-size: 21px;
+  line-height: 1.45;
+  font-weight: 700;
+}
+.ui-lead {
+  margin: 0 0 18px;
+  color: var(--sub);
+  font-size: 14px;
+}
+.ui-center {
+  text-align: center;
+}
+.ui-hint--warn {
+  color: var(--warn);
+}
+.ui-actions {
+  margin-top: 20px;
+}
+.ui-actions > * + * {
+  margin-top: 10px;
+}
+.ui-card__title a,
+.ui-linkbtn {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--sage);
+  text-decoration: none;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.ui-card--accent {
+  border-color: var(--accent);
+}
+.ui-card--muted {
+  background: var(--gray-soft);
+  border-style: dashed;
+}
+
+/* ラジオ（プラン・お支払い方法） */
+.ui-radio-list {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ui-radio {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  min-width: 0;
+}
+.ui-radio--on {
+  border-color: var(--accent);
+  background: var(--accent-pale);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.ui-radio--disabled {
+  background: var(--bg);
+  color: var(--sub);
+  cursor: not-allowed;
+}
+.ui-radio input {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--accent-deep);
+}
+.ui-radio__body {
+  flex: 1;
+  min-width: 0;
+}
+.ui-radio__title {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 700;
+}
+.ui-radio__price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--en);
+  font-style: normal;
+  text-align: right;
+}
+.ui-radio__price small {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--sub);
+}
+.ui-radio__desc {
+  display: block;
+  font-size: 12.5px;
+  color: var(--sub);
+  line-height: 1.55;
+}
+
+/* チェック（同意事項） */
+.ui-check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  margin-bottom: 10px;
+  line-height: 1.6;
+}
+.ui-check input {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  margin: 1px 0 0;
+  padding: 0;
+  accent-color: var(--accent);
+}
+.ui-check > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ui-check:last-child {
+  margin-bottom: 0;
+}
+
+/* 契約の内容 */
+.ui-clause {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.ui-clause:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+.ui-clause:last-child {
+  padding-bottom: 0;
+}
+
+/* 受付完了 */
+.ui-done-mark {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  margin: 20px auto 14px;
+  font-weight: 700;
+}
+.ui-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.ui-timeline li {
+  position: relative;
+  padding: 0 0 14px 24px;
+  font-size: 14px;
+}
+.ui-timeline li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.ui-timeline li::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 18px;
+  bottom: 0;
+  width: 2px;
+  background: var(--line);
+}
+.ui-timeline li:last-child::after {
+  display: none;
+}
+.ui-timeline li:last-child {
+  padding-bottom: 0;
+}
+.ui-timeline .ui-timeline__done::before {
+  background: var(--sage);
+}
+.ui-timeline .ui-timeline__now::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.ui-timeline__note {
+  display: block;
+  font-size: 12px;
+  color: var(--sub);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ui-hint a {
+  color: var(--accent);
+}
