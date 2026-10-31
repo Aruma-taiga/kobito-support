@@ -84,6 +84,55 @@ describe("notification outbox database behavior", () => {
     expect(after.rows[0]).toEqual(before.rows[0]);
   });
 
+  it("dispatches estimate and request status emails through the existing sender", async () => {
+    if (!customerId) throw new Error("Test customer was not created");
+    const keys: [string, string] = [
+      `${dedupeKey}:estimate`,
+      `${dedupeKey}:status`,
+    ];
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await schedule(client, {
+        customerId,
+        kind: "NT-06",
+        dedupeKey: keys[0],
+        scheduledAt: new Date("2026-11-01T00:00:00Z"),
+        payload: { requestId: randomUUID(), estimateVersion: 1 },
+      });
+      await schedule(client, {
+        customerId,
+        kind: "NT-07",
+        dedupeKey: keys[1],
+        scheduledAt: new Date("2026-11-01T00:00:00Z"),
+        payload: { requestId: randomUUID(), status: "done" },
+      });
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+    const queued = await pool.query<{ id: string }>(
+      "select id from notifications where dedupe_key=any($1::text[]) order by dedupe_key",
+      [keys],
+    );
+    const sender = new FakeMailSender();
+    const result = await runNotificationDispatch(
+      new Date("2026-11-02T00:00:00Z"),
+      { pool, sender, notificationIds: queued.rows.map((row) => row.id) },
+    );
+    expect(result).toEqual({ sent: 2, failed: 0, skipped: 0 });
+    expect(sender.messages.map((mail) => mail.subject)).toEqual([
+      "お見積りをお送りしました",
+      "ご依頼が完了しました",
+    ]);
+    expect(
+      sender.messages.every((mail) => mail.to === `${suffix}@example.test`),
+    ).toBe(true);
+  });
+
   it("does not send one locked notification concurrently twice", async () => {
     const client = await pool.connect();
     try {

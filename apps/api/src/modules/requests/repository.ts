@@ -20,6 +20,7 @@ import { safePgInteger } from "../../platform/db/integers.js";
 import { withTransaction } from "../../platform/db/transaction.js";
 import type { CustomerScope } from "../../platform/scope.js";
 import { ApiError, type Principal } from "../../platform/types.js";
+import { schedule } from "../notifications/service.js";
 import type { RequestModule } from "./contracts.js";
 
 interface EstimateRow {
@@ -183,7 +184,6 @@ async function queueNotification(
   customerId: string,
   requestId: string,
   kind: "NT-06" | "NT-07",
-  lineUserId: string | null,
   version: number | null = null,
   event: "approved" | "completed" = "approved",
 ) {
@@ -192,23 +192,19 @@ async function queueNotification(
     [requestId],
   );
   if (preview.rows[0]?.preview) return;
-  const channel = lineUserId ? "line" : "email";
-  await client.query(
-    `insert into notifications(customer_id,kind,channel,dedupe_key,scheduled_at,payload) values($1,$2,$3,$4,now(),$5::jsonb) on conflict(dedupe_key) do nothing`,
-    [
-      customerId,
-      kind,
-      channel,
-      `${kind}:${requestId}:${kind === "NT-06" ? `estimate:${version}` : event}`,
-      JSON.stringify({
-        requestId,
-        ...(version === null ? {} : { estimateVersion: version }),
-        ...(kind === "NT-07"
-          ? { status: event === "approved" ? "in_progress" : "done" }
-          : {}),
-      }),
-    ],
-  );
+  await schedule(client, {
+    customerId,
+    kind,
+    dedupeKey: `${kind}:${requestId}:${kind === "NT-06" ? `estimate:${version}` : event}`,
+    scheduledAt: new Date(),
+    payload: {
+      requestId,
+      ...(version === null ? {} : { estimateVersion: version }),
+      ...(kind === "NT-07"
+        ? { status: event === "approved" ? "in_progress" : "done" }
+        : {}),
+    },
+  });
 }
 
 export class RequestRepository implements RequestModule {
@@ -394,10 +390,9 @@ export class RequestRepository implements RequestModule {
       const base = await client.query<{
         contract_id: string;
         customer_id: string;
-        line_user_id: string | null;
         status: RequestStatus;
       }>(
-        "select c.id contract_id,c.customer_id,cu.line_user_id,r.status from service_requests r join contracts c on c.id=r.contract_id join customers cu on cu.id=c.customer_id where r.id=$1 and c.status in ('active','cancel_scheduled')",
+        "select c.id contract_id,c.customer_id,r.status from service_requests r join contracts c on c.id=r.contract_id where r.id=$1 and c.status in ('active','cancel_scheduled')",
         [requestId],
       );
       const initial = base.rows[0];
@@ -456,7 +451,6 @@ export class RequestRepository implements RequestModule {
         initial.customer_id,
         requestId,
         "NT-06",
-        initial.line_user_id,
         version,
       );
       await saveAudit(
@@ -548,9 +542,8 @@ export class RequestRepository implements RequestModule {
         status: RequestStatus;
         approved_estimate_id: string | null;
         customer_id: string;
-        line_user_id: string | null;
       }>(
-        "select r.status,r.approved_estimate_id,c.customer_id,cu.line_user_id from service_requests r join contracts c on c.id=r.contract_id join customers cu on cu.id=c.customer_id where r.id=$1 for update of r",
+        "select r.status,r.approved_estimate_id,c.customer_id from service_requests r join contracts c on c.id=r.contract_id where r.id=$1 for update of r",
         [estimateHead.rows[0].request_id],
       );
       const r = request.rows[0];
@@ -611,13 +604,7 @@ export class RequestRepository implements RequestModule {
         "insert into credit_entries(contract_id,period_id,kind,amount,request_id,note) values($1,$2,'reserve',$3,$4,'Estimate approval')",
         [req.rows[0].contract_id, period.rows[0].id, -e.credits, e.request_id],
       );
-      await queueNotification(
-        client,
-        r.customer_id,
-        e.request_id,
-        "NT-07",
-        r.line_user_id,
-      );
+      await queueNotification(client, r.customer_id, e.request_id, "NT-07");
       await client.query(
         "insert into audit_logs(actor,action,target_type,target_id,detail) values($1,'estimate.approved','service_request',$2,'{}'::jsonb)",
         [principal.authUserId, e.request_id],
@@ -660,7 +647,6 @@ export class RequestRepository implements RequestModule {
       const selectedRequest = await client.query<{
         contract_id: string;
         customer_id: string;
-        line_user_id: string | null;
         received_on: string;
         status: RequestStatus;
         approved_estimate_id: string | null;
@@ -670,9 +656,8 @@ export class RequestRepository implements RequestModule {
       }>(
         `select r.contract_id,r.received_on::text,r.status,r.approved_estimate_id,
                 r.completed_on::text,r.actual_minutes,r.actual_credits,
-                c.customer_id,cu.line_user_id
+                c.customer_id
            from service_requests r join contracts c on c.id=r.contract_id
-           join customers cu on cu.id=c.customer_id
           where r.id=$1 for update of r`,
         [id],
       );
@@ -821,7 +806,6 @@ export class RequestRepository implements RequestModule {
         request.customer_id,
         id,
         "NT-07",
-        request.line_user_id,
         null,
         "completed",
       );

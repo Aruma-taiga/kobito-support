@@ -27,13 +27,21 @@ export class LogMailSender implements MailSender {
       ? "NT-01"
       : message.subject.includes("新しい申込み")
         ? "S-03"
-        : message.subject.includes("請求書")
-          ? "NT-02"
-          : message.subject.includes("ご入金")
-            ? "NT-02b"
-            : message.subject.includes("カード")
-              ? "NT-05"
-              : "email";
+        : message.subject.includes("月額分の請求書")
+          ? "NT-03"
+          : message.subject.includes("請求書")
+            ? "NT-02"
+            : message.subject.includes("ご入金")
+              ? "NT-02b"
+              : message.subject.includes("カード")
+                ? "NT-05"
+                : message.subject.includes("クレジット")
+                  ? "NT-04"
+                  : message.subject.includes("お見積り")
+                    ? "NT-06"
+                    : message.subject.includes("ご依頼")
+                      ? "NT-07"
+                      : "email";
     const at = message.to.lastIndexOf("@");
     const maskedTo =
       at > 1 ? `${message.to[0]}***${message.to.slice(at)}` : "***";

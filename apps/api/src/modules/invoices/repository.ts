@@ -394,6 +394,15 @@ export class InvoiceRepository implements InvoiceModule {
          values ($1,$2,'grant',$3,$4,'月額請求の入金確認') on conflict (period_id) where kind='grant' do nothing`,
         [contractId, period.id, period.credits, invoiceId],
       );
+      if (!preview) {
+        await schedule(client, {
+          customerId: invoice.customer_id,
+          kind: "NT-04",
+          dedupeKey: `NT-04:${period.id}:email`,
+          scheduledAt: new Date(),
+          payload: { contractId, periodId: period.id, invoiceId },
+        });
+      }
       return confirmBankPaymentResponseSchema.parse({
         invoiceId,
         paymentId,
@@ -436,16 +445,6 @@ export class InvoiceRepository implements InvoiceModule {
       throw error;
     }
     const { paymentId, period } = settlement;
-    const periodId = period.id;
-    if (!preview) {
-      await schedule(client, {
-        customerId: invoice.customer_id,
-        kind: "NT-04",
-        dedupeKey: `NT-04:${periodId}:email`,
-        scheduledAt: new Date(),
-        payload: { contractId, periodId, invoiceId },
-      });
-    }
     return confirmBankPaymentResponseSchema.parse({
       invoiceId,
       paymentId,
@@ -849,6 +848,15 @@ export class InvoiceRepository implements InvoiceModule {
         customerId: input.customerId,
         kind: "NT-02",
         dedupeKey: `NT-02:invoice:${invoiceId}:customer`,
+        scheduledAt: new Date(),
+        payload: { invoiceId },
+      });
+    }
+    if (!preview && kind === "monthly") {
+      await schedule(client, {
+        customerId: input.customerId,
+        kind: "NT-03",
+        dedupeKey: `NT-03:invoice:${invoiceId}:customer`,
         scheduledAt: new Date(),
         payload: { invoiceId },
       });
