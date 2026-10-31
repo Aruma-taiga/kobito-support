@@ -112,7 +112,9 @@ export function buildPublicCatalog(
       terms: legalDocuments.terms,
       privacy: legalDocuments.privacy,
       disclosure: legalDocuments.disclosure,
-      availablePaymentMethods: [...applicationPaymentMethods],
+      availablePaymentMethods: config.cardPaymentEnabled
+        ? [...applicationPaymentMethods]
+        : applicationPaymentMethods.filter((method) => method !== "card"),
       konbiniFeeYen: null,
       displayVersion: "0".repeat(64),
       conditions: applicationPolicyConditions,
@@ -130,7 +132,9 @@ export function buildPublicCatalog(
           disclosure: application.disclosure,
         }
       : null,
-    availablePaymentMethods: applicationPaymentMethods,
+    availablePaymentMethods: config.cardPaymentEnabled
+      ? applicationPaymentMethods
+      : applicationPaymentMethods.filter((method) => method !== "card"),
     konbiniFeeYen: null,
     conditions: applicationPolicyConditions,
   };

@@ -114,6 +114,7 @@ export function createApp(dependencies: AppDependencies) {
     ]);
     return context.json({
       serviceName,
+      cardPaymentEnabled: dependencies.config.cardPaymentEnabled === true,
       ...(contactEmail ? { contactEmail } : {}),
       application: catalog.application,
     });

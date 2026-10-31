@@ -40,7 +40,7 @@ export const applicationPolicyConditions = {
   cancellation: "period_end_no_proration",
 } as const;
 
-export const applicationPaymentMethods = ["bank_transfer"] as const;
+export const applicationPaymentMethods = ["card", "bank_transfer"] as const;
 
 const invoiceRegistrationNoSchema = z.preprocess(
   (value) =>

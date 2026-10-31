@@ -70,6 +70,21 @@ describe("application preview/live policy gates", () => {
     ).not.toBe(catalog.displayVersion);
   });
 
+  it("publishes card alongside bank transfer only when the Komoju key enables it", () => {
+    const enabled = buildPublicCatalog([plan], draftDocuments, {
+      ...localConfig,
+      komojuSecretKey: "test-key",
+      cardPaymentEnabled: true,
+    });
+    expect(enabled.application?.availablePaymentMethods).toEqual([
+      "card",
+      "bank_transfer",
+    ]);
+    expect(enabled.displayVersion).not.toBe(
+      buildPublicCatalog([plan], draftDocuments, localConfig).displayVersion,
+    );
+  });
+
   it.each([
     {
       ...localConfig,

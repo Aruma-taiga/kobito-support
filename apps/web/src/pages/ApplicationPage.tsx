@@ -835,11 +835,16 @@ export function ApplicationPage({
                 </legend>
                 <RadioOption
                   name="payment"
-                  checked={false}
-                  disabled
-                  readOnly
+                  checked={draft.paymentMethod === "card"}
+                  disabled={!config?.cardPaymentEnabled}
+                  readOnly={!config?.cardPaymentEnabled}
+                  onChange={() => update("paymentMethod", "card")}
                   title={webMessages.applicationCardPayment}
-                  description={`${webMessages.applicationCardDescription}（${webMessages.applicationUnavailablePayment}）`}
+                  description={
+                    config?.cardPaymentEnabled
+                      ? webMessages.applicationCardDescription
+                      : `${webMessages.applicationCardDescription}（${webMessages.applicationUnavailablePayment}）`
+                  }
                 />
                 <RadioOption
                   name="payment"

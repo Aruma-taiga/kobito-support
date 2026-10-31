@@ -70,4 +70,13 @@ describe("invoice HTML renderer", () => {
     expect(html).not.toContain("払込番号");
     expect(html).not.toContain("支払番号");
   });
+
+  it("asks card customers to pay from their account without promising automatic charge", () => {
+    const html = invoiceHtml({ ...sample, paymentMethod: "card" });
+    expect(html).toContain(
+      "マイページのお支払いページからカードでお支払いください。",
+    );
+    expect(html).not.toContain("自動で課金");
+    expect(html).not.toContain("銀行振込</h2>");
+  });
 });

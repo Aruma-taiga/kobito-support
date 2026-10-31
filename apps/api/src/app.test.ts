@@ -400,9 +400,30 @@ describe("API routes and auth pipeline", () => {
     const response = await app.request("/api/v1/public/config");
     expect(await response.json()).toEqual({
       serviceName: "コビトサポート",
+      cardPaymentEnabled: false,
       contactEmail: "hello@contact.example",
       application: null,
     });
+  });
+
+  it("publishes only the card enabled boolean and never the Komoju key", async () => {
+    const secret = "private-komoju-key-for-test";
+    const app = makeApp({
+      config: {
+        nodeEnv: "test",
+        databaseUrl: "postgres://test",
+        firebaseProjectId: "demo-kobito-support",
+        webOrigin: "http://localhost:5173",
+        port: 3000,
+        invoicePrefix: "KS",
+        komojuSecretKey: secret,
+        cardPaymentEnabled: true,
+      },
+    });
+    const response = await app.request("/api/v1/public/config");
+    const body = await response.text();
+    expect(body).toContain('"cardPaymentEnabled":true');
+    expect(body).not.toContain(secret);
   });
 
   it("serves health and only the settings-backed public service name", async () => {
@@ -415,6 +436,7 @@ describe("API routes and auth pipeline", () => {
     expect(config.status).toBe(200);
     expect(await config.json()).toEqual({
       serviceName: "コビトサポート",
+      cardPaymentEnabled: false,
       application: null,
     });
 

@@ -36,7 +36,10 @@ export const publicApplicationConfigSchema = z.strictObject({
   terms: legalDocumentReferenceSchema,
   privacy: legalDocumentReferenceSchema,
   disclosure: legalDocumentReferenceSchema,
-  availablePaymentMethods: z.array(z.enum(applicationPaymentMethods)).length(1),
+  availablePaymentMethods: z
+    .array(z.enum(applicationPaymentMethods))
+    .min(1)
+    .max(2),
   konbiniFeeYen: z.null(),
   displayVersion: displayVersionSchema,
   conditions: applicationPolicyConditionsSchema,
@@ -47,6 +50,7 @@ export type PublicApplicationConfig = z.infer<
 
 export const publicConfigSchema = z.strictObject({
   serviceName: z.string().trim().min(1).max(120),
+  cardPaymentEnabled: z.boolean(),
   contactEmail: z.string().trim().email().max(254).optional(),
   application: publicApplicationConfigSchema.nullable().optional(),
 });
