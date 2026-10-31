@@ -442,9 +442,9 @@ describe("c08 requests", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: "ご依頼の状況" }),
     ).toBeTruthy();
-    const progress = screen
-      .getByRole("heading", { name: "進行中" })
-      .closest("section");
+    const progress = (
+      await screen.findByRole("heading", { name: "進行中" })
+    ).closest("section");
     expect(progress?.textContent).toContain("了承待ち");
     expect(progress?.textContent).toContain("作業中");
     const doneCard = screen
