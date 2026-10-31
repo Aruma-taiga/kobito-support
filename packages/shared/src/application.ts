@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { validationMessages } from "./messages.js";
-import { extraCreditGrossYen, planCodes } from "./pricing.js";
+import { extraCreditExclYen, planCodes } from "./pricing.js";
 
 export const paymentMethods = ["card", "konbini", "bank_transfer"] as const;
 export type PaymentMethod = (typeof paymentMethods)[number];
@@ -33,7 +33,7 @@ const passwordSchema = z
 
 export const applicationPolicyConditions = {
   initialDueDays: 7,
-  extraCreditGrossYen,
+  extraCreditExclYen,
   monthlyPrepaid: true,
   periodBasis: "contract_anchor",
   rollover: false,

@@ -40,7 +40,7 @@ const invoice = {
     planId: "55555555-5555-4555-8555-555555555555",
     planCode: "light",
     planName: "ライト（申込時）",
-    monthlyPriceInclTax: 5500,
+    monthlyPriceExclTax: 5000,
     credits: 1,
   },
   billingName: "喫茶ひだまり",
@@ -59,8 +59,8 @@ const invoice = {
     {
       description: "ライトプラン 初月分",
       quantity: 1,
-      unitPriceInclTax: 5500,
-      amountInclTax: 5500,
+      unitPriceExclTax: 5000,
+      amountExclTax: 5000,
       taxRate: 0.1,
     },
   ],
@@ -171,8 +171,10 @@ describe("invoice pages", () => {
     expect(screen.getByText("本店")).toBeTruthy();
     expect(screen.getByText("ライトプラン 初月分")).toBeTruthy();
     expect(screen.getByText("ライト（申込時）")).toBeTruthy();
-    expect(screen.getByText("￥5,000")).toBeTruthy();
-    expect(screen.getByText("￥500")).toBeTruthy();
+    const totals = document.querySelector(".invoice-totals");
+    expect(totals?.textContent).toBe(
+      `${webMessages.invoiceTotalExclTax}￥5,000${webMessages.invoiceTaxAmount}￥500${webMessages.invoiceTotalInclTax}￥5,500`,
+    );
     expect(
       page === "admin-detail"
         ? adminApiClient.getInvoice

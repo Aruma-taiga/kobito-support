@@ -10,9 +10,7 @@ const displayVersionSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
 export const applicationPolicyConditionsSchema = z.strictObject({
   initialDueDays: z.literal(applicationPolicyConditions.initialDueDays),
-  extraCreditGrossYen: z.literal(
-    applicationPolicyConditions.extraCreditGrossYen,
-  ),
+  extraCreditExclYen: z.literal(applicationPolicyConditions.extraCreditExclYen),
   monthlyPrepaid: z.literal(applicationPolicyConditions.monthlyPrepaid),
   periodBasis: z.literal(applicationPolicyConditions.periodBasis),
   rollover: z.literal(applicationPolicyConditions.rollover),
@@ -58,13 +56,13 @@ export const publicPlanSchema = z
     id: z.string().uuid(),
     code: z.enum(planCodes),
     name: z.string().trim().min(1).max(120),
-    priceInclTax: z.number().int().positive().nullable(),
+    priceExclTax: z.number().int().positive().nullable(),
     credits: z.number().int().positive().nullable(),
     isCustom: z.boolean(),
   })
   .superRefine((plan, context) => {
     const customFieldsMatchNull =
-      plan.priceInclTax === null && plan.credits === null;
+      plan.priceExclTax === null && plan.credits === null;
     if (plan.isCustom !== customFieldsMatchNull) {
       context.addIssue({
         code: "custom",

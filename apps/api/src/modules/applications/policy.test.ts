@@ -16,7 +16,7 @@ const plan = {
   id: "00000000-0000-4000-8000-000000000001",
   code: "light",
   name: "ライト",
-  priceInclTax: 5000,
+  priceExclTax: 5000,
   credits: 1,
   isCustom: false,
 } as const;
@@ -45,7 +45,7 @@ describe("application preview/live policy gates", () => {
     expect(catalog.application?.displayVersion).toBe(catalog.displayVersion);
     expect(catalog.application?.conditions).toEqual({
       initialDueDays: 7,
-      extraCreditGrossYen: 4400,
+      extraCreditExclYen: 4000,
       monthlyPrepaid: true,
       periodBasis: "contract_anchor",
       rollover: false,
@@ -53,7 +53,7 @@ describe("application preview/live policy gates", () => {
     });
     expect(
       buildPublicCatalog(
-        [{ ...plan, priceInclTax: 5100 }],
+        [{ ...plan, priceExclTax: 5100 }],
         draftDocuments,
         localConfig,
       ).displayVersion,

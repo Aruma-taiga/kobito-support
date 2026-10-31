@@ -264,7 +264,7 @@ function InvoiceDetailPage({
               <dt>{webMessages.invoiceAcceptedPlan}</dt>
               <dd>{invoice.acceptedPlan.planName}</dd>
               <dt>{webMessages.invoiceAcceptedMonthlyPrice}</dt>
-              <dd>{yen(invoice.acceptedPlan.monthlyPriceInclTax)}</dd>
+              <dd>{yen(invoice.acceptedPlan.monthlyPriceExclTax)}</dd>
               <dt>{webMessages.invoiceAcceptedCredits}</dt>
               <dd>{invoice.acceptedPlan.credits}</dd>
             </dl>
@@ -299,8 +299,8 @@ function InvoiceDetailPage({
                     <tr key={`${line.description}-${index}`}>
                       <td>{line.description}</td>
                       <td>{line.quantity}</td>
-                      <td>{yen(line.unitPriceInclTax)}</td>
-                      <td>{yen(line.amountInclTax)}</td>
+                      <td>{yen(line.unitPriceExclTax)}</td>
+                      <td>{yen(line.amountExclTax)}</td>
                       <td>{Math.round(line.taxRate * 100)}%</td>
                     </tr>
                   ))}

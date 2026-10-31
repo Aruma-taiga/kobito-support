@@ -60,7 +60,7 @@ export const confirmBankPaymentResponseSchema = z
         seq: z.literal(1),
         startsOn: calendarDate,
         endsOn: calendarDate,
-        priceInclTax: z.number().int().safe().positive(),
+        priceExclTax: z.number().int().safe().positive(),
         credits: z.number().int().safe().positive(),
       })
       .strict(),
@@ -75,7 +75,7 @@ export type ConfirmBankPaymentResponse = z.infer<
 const contractPlanSchema = z
   .object({
     name: z.string(),
-    priceInclTax: z.number().int().safe().positive(),
+    priceExclTax: z.number().int().safe().positive(),
     credits: z.number().int().safe().positive(),
   })
   .strict();
@@ -85,7 +85,7 @@ const currentPeriodSchema = z
     seq: z.number().int().positive(),
     startsOn: calendarDate,
     endsOn: calendarDate,
-    priceInclTax: z.number().int().safe().positive(),
+    priceExclTax: z.number().int().safe().positive(),
     credits: z.number().int().safe().positive(),
     balance: z.number().int().safe(),
   })
