@@ -602,6 +602,8 @@ export function StatTiles({
     key: string;
     label: ReactNode;
     value: ReactNode;
+    /** 値の下に出す小さな補足（税込の金額など） */
+    note?: ReactNode;
     tone?: "accent" | "gray";
   }>;
 }) {
@@ -614,6 +616,9 @@ export function StatTiles({
         >
           <small>{item.label}</small>
           <div className="ui-tile__value">{item.value}</div>
+          {item.note ? (
+            <small className="ui-tile__note">{item.note}</small>
+          ) : null}
         </div>
       ))}
     </div>

@@ -69,6 +69,20 @@ interface BankInvoiceRow {
 
 type IssuerSnapshot = InvoiceDetail["issuer"];
 
+export interface InitialInvoiceInput {
+  contractId: string;
+  customerId: string;
+  billingName: string;
+  billingAddress: string;
+  plan: {
+    planId: string;
+    planCode: string;
+    planName: string;
+    monthlyExcl: number;
+    credits: number;
+  };
+}
+
 function safeObject(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -634,6 +648,47 @@ export class InvoiceRepository implements InvoiceModule {
       (credits as number) <= 0
     )
       throw new ApiError(409, "application_conflict");
+    const invoice = await this.issueInitialInvoice(client, {
+      contractId: row.contract_id,
+      customerId: row.customer_id,
+      billingName: row.billing_name,
+      billingAddress: row.billing_address,
+      plan: {
+        planId,
+        planCode,
+        planName,
+        monthlyExcl: monthlyExcl as number,
+        credits: credits as number,
+      },
+    });
+    await client.query(
+      "update applications set reviewed_at = now(), review_result = 'approved' where id = $1",
+      [row.application_id],
+    );
+    return {
+      applicationId: row.application_id,
+      contractId: row.contract_id,
+      status: "awaiting_payment",
+      invoice,
+      replayed: false,
+    };
+  }
+
+  /** 個別見積りの了承で、了承した版の金額・クレジットから初月の請求書を発行する。 */
+  issueInitialInvoiceForQuote(
+    client: PoolClient,
+    input: InitialInvoiceInput,
+  ): Promise<InvoiceListItem> {
+    if (this.config.nodeEnv === "production")
+      throw new ApiError(503, "invoice_unavailable");
+    return this.issueInitialInvoice(client, input);
+  }
+
+  private async issueInitialInvoice(
+    client: PoolClient,
+    input: InitialInvoiceInput,
+  ): Promise<InvoiceListItem> {
+    const { monthlyExcl, planName, planId, planCode, credits } = input.plan;
     const currentSettings = await this.readIssuerSettings(client);
     const preview = localPreviewPermitted(
       this.config,
@@ -645,7 +700,7 @@ export class InvoiceRepository implements InvoiceModule {
 
     const issuedOn = todayInTokyo(this.clock());
     const dueOn = addCalendarDays(issuedOn, 7);
-    const total = invoiceTotals([monthlyExcl as number]);
+    const total = invoiceTotals([monthlyExcl]);
     const invoiceId = randomUUID();
     const year = Number(issuedOn.slice(0, 4));
     const prefix = currentSettings.prefix;
@@ -679,8 +734,8 @@ export class InvoiceRepository implements InvoiceModule {
       taxAmount: total.taxYen,
       paymentMethod: "bank_transfer",
       preview,
-      billingName: row.billing_name,
-      billingAddress: row.billing_address,
+      billingName: input.billingName,
+      billingAddress: input.billingAddress,
       acceptedPlan: {
         planId,
         planCode,
@@ -721,14 +776,14 @@ export class InvoiceRepository implements InvoiceModule {
       [
         invoiceId,
         invoiceNo,
-        row.contract_id,
+        input.contractId,
         issuedOn,
         dueOn,
         total.inclYen,
         total.exclYen,
         total.taxYen,
-        row.billing_name,
-        row.billing_address,
+        input.billingName,
+        input.billingAddress,
         JSON.stringify(issuerSnapshot),
         `invoice_documents:${invoiceId}`,
       ],
@@ -747,31 +802,21 @@ export class InvoiceRepository implements InvoiceModule {
       ],
     );
     await client.query(
-      "update applications set reviewed_at = now(), review_result = 'approved' where id = $1",
-      [row.application_id],
-    );
-    await client.query(
       "update contracts set status = 'awaiting_payment', first_invoice_due_on = $2 where id = $1",
-      [row.contract_id, dueOn],
+      [input.contractId, dueOn],
     );
     if (!preview) {
       await client.query(
         `insert into notifications (customer_id, kind, channel, dedupe_key, scheduled_at, payload)
          values ($1,'NT-02','email',$2,now(),$3::jsonb)`,
         [
-          row.customer_id,
+          input.customerId,
           `NT-02:invoice:${invoiceId}:customer`,
           JSON.stringify({ invoiceId }),
         ],
       );
     }
-    return {
-      applicationId: row.application_id,
-      contractId: row.contract_id,
-      status: "awaiting_payment",
-      invoice: this.listItem(details),
-      replayed: false,
-    };
+    return this.listItem(details);
   }
 
   private async readIssuerSettings(client: PoolClient): Promise<{

@@ -5,6 +5,7 @@ import { AdminLogoutButton } from "../auth/admin-session.js";
 import { AdminBrand, AdminNavItem, AdminShell } from "../ui/index.js";
 
 const navItems = [
+  { to: "/admin", label: webMessages.adminNavToday, end: true },
   { to: "/admin/customers", label: webMessages.adminNavCustomers },
   { to: "/admin/requests", label: webMessages.adminNavRequests },
   { to: "/admin/bank-transfers", label: webMessages.adminNavBankTransfers },
@@ -28,7 +29,12 @@ export function AdminLayout({
       nav={
         <>
           {navItems.map((item) => (
-            <AdminNavItem component={NavLink} key={item.to} to={item.to}>
+            <AdminNavItem
+              component={NavLink}
+              end={item.end}
+              key={item.to}
+              to={item.to}
+            >
               {item.label}
             </AdminNavItem>
           ))}

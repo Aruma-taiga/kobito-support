@@ -26,6 +26,15 @@ export function requireCustomerAccess(
       customerScopeFor(context.get("principal")),
     );
     if (
+      state.access === "pending" &&
+      ((method === "GET" && path === "/api/v1/me/plan-quote") ||
+        (method === "POST" &&
+          /^\/api\/v1\/me\/plan-quote\/[^/]+\/approve$/.test(path)))
+    ) {
+      await next();
+      return;
+    }
+    if (
       method === "GET" &&
       path === "/api/v1/me" &&
       (state.access === "active" || state.access === "none")

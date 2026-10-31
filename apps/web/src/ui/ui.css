@@ -654,6 +654,10 @@ textarea.ui-input {
 .ui-list-item .ui-badge {
   flex: 0 0 auto;
 }
+.ui-list-item .ui-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .ui-amounts__row {
   display: flex;
   justify-content: space-between;
@@ -733,6 +737,14 @@ textarea.ui-input {
   font-size: 28px;
   font-weight: 700;
   line-height: 1.6;
+}
+.ui-tile__unit {
+  font-size: 14px;
+}
+.ui-tile .ui-tile__note {
+  display: block;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .ui-block {
   padding: 10px 0;
