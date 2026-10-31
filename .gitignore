@@ -10,3 +10,11 @@ tmp/pdfs/
 .tools/
 .firebase/
 firebase-debug.log
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+*.auto.tfvars
+crash.log

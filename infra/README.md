@@ -1,5 +1,5 @@
 # インフラ
 
-このディレクトリには、まだクラウド用の設定や Terraform を置いていません。PR1 で用意したのはローカル用の PostgreSQL 16 と Firebase Auth Emulator のみで、設定はリポジトリ直下の `docker-compose.yml`、Emulator 用イメージは `docker/firebase-auth/` にあります。
+クラウド構成のコードと運用メモを置くディレクトリです。Terraform の GCP・Cloudflare 構成は [`terraform/README.md`](terraform/README.md) を参照してください。
 
-GCP / Cloudflare の構築、本番用の秘密情報、KOMOJU、LINE、メール送信、デプロイはこの段階の対象外です。後続 PR で設計書に沿ってインフラを加える際は、この README を更新してください。
+ローカル開発ではリポジトリ直下の `docker-compose.yml` で PostgreSQL 16 と Firebase Auth Emulator を起動します。クラウドへの適用・デプロイは構成のレビューと各サービスの準備が済んでから行います。
