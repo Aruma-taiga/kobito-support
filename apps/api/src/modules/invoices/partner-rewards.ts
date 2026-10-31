@@ -18,12 +18,14 @@ export async function recordPartnerReward(
     status: string;
     cancel_requested_at: string | null;
     partner_id: string | null;
+    partner_active: boolean | null;
     reward_type: "appointment" | "closing";
     reward_rate: string;
     max_months: number;
   }>(
-    `select c.status, c.cancel_requested_at::text, r.partner_id, r.reward_type, r.reward_rate::text, r.max_months
+    `select c.status, c.cancel_requested_at::text, r.partner_id, pa.active as partner_active, r.reward_type, r.reward_rate::text, r.max_months
        from contracts c left join referrals r on r.contract_id=c.id
+       left join partners pa on pa.id=r.partner_id
       where c.id=$1 for update of c`,
     [input.contractId],
   );
@@ -32,7 +34,9 @@ export async function recordPartnerReward(
     !contract ||
     contract.status !== "active" ||
     contract.cancel_requested_at !== null ||
-    !contract.partner_id
+    !contract.partner_id ||
+    // 無効（active=false）のパートナーには報酬を作らない。
+    contract.partner_active !== true
   )
     return;
 
