@@ -72,6 +72,11 @@ export const invoiceListSchema = z
 export type InvoiceListItem = z.infer<typeof invoiceListItemSchema>;
 export type InvoiceList = z.infer<typeof invoiceListSchema>;
 
+export const voidInvoiceRequestSchema = z
+  .object({ reason: z.string().trim().min(1).max(200) })
+  .strict();
+export type VoidInvoiceRequest = z.infer<typeof voidInvoiceRequestSchema>;
+
 export const invoiceDetailSchema = invoiceListItemSchema
   .extend({
     acceptedPlan: z
@@ -149,6 +154,14 @@ export const invoiceDetailSchema = invoiceListItemSchema
   });
 
 export type InvoiceDetail = z.infer<typeof invoiceDetailSchema>;
+
+export const adminInvoiceDetailSchema = invoiceDetailSchema
+  .safeExtend({
+    voidedAt: z.string().datetime().nullable(),
+    voidReason: z.string().max(200).nullable(),
+  })
+  .strict();
+export type AdminInvoiceDetail = z.infer<typeof adminInvoiceDetailSchema>;
 
 export const invoiceReadinessSchema = z
   .object({

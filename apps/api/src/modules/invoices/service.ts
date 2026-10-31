@@ -1,4 +1,7 @@
-import { extraCreditPurchaseRequestSchema } from "@kobito/shared";
+import {
+  extraCreditPurchaseRequestSchema,
+  voidInvoiceRequestSchema,
+} from "@kobito/shared";
 import { z } from "zod";
 import type { CustomerScope } from "../../platform/scope.js";
 import { ApiError, type Principal } from "../../platform/types.js";
@@ -27,6 +30,14 @@ export class InvoiceService implements InvoiceModule {
     if (!uuidSchema.safeParse(invoiceId).success)
       throw new ApiError(404, "not_found");
     return this.repository.confirmBankPayment(principal, invoiceId, request);
+  }
+  voidInvoice(principal: Principal, invoiceId: string, request: unknown) {
+    this.requireAdmin(principal);
+    if (!uuidSchema.safeParse(invoiceId).success)
+      throw new ApiError(404, "not_found");
+    const parsed = voidInvoiceRequestSchema.safeParse(request);
+    if (!parsed.success) throw new ApiError(422, "validation_error");
+    return this.repository.voidInvoice(principal, invoiceId, parsed.data);
   }
   getCustomerContract(scope: CustomerScope) {
     return this.repository.getCustomerContract(scope);

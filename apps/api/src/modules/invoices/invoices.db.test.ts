@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  adminInvoiceDetailSchema,
   adminReferralsResponseSchema,
   approveApplicationResponseSchema,
   confirmBankPaymentResponseSchema,
@@ -262,6 +263,21 @@ function confirm(app: ReturnType<typeof createApp>, id: string, body: unknown) {
       "content-type": "application/json",
     },
     body: JSON.stringify(body),
+  });
+}
+
+function voidInvoice(
+  app: ReturnType<typeof createApp>,
+  id: string,
+  reason: string,
+) {
+  return app.request(`/api/v1/admin/invoices/${id}/void`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${adminToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ reason }),
   });
 }
 
@@ -1837,6 +1853,163 @@ describe("initial invoice approval and customer access", () => {
       sent_at: null,
       pdf_count: "1",
     });
+  });
+
+  it("voids an unpaid invoice, cancels its queued notices, hides the reason from customers, and permits a fresh initial invoice", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    const issued = await approve(app, fixture.applicationId);
+    const original = ((await issued.json()) as { invoice: { id: string } })
+      .invoice;
+    await pool.query(
+      `insert into notifications(customer_id,kind,channel,dedupe_key,scheduled_at,payload)
+       values($1,'NT-05','email',$2,now(),$3::jsonb)`,
+      [
+        fixture.customerId,
+        `NT-05:${original.id}:day1:email`,
+        JSON.stringify({ invoiceId: original.id }),
+      ],
+    );
+    const before = await pool.query<{ payments: string; entries: string }>(
+      `select (select count(*) from payments p join invoices i on i.id=p.invoice_id where i.contract_id=$1)::text as payments,
+              (select count(*) from credit_entries e where e.contract_id=$1)::text as entries`,
+      [fixture.contractId],
+    );
+
+    const response = await voidInvoice(app, original.id, "請求内容の誤り");
+    expect(response.status).toBe(200);
+    expect(adminInvoiceDetailSchema.parse(await response.json())).toMatchObject(
+      {
+        id: original.id,
+        status: "void",
+        voidReason: "請求内容の誤り",
+        voidedAt: expect.any(String),
+      },
+    );
+    const repeat = await voidInvoice(app, original.id, "別の理由");
+    expect(repeat.status).toBe(200);
+    expect(await repeat.json()).toMatchObject({
+      id: original.id,
+      status: "void",
+    });
+
+    const persisted = await pool.query<{
+      status: string;
+      void_reason: string;
+      voided_at: Date;
+      replaced_by: string | null;
+    }>(
+      "select status,void_reason,voided_at,replaced_by from invoices where id=$1",
+      [original.id],
+    );
+    expect(persisted.rows[0]).toMatchObject({
+      status: "void",
+      void_reason: "請求内容の誤り",
+      replaced_by: null,
+    });
+    expect(persisted.rows[0]?.voided_at).toBeInstanceOf(Date);
+    const notices = await pool.query<{
+      kind: string;
+      attempts: number;
+      last_error: string;
+    }>(
+      "select kind,attempts,last_error from notifications where payload->>'invoiceId'=$1 and sent_at is null",
+      [original.id],
+    );
+    expect(notices.rows.length).toBeGreaterThan(0);
+    expect(
+      notices.rows.every(
+        (notice) => notice.attempts === 3 && notice.last_error === "cancelled",
+      ),
+    ).toBe(true);
+    const after = await pool.query<{ payments: string; entries: string }>(
+      `select (select count(*) from payments p join invoices i on i.id=p.invoice_id where i.contract_id=$1)::text as payments,
+              (select count(*) from credit_entries e where e.contract_id=$1)::text as entries`,
+      [fixture.contractId],
+    );
+    expect(after.rows).toEqual(before.rows);
+    const contract = await pool.query<{ status: string }>(
+      "select status from contracts where id=$1",
+      [fixture.contractId],
+    );
+    expect(contract.rows[0]?.status).toBe("awaiting_payment");
+
+    const customerDetail = await app.request(
+      `/api/v1/me/invoices/${original.id}`,
+      {
+        headers: { authorization: `Bearer ${fixture.token}` },
+      },
+    );
+    const customerBody = invoiceDetailSchema.parse(await customerDetail.json());
+    const customerJson = JSON.stringify(customerBody);
+    expect(customerBody.status).toBe("void");
+    expect(customerJson).toContain('"status":"void"');
+    expect(customerJson).not.toContain("請求内容の誤り");
+
+    const reissued = await approve(app, fixture.applicationId);
+    expect(reissued.status).toBe(200);
+    expect(await reissued.json()).toMatchObject({
+      replayed: false,
+      status: "awaiting_payment",
+      invoice: { status: "issued" },
+    });
+    const linked = await pool.query<{ replaced_by: string | null }>(
+      "select replaced_by from invoices where id=$1",
+      [original.id],
+    );
+    expect(linked.rows[0]?.replaced_by).not.toBeNull();
+  });
+
+  it("rejects voiding paid, missing, invalid, and non-MFA invoices", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    const issued = await approve(app, fixture.applicationId);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    const paid = await confirm(app, invoiceId, {
+      amount: 5500,
+      paidOn: "2026-01-31",
+    });
+    expect(paid.status).toBe(200);
+    expect((await voidInvoice(app, invoiceId, "取消理由")).status).toBe(409);
+    expect((await voidInvoice(app, randomUUID(), "取消理由")).status).toBe(404);
+    expect((await voidInvoice(app, invoiceId, "  ")).status).toBe(422);
+    identities.set(`${prefix}-no-mfa-token`, { uid: adminUid });
+    expect(
+      (
+        await app.request(`/api/v1/admin/invoices/${invoiceId}/void`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${prefix}-no-mfa-token`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ reason: "取消理由" }),
+        })
+      ).status,
+    ).toBe(403);
+  });
+
+  it.each([
+    "failed",
+    "overdue",
+  ] as const)("allows cancellation from %s without changing contract state", async (status) => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    const issued = await approve(app, fixture.applicationId);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    await pool.query("update invoices set status=$2 where id=$1", [
+      invoiceId,
+      status,
+    ]);
+    const response = await voidInvoice(app, invoiceId, "支払リンクの再発行");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "void" });
+    const contract = await pool.query<{ status: string }>(
+      "select status from contracts where id=$1",
+      [fixture.contractId],
+    );
+    expect(contract.rows[0]?.status).toBe("awaiting_payment");
   });
 
   it("serializes simultaneous approvals into one invoice, one document, one pending notice, and one counter increment", async () => {

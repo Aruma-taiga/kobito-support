@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type {
+  AdminInvoiceDetail,
   ApproveApplicationResponse,
   ConfirmBankPaymentRequest,
   ConfirmBankPaymentResponse,
@@ -11,9 +12,11 @@ import type {
   InvoiceListItem,
   InvoiceReadiness,
   PendingBankTransfers,
+  VoidInvoiceRequest,
 } from "@kobito/shared";
 import {
   addCalendarDays,
+  canTransitionInvoice,
   confirmBankPaymentResponseSchema,
   customerContractResponseSchema,
   extraCreditExclYen,
@@ -57,6 +60,8 @@ interface InvoiceRow {
   billing_address: string;
   issuer_snapshot: unknown;
   lines: unknown;
+  voided_at: Date | null;
+  void_reason: string | null;
 }
 
 interface BankInvoiceRow {
@@ -244,6 +249,70 @@ export class InvoiceRepository implements InvoiceModule {
           invoiceId,
           request,
         ),
+    );
+  }
+
+  voidInvoice(
+    principal: Principal,
+    invoiceId: string,
+    request: VoidInvoiceRequest,
+  ): Promise<AdminInvoiceDetail> {
+    this.assertAdmin(principal);
+    return withAdminAudit(
+      this.pool,
+      principal,
+      {
+        action: "invoice.voided",
+        targetType: "invoice",
+        targetId: invoiceId,
+        detail: { toStatus: "void" },
+      },
+      async (client) => {
+        await client.query("set local lock_timeout = '5s'");
+        await client.query("set local statement_timeout = '30s'");
+        const reference = await client.query<{ contract_id: string }>(
+          "select contract_id from invoices where id=$1 and kind in ('initial','monthly','extra_credit')",
+          [invoiceId],
+        );
+        const contractId = reference.rows[0]?.contract_id;
+        if (!contractId) throw new ApiError(404, "not_found");
+        // Match notification dispatch's notification→invoice lock order. This
+        // prevents a dispatcher holding NT-05 from deadlocking against void.
+        await client.query(
+          `select id from notifications
+            where sent_at is null and payload->>'invoiceId'=$1
+            order by id for update`,
+          [invoiceId],
+        );
+        await client.query("select id from contracts where id=$1 for update", [
+          contractId,
+        ]);
+        const locked = await client.query<{
+          status: InvoiceListItem["status"];
+        }>("select status from invoices where id=$1 for update", [invoiceId]);
+        const status = locked.rows[0]?.status;
+        if (!status) throw new ApiError(404, "not_found");
+        if (status !== "void") {
+          if (!canTransitionInvoice(status, "void"))
+            throw new ApiError(409, "conflict");
+          await client.query(
+            "update invoices set status='void',voided_at=$2,void_reason=$3 where id=$1",
+            [invoiceId, this.clock(), request.reason],
+          );
+          await client.query(
+            `update notifications set attempts=3,last_error='cancelled'
+              where sent_at is null and payload->>'invoiceId'=$1`,
+            [invoiceId],
+          );
+        }
+        const result = await client.query<InvoiceRow>(
+          `${detailQuery} where i.id=$1 and i.kind in ('initial','monthly','extra_credit')`,
+          [invoiceId],
+        );
+        const invoice = result.rows[0];
+        if (!invoice) throw new ApiError(404, "not_found");
+        return this.toAdminDetail(invoice);
+      },
     );
   }
 
@@ -724,8 +793,47 @@ export class InvoiceRepository implements InvoiceModule {
     }
     if (row.review_result === "approved" && row.status === "awaiting_payment") {
       const existing = await this.getByContract(client, row.contract_id);
-      if (!existing)
-        throw new Error("Approved payment-waiting contract has no invoice");
+      if (!existing) {
+        const terms = safeObject(row.shown_terms);
+        if (
+          typeof terms.planCode !== "string" ||
+          !planCodes.includes(terms.planCode as (typeof planCodes)[number]) ||
+          terms.planCode === "custom" ||
+          typeof terms.priceExclTax !== "number" ||
+          typeof terms.planName !== "string" ||
+          typeof terms.planId !== "string" ||
+          typeof terms.credits !== "number"
+        )
+          throw new ApiError(409, "application_conflict");
+        const invoice = await this.issueInitialInvoice(client, {
+          contractId: row.contract_id,
+          customerId: row.customer_id,
+          billingName: row.billing_name,
+          billingAddress: row.billing_address,
+          paymentMethod: row.payment_method as "card" | "bank_transfer",
+          plan: {
+            planId: terms.planId,
+            planCode: terms.planCode,
+            planName: terms.planName,
+            monthlyExcl: terms.priceExclTax,
+            credits: terms.credits,
+          },
+        });
+        await client.query(
+          `update invoices set replaced_by=$2 where id=(
+             select id from invoices where contract_id=$1 and kind='initial'
+               and status='void' and replaced_by is null order by created_at desc limit 1
+           )`,
+          [row.contract_id, invoice.id],
+        );
+        return {
+          applicationId: row.application_id,
+          contractId: row.contract_id,
+          status: "awaiting_payment",
+          invoice,
+          replayed: false,
+        };
+      }
       return {
         applicationId: row.application_id,
         contractId: row.contract_id,
@@ -1239,7 +1347,7 @@ export class InvoiceRepository implements InvoiceModule {
   async getAdmin(
     principal: Principal,
     invoiceId: string,
-  ): Promise<InvoiceDetail> {
+  ): Promise<AdminInvoiceDetail> {
     this.assertAdmin(principal);
     const result = await this.pool.query<InvoiceRow>(
       `${detailQuery} where i.id = $1 and i.kind in ('initial','monthly','extra_credit')`,
@@ -1247,7 +1355,7 @@ export class InvoiceRepository implements InvoiceModule {
     );
     const row = result.rows[0];
     if (!row) throw new ApiError(404, "not_found");
-    return this.toDetail(row);
+    return this.toAdminDetail(row);
   }
   getAdminPdf(principal: Principal, invoiceId: string) {
     this.assertAdmin(principal);
@@ -1367,11 +1475,20 @@ export class InvoiceRepository implements InvoiceModule {
       })),
     });
   }
+
+  private toAdminDetail(row: InvoiceRow): AdminInvoiceDetail {
+    return {
+      ...this.toDetail(row),
+      voidedAt: row.voided_at?.toISOString() ?? null,
+      voidReason: row.void_reason,
+    };
+  }
 }
 
 const detailQuery = `select i.id, i.invoice_no, i.kind, i.status, i.payment_method,
        i.issued_on::text as issued_on, i.due_on::text as due_on,
        i.total_incl_tax, i.total_excl_tax, i.tax_amount, i.billing_name,
+       i.voided_at, i.void_reason,
        coalesce(i.billing_address_snapshot, cst.billing_address) as billing_address,
        i.issuer_snapshot,
        coalesce(l.lines,

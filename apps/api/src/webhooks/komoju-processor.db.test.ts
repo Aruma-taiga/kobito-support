@@ -262,6 +262,49 @@ function capturedEvent(id: string, invoiceNo: string, paymentId: string) {
 }
 
 describe("KOMOJU event processing database behavior", () => {
+  it("sends a captured payment for a void invoice to manual review without settlement", async () => {
+    const fixture = await createInvoice();
+    const eventId = newEventId();
+    try {
+      await pool.query(
+        "update invoices set status='void',voided_at=now(),void_reason='test cancellation' where id=$1",
+        [fixture.invoiceId],
+      );
+      await repository.receive(
+        capturedEvent(
+          eventId,
+          fixture.invoiceNo,
+          `pay_void_${randomUUID().replaceAll("-", "")}`,
+        ),
+      );
+      await expect(repository.processEvent(eventId)).resolves.toBe("review");
+      const result = await pool.query<{
+        invoice_status: string;
+        contract_status: string;
+        payment_count: string;
+        grant_count: string;
+        review_error: string | null;
+      }>(
+        `select i.status invoice_status,c.status contract_status,
+          (select count(*)::text from payments where invoice_id=i.id) payment_count,
+          (select count(*)::text from credit_entries where invoice_id=i.id and kind='grant') grant_count,
+          e.error review_error
+         from invoices i join contracts c on c.id=i.contract_id
+         join komoju_events e on e.id=$2 where i.id=$1`,
+        [fixture.invoiceId, eventId],
+      );
+      expect(result.rows[0]).toEqual({
+        invoice_status: "void",
+        contract_status: "awaiting_payment",
+        payment_count: "0",
+        grant_count: "0",
+        review_error: "review:invoice_state_conflict",
+      });
+    } finally {
+      await cleanup(fixture, [eventId]);
+    }
+  });
+
   it("settles an initial invoice from the accepted snapshot and ignores duplicate event/payment delivery", async () => {
     const fixture = await createInvoice();
     const eventId = newEventId();

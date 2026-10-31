@@ -180,6 +180,9 @@ function makeApp(overrides: AppOverrides = {}) {
       confirmBankPayment: vi.fn(async () => {
         throw new Error("not used");
       }),
+      voidInvoice: vi.fn(async () => {
+        throw new Error("not used");
+      }),
       getCustomerContract: vi.fn(async () => ({ contract: null })),
       purchaseExtraCredits: async () => {
         throw new Error("not implemented");

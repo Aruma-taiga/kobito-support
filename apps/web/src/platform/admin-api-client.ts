@@ -3,6 +3,7 @@ import {
   type AdminApplicationQueueResponse,
   type AdminCancellation,
   type AdminCustomerDetail,
+  type AdminInvoiceDetail,
   type AdminIssuerSettings,
   type AdminIssuerSettingsResponse,
   type AdminNotificationFailuresResponse,
@@ -16,6 +17,7 @@ import {
   adminApplicationQueueResponseSchema,
   adminCancellationSchema,
   adminCustomerDetailSchema,
+  adminInvoiceDetailSchema,
   adminIssuerSettingsResponseSchema,
   adminNotificationFailureRetryResponseSchema,
   adminNotificationFailuresResponseSchema,
@@ -51,10 +53,8 @@ import {
   declineApplicationResponseSchema,
   type EligibleRequestContracts,
   eligibleRequestContractsSchema,
-  type InvoiceDetail,
   type InvoiceList,
   type InvoiceReadiness,
-  invoiceDetailSchema,
   invoiceListSchema,
   invoiceReadinessSchema,
   type PayReferralRewardsRequest,
@@ -68,6 +68,7 @@ import {
   type UpdateCancellationChecklist,
   updateAdminIssuerSettingsRequestSchema,
   updateCancellationChecklistSchema,
+  voidInvoiceRequestSchema,
 } from "@kobito/shared";
 
 export interface AdminApiAuthUser {
@@ -480,16 +481,25 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
         { method: "POST", body: JSON.stringify(parsed.data) },
       );
     },
+    voidInvoice(invoiceId: string, value: { reason: string }) {
+      const parsed = voidInvoiceRequestSchema.safeParse(value);
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      return request(
+        `/api/v1/admin/invoices/${encodeURIComponent(invoiceId)}/void`,
+        adminInvoiceDetailSchema,
+        { method: "POST", body: JSON.stringify(parsed.data) },
+      );
+    },
     getInvoiceReadiness(): Promise<InvoiceReadiness> {
       return request(
         "/api/v1/admin/invoices/readiness",
         invoiceReadinessSchema,
       );
     },
-    getInvoice(invoiceId: string): Promise<InvoiceDetail> {
+    getInvoice(invoiceId: string): Promise<AdminInvoiceDetail> {
       return request(
         `/api/v1/admin/invoices/${encodeURIComponent(invoiceId)}`,
-        invoiceDetailSchema,
+        adminInvoiceDetailSchema,
       );
     },
     getInvoicePdf(invoiceId: string): Promise<Blob> {
