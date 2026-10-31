@@ -1,0 +1,349 @@
+/* 共通UI部品。値は docs/mock/index.html の :root と同じ。黄色(--brand)はロゴ専用。 */
+:root {
+  --bg: #f4f6f8;
+  --brand: #f0b429;
+  --attn: #f6e7c4;
+  --attn-pale: #fbf5e6;
+  --attn-text: #7a5600;
+  --card: #ffffff;
+  --text: #1f2e3a;
+  --sub: #5f6b73;
+  --accent: #2f5b85;
+  --accent-deep: #1f3f60;
+  --accent-soft: #dce6f0;
+  --accent-pale: #eef3f8;
+  --line: #d6dce2;
+  --sage: #2f8f7e;
+  --sage-soft: #d9eee9;
+  --warn: #c2410c;
+  --warn-soft: #fde4d6;
+  --gray-soft: #eaedf0;
+  --en: "Inter", "Zen Kaku Gothic Antique", sans-serif;
+  --font-ui:
+    "Zen Kaku Gothic Antique", "Hiragino Sans", "Noto Sans JP", "Yu Gothic",
+    sans-serif;
+}
+
+.ui-shell {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.75;
+  font-weight: 500;
+  overflow-x: hidden;
+}
+.ui-shell__main {
+  min-width: 0;
+}
+
+/* BrandHeader */
+.ui-brand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 56px;
+  padding: 0 16px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-ui);
+}
+.ui-brand-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.ui-brand-header__logo {
+  height: 32px;
+  width: 32px;
+  flex: 0 0 auto;
+  display: block;
+}
+.ui-brand-header__name {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ui-brand-header__right {
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 600;
+}
+.ui-brand-header__right a {
+  color: var(--accent);
+}
+@media (min-width: 521px) {
+  .ui-brand-header {
+    padding: 0 24px;
+  }
+}
+
+/* Button */
+.ui-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 15px 18px;
+  border-radius: 8px;
+  border: 1.5px solid transparent;
+  font: inherit;
+  font-weight: 700;
+  font-size: 16px;
+  text-decoration: none;
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+}
+.ui-btn--ghost {
+  background: #fff;
+  color: var(--text);
+  border-color: var(--line);
+}
+.ui-btn--dark {
+  background: var(--text);
+  color: #fff;
+}
+.ui-btn--sm {
+  display: inline-flex;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+.ui-btn--full {
+  width: 100%;
+}
+.ui-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.ui-btn:focus-visible {
+  outline: 3px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
+/* Card */
+.ui-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.ui-card__title {
+  margin: 0 0 10px;
+  font-size: 15.5px;
+  line-height: 1.45;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Badge */
+.ui-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 1px 9px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.ui-badge--sage {
+  background: var(--sage-soft);
+  color: #1d6b5d;
+}
+.ui-badge--yellow {
+  background: var(--attn);
+  color: var(--attn-text);
+}
+.ui-badge--warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.ui-badge--gray {
+  background: var(--gray-soft);
+  color: var(--sub);
+}
+.ui-badge--dark {
+  background: var(--text);
+  color: #fff;
+}
+
+/* Notice */
+.ui-notice {
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin-bottom: 14px;
+}
+.ui-notice--info {
+  background: var(--sage-soft);
+}
+.ui-notice--yellow {
+  background: var(--attn-pale);
+  border: 1px solid var(--attn);
+}
+.ui-notice--warn {
+  background: var(--warn-soft);
+}
+.ui-notice__title {
+  display: block;
+  margin-bottom: 2px;
+}
+
+/* Field */
+.ui-field {
+  margin-bottom: 16px;
+}
+.ui-field__label {
+  display: block;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+.ui-req,
+.ui-opt {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+  font-weight: 700;
+  vertical-align: 1px;
+}
+.ui-req {
+  background: var(--warn);
+  color: #fff;
+}
+.ui-opt {
+  background: var(--gray-soft);
+  color: var(--sub);
+}
+.ui-input {
+  display: block;
+  width: 100%;
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 12px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--text);
+}
+textarea.ui-input {
+  min-height: 84px;
+  resize: vertical;
+}
+.ui-input:focus-visible {
+  outline: 3px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+.ui-input[aria-invalid="true"] {
+  border-color: var(--warn);
+}
+.ui-hint {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--sub);
+  line-height: 1.6;
+}
+.ui-hint--error {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+/* DefinitionList */
+.ui-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 14px;
+}
+.ui-dl__row {
+  display: contents;
+}
+.ui-dl dt {
+  color: var(--sub);
+}
+.ui-dl dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Steps */
+.ui-steps {
+  display: flex;
+  gap: 6px;
+  list-style: none;
+  margin: 0 0 18px;
+  padding: 0;
+}
+.ui-steps__item {
+  flex: 1;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--sub);
+}
+.ui-steps__item::before {
+  content: "";
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+  margin-bottom: 5px;
+}
+.ui-steps__item--done::before,
+.ui-steps__item--now::before {
+  background: var(--accent);
+}
+.ui-steps__item--now {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* Table: 狭幅では容器内だけ横スクロール */
+.ui-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.ui-table th {
+  text-align: left;
+  font-size: 12px;
+  color: var(--sub);
+  font-weight: 700;
+  background: var(--accent-pale);
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.ui-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--gray-soft);
+  vertical-align: middle;
+}
+.ui-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.ui-table .ui-table__num {
+  text-align: right;
+  font-family: var(--en);
+  white-space: nowrap;
+}
