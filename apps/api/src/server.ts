@@ -20,6 +20,8 @@ import { IssuerSettingsRepository } from "./modules/issuer-settings/repository.j
 import { IssuerSettingsService } from "./modules/issuer-settings/service.js";
 import { PlanQuoteRepository } from "./modules/plan-quotes/repository.js";
 import { PlanQuoteService } from "./modules/plan-quotes/service.js";
+import { ReferralRepository } from "./modules/referrals/repository.js";
+import { ReferralService } from "./modules/referrals/service.js";
 import { RequestRepository } from "./modules/requests/repository.js";
 import { RequestService } from "./modules/requests/service.js";
 import {
@@ -63,6 +65,7 @@ const app = createApp({
   planQuotes: new PlanQuoteService(
     new PlanQuoteRepository(pool, invoiceRepository),
   ),
+  referrals: new ReferralService(new ReferralRepository(pool)),
   customerAccess: new CustomerAccessService(
     new PostgresCustomerAccessRepository(pool),
   ),

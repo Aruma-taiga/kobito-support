@@ -237,6 +237,7 @@ describe("admin shell (mock a03〜a08)", () => {
       "依頼",
       "入金確認",
       "請求書",
+      "紹介・報酬",
       "設定",
     ]);
     const current = within(nav).getByRole("link", { name: "顧客" });
@@ -248,7 +249,7 @@ describe("admin shell (mock a03〜a08)", () => {
         .getByRole("link", { name: "今日やること" })
         .getAttribute("aria-current"),
     ).toBeNull();
-    expect(within(nav).queryByText(/紹介|LINE|コンビニ/)).toBeNull();
+    expect(within(nav).queryByText(/LINE|コンビニ/)).toBeNull();
     expect(
       within(nav).getByRole("button", { name: "ログアウト" }),
     ).toBeTruthy();

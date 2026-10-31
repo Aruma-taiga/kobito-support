@@ -21,6 +21,7 @@ import type { IssuerSettingsModule } from "./modules/issuer-settings/contracts.j
 import { createAdminIssuerSettingsRoutes } from "./modules/issuer-settings/routes.js";
 import type { PlanQuoteModule } from "./modules/plan-quotes/contracts.js";
 import { createPlanQuoteCustomerRoutes } from "./modules/plan-quotes/routes.js";
+import type { ReferralModule } from "./modules/referrals/contracts.js";
 import type { RequestModule } from "./modules/requests/contracts.js";
 import { createRequestCustomerRoutes } from "./modules/requests/routes.js";
 import {
@@ -47,6 +48,7 @@ export interface AppDependencies {
   invoices: InvoiceModule;
   requests?: RequestModule;
   planQuotes?: PlanQuoteModule;
+  referrals?: ReferralModule;
   customerAccess: CustomerAccessModule;
   publicSettings: {
     getServiceName(): Promise<string>;
@@ -171,6 +173,7 @@ export function createApp(dependencies: AppDependencies) {
       ...(dependencies.planQuotes
         ? { planQuotes: dependencies.planQuotes }
         : {}),
+      ...(dependencies.referrals ? { referrals: dependencies.referrals } : {}),
     }),
   );
 

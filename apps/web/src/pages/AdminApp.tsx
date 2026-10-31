@@ -10,6 +10,7 @@ import { AdminCustomerPage, AdminQueuePage } from "./AdminCustomerPages.js";
 import { AdminLayout } from "./AdminLayout.js";
 import { AdminLoginPage } from "./AdminLoginPage.js";
 import { AdminPlanQuotePage } from "./AdminPlanQuotePage.js";
+import { AdminReferralsPage } from "./AdminReferralsPage.js";
 import {
   AdminRequestCreatePage,
   AdminRequestDetailPage,
@@ -63,6 +64,10 @@ export function AdminApp({
           <Route
             path="customers/:id/plan-quote"
             element={<AdminPlanQuotePage apiClient={apiClient} />}
+          />
+          <Route
+            path="referrals"
+            element={<AdminReferralsPage apiClient={apiClient} />}
           />
           <Route
             path="invoices"

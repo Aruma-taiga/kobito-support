@@ -207,7 +207,15 @@ describe("a02 today's tasks", () => {
       within(nav)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["今日やること", "顧客", "依頼", "入金確認", "請求書", "設定"]);
+    ).toEqual([
+      "今日やること",
+      "顧客",
+      "依頼",
+      "入金確認",
+      "請求書",
+      "紹介・報酬",
+      "設定",
+    ]);
     expect(
       within(nav)
         .getByRole("link", { name: "今日やること" })
