@@ -14,11 +14,11 @@
 |---|---|---|---|
 | 1 | （解消済み）Cloud Run Jobs（`daily` / `notifications` / `retention`）に `WEB_ORIGIN` が渡されていなかった。`config.ts` は `WEB_ORIGIN` を必須にしており、そのままでは Job が起動時に失敗する。**`main.tf` で 3 本に API と同じ `https://app.${var.domain_name}` を渡すよう修正した。** `config.ts` の必須変数は `DATABASE_URL`・`FIREBASE_PROJECT_ID`・`WEB_ORIGIN` の 3 つで、他に不足はない | 修正済み（`terraform validate` と実機の手動実行での確認は未） | 7章 |
 | 2 | `DATABASE_URL` を空ホスト形式（`postgresql://user:pw@/db?host=/cloudsql/…`）で書くと、`config.ts` の `.url()` 検証で**拒否される**。`postgresql://user:pw@localhost/db?host=/cloudsql/<接続名>` の形は `loadConfig` を通り、`pg` が `host` をソケットのディレクトリ（`/cloudsql/<接続名>`）、`localhost` を無視して解釈することをこのリポジトリの `pg` で確認した（Cloud SQL への実接続は未検証）。Terraform README の例も直した | 修正済み | 4章 |
-| 3 | DB マイグレーションと seed は `tsx` を使う手元実行用で、**本番コンテナには入っていない**（Dockerfile は `pnpm deploy --prod` で `db/` も含めない）。本番では手元から Cloud SQL Auth Proxy 経由で実行する形になる | 実装を読んだ結果。**本番での実行方法は別PRで対応中（この手順書では書き換えない）** | 4章 |
-| 4 | **seed は本番でも必須。** `plans`（料金プラン）は seed 以外で入らない。`settings` の初期キーも seed が作る | 設計書・README に明記なし。**本番での seed の実行方法は別PRで対応中** | 4章 |
+| 3 | （解消済み・#58）DB マイグレーションと seed は、以前は `tsx` を使う手元実行用で本番コンテナに入っていなかった。**`apps/api/Dockerfile` に `migrate` ターゲットを追加し、Terraform に手動実行の Cloud Run Job `<prefix>-migrate` を追加した**（`DATABASE_URL` Secret と Cloud SQL 接続を使い、マイグレーション → seed の順に実行） | 修正済み。このイメージを本物の PostgreSQL 16 に対して実行し、1 回目は 8 本適用、2 回目は 0 本（冪等）を確認。**Cloud Run Jobs 上の実行と Cloud SQL への実接続は未確認** | 4.5 |
+| 4 | （解消済み・#58）**seed は本番でも必須。** `plans`（料金プラン）は seed 以外で入らない。`settings` の初期キーも seed が作る。上の `migrate` Job が、マイグレーションに続けて seed を実行する | 修正済み。上記の PostgreSQL 16 で、プラン（税抜 5,000 / 10,000 / 15,000 円と個別見積り）と設定の既定値が入り、顧客・請求書・ユーザーは 0 件であることを確認。seed は既存の設定を上書きしない | 4.5・4.6 |
 | 5 | 発行者情報（会社名・住所・登録番号・振込先）の**実際の取得元は `settings` テーブル**。環境変数 `INVOICE_REGISTRATION_NO` / `BANK_*` / `COMPANY_NAME` / `SERVICE_NAME` は `config.ts` が読み込むが、請求書の発行処理は使っていない（`invoices/repository.ts` は `settings` だけを読む）。Terraform の `company_name` / `service_name` 変数も請求書には効かない | `.env.example` / Terraform とコードの食い違い | 2章 |
 | 6 | 請求書を本番で発行できる条件は、`settings` に **全項目**（サービス名・会社名・住所・`T`+13桁の登録番号・接頭辞・振込先5項目）が入っていること。1つでも欠けると発行不可（`issuer_not_configured`） | コードで確認 | 2章 |
-| 7 | **本番の管理者アカウントを作る手順がリポジトリにない。** `seed:dev-admin` はローカルのエミュレータ専用でガードされている。管理者には、Firebase のユーザー作成、**TOTP の登録**、DB の `user_accounts` への `admin` 行の追加が必要。Web には TOTP の**登録**画面がなく（ログイン時の確認コード入力だけ）、登録手段は未整備 | 未実装（[D] 要対応）。**本番の管理者アカウントの作成と TOTP の登録は別PRで対応中（この手順書では書き換えない）** | 3章 |
+| 7 | （解消済み・#59）本番の管理者アカウントを作る手段と TOTP の登録画面がなかった。**`pnpm --filter @kobito/api admin:bootstrap -- --email=<メール>`（Firebase ユーザーの作成と `user_accounts` への `admin` 行の追加、パスワード設定リンクの出力）と、Web の `/admin/enroll`（TOTP 登録画面）を追加した** | 修正済み。**Firebase の実環境での TOTP 登録とログインは未確認**（Identity Platform の MFA（TOTP）の有効化が前提） | 3.3・4.7 |
 | 8 | （解消済み）`scheduler_paused` が 3 つの Scheduler 全部に効いていた。**`retention_scheduler_paused`（既定 `true`）を追加し、`scheduler_paused` は `daily`・`notifications` のみに効くようにした。** 匿名化は dry-run 確認と承認が済むまで別に止めておける | 修正済み | 8章 |
 | 9 | 顧客のパスワード再設定は `sendPasswordResetEmail(auth, email)` を**追加設定なし**で呼ぶだけ。遷移先 URL の指定（ActionCodeSettings）はない。アプリ側に再設定用の画面（`oobCode` の処理）もないため、Firebase 既定の再設定ページが使われる見込み（Firebase の一般仕様に基づく推定。実環境は未確認）。**管理者ログインには再設定機能がない** | コード確認 | 3章 |
 | 10 | `contact_email`（S-03 の当社あて通知の宛先、通知メールのフッターのお問い合わせ先）は seed が既定値を入れ、**管理画面の発行者設定では編集できない**（編集できる 6 キーに含まれない）。変更は SQL で行う。既定値のドメインは設計書で綴り確認待ちのもの | コード確認 | 2章 |
@@ -35,8 +35,8 @@
 | 段階 | 内容 | 担当 | 章 |
 |---|---|---|---|
 | A | 事前準備：GCP・Cloudflare・ドメイン・KOMOJU 審査・Resend・会社情報 | **[O]** が中心 | 2 |
-| B | Firebase Authentication（Identity Platform）の設定・パスワード再設定・管理者 2 段階認証 | **[O]** 画面操作、**[D]** 管理者登録手段の用意 | 3 |
-| C | Terraform の段階適用・シークレット登録・イメージのビルド・マイグレーション・seed | **[O/D]**（権限のある人がコマンドを実行） | 4 |
+| B | Firebase Authentication（Identity Platform）の設定・パスワード再設定・管理者 2 段階認証の有効化（管理者の作成と TOTP 登録は C の後、3.3 / 4.7） | **[O]** 画面操作 | 3 |
+| C | Terraform の段階適用・シークレット登録・イメージのビルドと push・マイグレーション・seed（`migrate` Job）・Web の配信・管理者の作成と TOTP 登録 | **[O/D]**（権限のある人がコマンドを実行） | 4 |
 | D | 発行者情報の入力（管理画面 `/admin/settings`） | **[O]** | 2 |
 | E | 通し確認（テストモードの KOMOJU・メールを有効にして 1 件通す） | **[O/D]** | 6 |
 | F | カードを有効にする前の確認と KOMOJU の本番 Webhook 登録 | **[O]** | 5 |
@@ -47,7 +47,7 @@
 |---|---|
 | Terraform のコード修正、`terraform fmt` / `validate` / `plan` の確認 | 各サービスの契約・課金・本人確認・審査（GCP、Cloudflare、KOMOJU、Resend） |
 | Job の `WEB_ORIGIN` 不足などコードと設定の食い違いの修正（`WEB_ORIGIN` と `retention_scheduler_paused` は修正済み） | ドメインの綴りの確定と DNS の管理権限 |
-| 管理者の TOTP 登録手段・本番用の管理者登録手順の整備 | 会社名・住所・インボイス登録番号・振込先の確定と入力 |
+| 管理者の登録手順・TOTP 登録手段の整備（#59 で対応済み。実環境での確認は未） | 会社名・住所・インボイス登録番号・振込先の確定と入力 |
 | コマンド列・確認用 SQL の用意 | KOMOJU 本番キー・Webhook の秘密値の発行（値は人が Secret Manager に入れる） |
 | 通し確認の自動テスト（`apps/api/src/e2e/rehearsal.db.test.ts` はローカル DB 用で、本番の代わりにはならない） | `komoju_enabled` / `mail_enabled` / `scheduler_paused` を切り替える最終判断 |
 
@@ -115,25 +115,28 @@ Firebase コンソール（Authentication → Templates → パスワードの�
 
 ### 3.3 管理者の 2 段階認証（TOTP）[O/D]
 
-> **別PRで対応中：** 本番の管理者アカウントの作成と TOTP の登録は別のPRで整備している。この節の手順は、そのPRの内容が決まるまで書き換えない。
-
+管理者の作成と TOTP の登録は #59 で整備された。**DB への接続とログイン画面の配信が前提のため、実際の作業は 4.7（Terraform の適用・マイグレーション・Web の配信の後）で行う。** ここでは、先に行う Identity Platform 側の設定と、コードで確認した事実をまとめる。
 
 コードで確認した事実：
 
 - 管理者の API は、ID トークンの `firebase.sign_in_second_factor` が空でない場合だけ通す（`apps/api/src/platform/auth.ts` の `requireAdmin`）。管理者向け API は ID トークンの失効も確認する（`checkRevoked = true`）。
 - Web の管理者ログイン（`firebase-admin-client.ts`）は、本番（エミュレータなし）では**TOTP の確認コード（6 桁）だけ**を受け付け、電話（SMS）などその他の要素は「未対応」として拒否する。
-- 画面は `getMultiFactorResolver` でログイン時の確認を行うのみ。**TOTP を新規に登録する（QR/シークレットを表示して登録する）画面やスクリプトは、リポジトリに無い。**
+- TOTP の登録は Web の `/admin/enroll`（`AdminEnrollPage.tsx`。`/admin/login` の「初回の2段階認証の登録」リンクから入れる）。クライアント SDK の `TotpMultiFactorGenerator` で秘密鍵を作り、**秘密鍵と otpauth URI を文字で表示する（QR 画像はない）**。すでに MFA を登録済みのアカウントでは「登録済み」と表示して登録しない。
+- 管理者アカウントの作成は `apps/api/scripts/admin-bootstrap.ts`（`pnpm --filter @kobito/api admin:bootstrap`）。使い方は 4.7。
 
-手順：
+先に行う設定 [O]：
 
-- [ ] [O] Identity Platform の設定で**多要素認証（MFA）を有効にし、TOTP を許可**する（コンソールの手順は未確認）。
-- [ ] [O] 管理者になる Firebase ユーザー（メール＋パスワード）を作成する（コンソールまたは Admin SDK）。
-- [ ] [D] **TOTP の登録手段を用意する**（例：一度だけ使う登録用の最小画面またはスクリプトで、クライアント SDK の MFA 登録 API を呼ぶ）。**現状は未整備。** 登録できないと本番の管理画面に入れない。
-- [ ] [D/O] 管理者の uid を DB の `user_accounts` に `role = 'admin'`、`customer_id` なしで追加する（テーブル定義は `db/migrations/001_initial.sql`）。アカウントが見つからないと API は 401 を返す。SQL の例は 4.7 を参照（未実行・未検証）。
+- [ ] Identity Platform の設定で**多要素認証（MFA）を有効にし、TOTP を許可**する。**無効のままだと `/admin/enroll` は「2段階認証の登録を開始できません」と表示して先へ進めない**（`auth/multi-factor-auth-not-enabled` などをこの表示に変換するコード）。コンソールの操作手順は未確認。
+- [ ] 本番の画面ドメイン（`app.<ドメイン>`）が承認済みドメインに入っていること（3.1）。`/admin/enroll` と `/admin/login` は、このドメインの Web から行う。
 - [ ] 開発用のシード（`pnpm dev:seed-admin`、`DEV_ADMIN_*`、`admin:dev-code`）は**本番では使わない。** ローカルのエミュレータ専用で、本番相手にはガードで拒否される。
-- [ ] 管理画面 `/admin/login` で、パスワード → TOTP コードの順でログインでき、2 段階認証なしでは `/admin` の API が 403 になることを確認する。
-- [ ] 管理者アカウントのパスワードを失った場合の復旧手段を決めておく（管理者には再設定画面がない）。Firebase コンソール側での対応になる見込み（未確認）。
+
+作成後の確認（4.7 の手順の後）：
+
+- [ ] `/admin/login` で、パスワード → TOTP コードの順でログインでき、2 段階認証なしでは `/admin` の API が 403 になること（6 章の #7）。
+- [ ] 管理者アカウントのパスワードを失った場合の復旧手段を決めておく（管理者のログイン画面には再設定機能がない）。Firebase コンソール側での対応になる見込み（未確認）。なお、`admin:bootstrap` は既存の管理者に対して再実行すると新しいパスワード設定リンクを出力する（コードの動き。実環境では未確認）が、MFA の登録は消さない。TOTP の端末を失った場合の復旧は未整備。
 - [ ] 管理者は少なくとも 2 名か、復旧用の手順を決める（1 名だけだと TOTP の端末を失ったとき管理画面に入れない。設計書は「taiga さんだけ」。判断は [O]）。
+
+**Firebase の実環境での TOTP 登録とログインは未確認。** 自動テストとエミュレータ上の確認はあるが、本番の Identity Platform では一度も通していない。
 
 ---
 
@@ -153,6 +156,7 @@ Firebase コンソール（Authentication → Templates → パスワードの�
 | `mail_enabled` | `false` | Resend のドメイン検証と Secret 登録の後（6章の通し確認の前） |
 | `pdf_storage_gcs_enabled` | `false` | GCS 保存の実環境確認の後。**下の注意を参照** |
 | `api_image` | プレースホルダ | イメージをビルドして登録した後に実際のタグを渡す |
+| `migrate_image` | **既定値なし（必須）** | `--target migrate` でビルドして登録したイメージのタグ。`migrate` Job が使う（4.4・4.5） |
 | `database_password_secret_version` | `"1"` | DB パスワードの Secret にバージョンを入れた後 |
 | `cloudflare_api_token` | 空 | 環境変数で渡す（ファイルに書かない） |
 
@@ -168,8 +172,8 @@ Firebase コンソール（Authentication → Templates → パスワードの�
   2. [O] DB パスワードの値を Secret `<prefix>-database-password` にバージョンとして登録する（4.3 のコマンド）。そのバージョン番号を `database_password_secret_version` に入れる（`data` が版を読むため、版がないと `plan` 自体が失敗する）。
   3. [D/O] `terraform apply -target=google_sql_database_instance.main -target=google_sql_database.app -target=google_sql_user.app`。Cloud SQL は削除保護あり、`db-f1-micro`、自動バックアップと PITR 有効。
   4. [O] Terraform の state に DB パスワードが含まれうる。**GCS backend を有効化する前に state の保管先を厳格に保護**し、アクセス権を限定する（`versions.tf` の GCS backend はコメントアウトされている）。
-- [ ] **マイグレーションと seed（4.5・4.6）**：README は「別途、承認済みの手順で実行」とだけ書いている。
-- [ ] **README 3**：Artifact Registry に API イメージをビルド・登録し、`api_image` に渡す（4.4）。
+- [ ] **README 3**：Artifact Registry に API イメージと migrate イメージをビルド・登録し、`api_image` と `migrate_image` に渡す（4.4）。`migrate_image` は**既定値のない必須変数**（`variables.tf`）で、`api_image` と違いプレースホルダがない。段階適用の `plan` / `apply` でも値を求められるため、前の段階ではダミーのタグを渡す（動作は未検証）。
+- [ ] **マイグレーションと seed（4.5・4.6）**：`migrate` Job を作り、`gcloud run jobs execute <prefix>-migrate --wait` で実行する。DB パスワードと `DATABASE_URL` の Secret、Cloud SQL が先にできている必要がある。
 - [ ] **README 4**：アプリ Secret の必要な版を登録（4.3）してから Cloud Run API を起動し、ヘルスチェック・認証・Webhook の疎通を確認する。
   - Cloud Run は版のない Secret を参照すると起動に失敗する。このため `DATABASE_URL` は必須。`KOMOJU_*` と `RESEND_API_KEY` / `MAIL_FROM` は、それぞれの有効化変数が false の間は Cloud Run に渡らない。
   - [ ] `GET <API の URL>/healthz` が `{"status":"ok"}` を返す。
@@ -179,6 +183,7 @@ Firebase コンソール（Authentication → Templates → パスワードの�
   - Web のビルドには `VITE_FIREBASE_API_KEY`、`VITE_FIREBASE_AUTH_DOMAIN`、`VITE_FIREBASE_PROJECT_ID`、`VITE_FIREBASE_APP_ID`、`VITE_API_BASE_URL`（`https://api.<ドメイン>`。パスなし、`https` 必須）が**ビルド時に**必要。`VITE_LINE_ENABLED` は `false` のままにする（LINE は本番未接続）。
   - 配信方式は未決（要点 12）。Terraform の Pages プロジェクトは Git 連携先がプレースホルダで、デプロイ無効（誤デプロイ防止）。Pages にするならプレースホルダを実際のアカウント/リポジトリに直して有効化、Workers 静的アセットにするなら `apps/web/wrangler.toml`（`name = "kobito-support-web"`、`directory = "./dist"`）を使い、Terraform の Pages は使わない。[O/D] が決める。
   - API の CORS は `WEB_ORIGIN`（`https://app.<ドメイン>`）の 1 つだけを許可する。画面のドメインがこれと一致していることを確認する。
+- [ ] **管理者の作成と TOTP の登録（4.7）**：Web が `app.<ドメイン>` で配信され、マイグレーション済み（4.5）で、Identity Platform の MFA（TOTP）が有効（3.3）になった後に行う。`admin:bootstrap` は手元から Cloud SQL Auth Proxy 経由で DB に接続する。
 - [ ] **README 6**：メール送信、決済、バックアップ復元、各 Job の dry run 相当の手順を検証する（5〜8章）。最後に `scheduler_paused = false` にする（`retention` は `retention_scheduler_paused` で別に制御し、8.3 の確認まで `true` のまま）。
 
 ### 4.3 シークレットの登録
@@ -220,49 +225,106 @@ unset SECRET_VALUE
 ### 4.4 API イメージのビルドと登録 [D/O]
 
 - [ ] `apps/api/Dockerfile` はリポジトリのルートをコンテキストにする（`COPY . .`）：`docker build -f apps/api/Dockerfile -t <リージョン>-docker.pkg.dev/<プロジェクト>/<リポジトリ>/<イメージ>:<タグ> .`。登録先は `terraform output artifact_registry_repository`（実行は未検証）。
+- [ ] **migrate イメージ**も同じ Dockerfile の `migrate` ターゲットから作り、同様に登録する：`docker build -f apps/api/Dockerfile --target migrate -t <リージョン>-docker.pkg.dev/<プロジェクト>/<リポジトリ>/<イメージ名>:<タグ> .`。タグは `api_image` と別にし、`migrate_image` に渡す。`.dockerignore` により `.env` などのローカル環境ファイルはコンテキストに含まれない（`infra/terraform/README.md`）。このイメージはビルド段階をそのまま使うため大きく、ソースと `db/migrations` を含む。非 root（`node`）で動く。
 - [ ] `docker push` の前に Artifact Registry への認証（`gcloud auth configure-docker <リージョン>-docker.pkg.dev`）が必要。
 - [ ] ビルドに使う pnpm は Dockerfile で `pnpm@10.22.0` に固定されている（ルートの `packageManager` と一致）。
 - [ ] イメージには Chromium と日本語フォント（Noto CJK）が入り、`INVOICE_CHROMIUM_EXECUTABLE=/usr/bin/chromium`、実行ユーザーは `node`（非 root）。**本番イメージをビルドして、非 root のコンテナ内で、日本語の PDF が生成できることは確認済み**（Chromium のサンドボックスは、コンテナ内のみ `INVOICE_CHROMIUM_SANDBOX=false` で無効。#56）。**Cloud Run 上の実動作とメモリは未確認**（API と日次ジョブは `pdf_render_memory`、既定 2Gi）（10.1）。
 - [ ] イメージ内に `dist/server.js` と `dist/jobs/*-script.js` があることを確認する（未確認。`pnpm deploy --prod` が `dist` を含める前提）。
 - [ ] `latest` ではなく**タグまたはダイジェストを固定**して `api_image` に渡す（戻し方が楽になる）。
 
-### 4.5 DB のマイグレーション [D/O]
+### 4.5 DB のマイグレーションと seed（`migrate` Job）[D/O]
 
-> **別PRで対応中：** 本番でのマイグレーション／seed の実行方法は別のPRで整備している。この節の手順は、そのPRの内容が決まるまで書き換えない。
+本番では、手元から DB を直接操作せず、Terraform が作る Cloud Run Job `<prefix>-migrate`（手動実行のみ。Scheduler はない）で行う（#58）。この Job は migrate イメージ（4.4）を使い、`DATABASE_URL` Secret と Cloud SQL 接続（`/cloudsql` のマウント）を受け取り、**マイグレーション（`pnpm --filter @kobito/db migrate`）→ seed（`pnpm --filter @kobito/db seed`）の順**に実行する。どちらかが失敗すれば Job は失敗する。
 
+事前に必要なもの：
 
-- コマンドは `pnpm db:migrate`（= `@kobito/db` の `tsx scripts/migrate.ts`）。`db/migrations/` の `NNN_name.sql` を順に適用し、履歴は `schema_migrations`（ファイルの SHA-256 つき）に残す。排他ロックあり。現在 `001`〜`008`。
-- **本番での実行場所**：本番コンテナには `tsx` も `db/` も入っていない（Dockerfile は API の本番依存だけを配置）。Cloud Run Jobs では実行できないため、**手元（または信頼できる作業端末）から Cloud SQL Auth Proxy 経由で実行する形**になる。Cloud SQL は公共 IPv4 が有効だが承認済みネットワークは設定していない（`main.tf`）ため、直接接続ではなく Proxy を使う。
-- [ ] Cloud SQL Auth Proxy を起動する（`cloud-sql-proxy <接続名> --port 5432`。コマンドは未検証）。
-- [ ] `DATABASE_URL` を**環境変数で**渡す。例：`postgresql://kobito_app:<パスワード>@127.0.0.1:5432/kobito_support`（パスワードは 4.3 と同じ方法で読み込む。コマンド行に直書きしない）。`dotenv` は既存の環境変数を上書きしないので、ローカルの `.env` があっても環境変数が優先される。
-- [ ] `pnpm install --frozen-lockfile` の後、`pnpm db:migrate` を実行する。`Database migrations complete (N applied).` を確認する。
-- [ ] **`pnpm db:reset` は本番では使わない。** データベースを作り直すコマンドで、ローカルの `kobito_support`（`localhost` 系のホスト）以外は拒否されるが、手順としても使わない。
+- [ ] DB パスワードの Secret（4.2 README 2）と、`DATABASE_URL` Secret の版（4.3。接続名を使うソケット形式）が登録済みである。Job は `version = "latest"` で参照する。
+- [ ] **DB ユーザー `kobito_app` に、`public` スキーマへテーブルを作る権限があること。** `infra/terraform/README.md` は「必要に応じて DB 管理者として `GRANT USAGE, CREATE ON SCHEMA public TO kobito_app;` を実行する」としている（PostgreSQL 15 以降は `public` への作成権限が既定で付かない見込み。DB 管理者としてどう接続するか（管理者ユーザーのパスワードの設定を含む）は手順がなく、**未確認**）。この権限が無いとマイグレーションは失敗する。001 は `create extension if not exists pgcrypto` も実行する。`kobito_app` にこの作成権限が足りるかは**未確認**。
+- [ ] `migrate_image` を登録済みのタグにして Terraform を適用し、Job `<prefix>-migrate` ができている。Secret の版が無い状態では Job を作れない可能性がある（未確認）。このため、適用は Secret 登録の後に行う。
 - [ ] マイグレーションの実行前に Cloud SQL のバックアップを取る（9.2 の復元手順を参照）。
+
+実行：
+
+```bash
+gcloud run jobs execute <prefix>-migrate --region=<リージョン> --project=<プロジェクトID> --wait
+```
+
+- [ ] 実行の成否を Cloud Run Jobs の実行履歴で確認し、ログに `Database migrations complete (N applied).` が出ること、続けて seed が完走していることを確認する。ログに接続情報や値は出ない設計（失敗時は「Database migration failed. Connection details were not logged.」とだけ出る）。
+- [ ] 1 回目は `db/migrations` の `001`〜`008`（8 本）が適用される。**2 回目以降の実行は 0 本で、冪等**（履歴は `schema_migrations` にファイルの SHA-256 つきで残り、排他ロックあり）。リリースでマイグレーションが増えるたびに、新しい migrate イメージを登録し、`migrate_image` を更新して適用し、再実行する。
+- [ ] **`pnpm db:reset` は本番では使わない。** データベースを作り直すコマンドで、ローカルの `kobito_support`（`localhost` 系のホスト）以外は拒否されるが、手順としても使わない。
 - [ ] CI は `docs/schema-v1.sql` を PostgreSQL 16 で検証しているが、`db/migrations` と schema-v1 が一致するかは、この調査では確認していない。
+
+確認できていること・できていないこと：
+
+- 確認済み：このイメージを本物の PostgreSQL 16 に対して実行し、1 回目は 8 本適用、プランと設定の既定値が入り、顧客・請求書・ユーザーは 0 件。2 回目は 0 本で冪等。
+- **未確認：Cloud Run Jobs 上での実行、Cloud SQL への実接続、`gcloud run jobs execute` のコマンドの書式**（`infra/terraform/README.md` も「実環境では未検証」としている）。
 
 ### 4.6 初期データ（seed）[D/O]
 
-> **別PRで対応中：** 本番でのマイグレーション／seed の実行方法は別のPRで整備している。この節の手順は、そのPRの内容が決まるまで書き換えない。
+seed（`db/src/seed.ts`）は 4.5 の `migrate` Job が、マイグレーションに続けて自動で実行する。**本番でも必須。** 手元からは実行しない。内容は次の通り：
 
+- `plans`：ライト（5,000）、スタンダード（10,000）、プレミアム（15,000）、個別見積り。`valid_from` は 2026-10-25 で、価格は税抜（`price_excl_tax`）。
+- `settings` の初期キー：`service_name`（既定値あり）、`company_name`・`company_address`・`invoice_registration_no`（空）、`invoice_prefix`（`KS`）、`bank_account`（空の項目）、`contact_email`（既定値あり）、`konbini_fee_yen`（null）。
+- **既存の `plans` / `settings` の行は上書きしない**（`on conflict do nothing`）。管理者が管理画面で編集した値は、再実行しても保たれる。
+- 顧客・請求書・ユーザーなどの開発用の架空データは作らない（4.5 で 0 件を確認済み）。
 
-- [ ] `pnpm db:seed`（`db/src/seed.ts`）を、4.5 と同じ接続で実行する。**本番でも必須。** 内容は次の通り（`on conflict do nothing`で何度実行しても安全）：
-  - `plans`：ライト（5,000）、スタンダード（10,000）、プレミアム（15,000）、個別見積り。`valid_from` は 2026-10-25 で、価格は税抜（`price_excl_tax`）。
-  - `settings` の初期キー：`service_name`（既定値あり）、`company_name`・`company_address`・`invoice_registration_no`（空）、`invoice_prefix`（`KS`）、`bank_account`（空の項目）、`contact_email`（既定値あり）、`konbini_fee_yen`（null）。
+- [ ] 4.5 の実行後、`plans` に 4 件、`settings` に初期キーが入っていることを確認する（確認用の SQL は未用意。管理画面の `/admin/settings` で発行者情報が読めることでも間接的に確認できる）。
 - [ ] 公開料金表（税別 5,000 / 10,000 / 15,000 円、追加 1 クレジット 4,000 円）と `plans` の値が一致することを確認する（追加クレジットの単価がどこに保存されるかは、この調査では未確認）。
 - [ ] **開発用のデータ投入（`dev:seed-auth`、`dev:seed-billing`、`dev:seed-admin`）は本番で使わない。**
 - [ ] seed の後に、2 章の発行者情報を管理画面から入れる。
 
-### 4.7 管理者の登録（確認用 SQL）
+### 4.7 管理者の作成と TOTP の登録 [O/D]
 
-> **別PRで対応中：** 本番の管理者アカウントの作成と TOTP の登録は別のPRで整備している。この節の手順は、そのPRの内容が決まるまで書き換えない。
+#59 で追加された `admin:bootstrap` と `/admin/enroll` を使う。**順序：4.5（マイグレーション）と Web の配信（4.2 README 5）が済み、Identity Platform の MFA（TOTP）が有効（3.3）になってから行う。** 全体では「Terraform の適用 → イメージのビルドと push → `migrate` の実行 → `admin:bootstrap` → TOTP の登録 → Scheduler の解除（8章）」の順になる。
 
+#### (a) 管理者アカウントの作成（手元で実行）
 
-管理者の Firebase ユーザー作成と TOTP 登録（3.3）の後、管理者の uid を DB に登録する。**未実行・未検証。**
+`admin:bootstrap` は Firebase Admin SDK と DB の両方に接続するため、手元の端末に次を用意する。
 
-```sql
--- <ADMIN_UID> は Firebase のユーザー ID（実在の値は書かない）
-insert into user_accounts (auth_user_id, role) values ('<ADMIN_UID>', 'admin');
+- [ ] 本番の **ADC（Application Default Credentials）**：`gcloud auth application-default login`。Firebase ユーザーの作成とパスワード設定リンクの生成ができる権限が必要（必要なロールは未確認。サービスアカウント鍵ファイルは作らない・配布しない）。
+- [ ] 環境変数 `FIREBASE_PROJECT_ID`（本番の Firebase / GCP のプロジェクト ID。3.1 の前提）。
+- [ ] 環境変数 `DATABASE_URL`（下記の Proxy 経由の形）。**どちらかが無いとスクリプトは「Required configuration is missing」で終了する。**
+- [ ] **`FIREBASE_AUTH_EMULATOR_HOST` を設定しない。** 設定されていると、エミュレータ向けの誤操作を防ぐために**スクリプトが実行を拒否する**。スクリプトはリポジトリルートの `.env` も読むので（既存の環境変数は上書きしない）、ローカル開発用の `.env` にエミュレータ向けの設定があると拒否される。本番用の作業は、ローカル用の設定を持たない環境で行う。
+- [ ] リポジトリで `pnpm install --frozen-lockfile` を済ませる。
+
+DB への接続（**Cloud SQL Auth Proxy 経由**）：Cloud SQL は公共 IPv4 が有効だが承認済みネットワークは設定していない（`main.tf`）ため、直接接続できない。
+
+- [ ] Cloud SQL Auth Proxy を起動する（`cloud-sql-proxy <接続名> --port 5432`。接続名は `terraform output database_connection_name`。コマンドは未検証）。
+- [ ] `DATABASE_URL` は、Proxy 経由の形にする：`postgresql://kobito_app:<URLエンコードしたパスワード>@127.0.0.1:5432/kobito_support`。**4.3 の Cloud Run 用（`@localhost/…?host=/cloudsql/…`）とは別の値**で、手元のシェルだけで使う。パスワードは 4.3 と同じく対話入力で読み込み、コマンド行に直書きしない・履歴に残さない。
+- [ ] Proxy 経由の接続を使う権限（`roles/cloudsql.client`）が実行者にあること（未確認）。
+
+実行：
+
+```bash
+pnpm --filter @kobito/api admin:bootstrap -- --email=<管理者のメール>
 ```
+
+- [ ] 出力は `管理者アカウントを準備しました。パスワード設定リンク（…）: <URL>` の 1 行。**このリンクは秘密。** チャット・Issue・ログ・メモに貼らない。実行した本人だけが開く。リンクの有効期限はコードからは確認できない（Firebase の既定に従うと推定。未確認）。
+- [ ] スクリプトの動き（`admin-bootstrap.ts`）：メールの Firebase ユーザーが無ければ、ランダムなパスワードで作成する。`user_accounts` に `role = 'admin'`・`customer_id = null` の行を追加する（既にあれば何もしない）。**同じ uid の顧客アカウントがある場合は拒否する**（顧客を管理者に変えない）。無効化されたユーザーも拒否する。何度実行しても、行は増えない。
+- [ ] 失敗時の出力は `管理者の準備に失敗しました: <エラー名>`。メールアドレスや認証情報は出力しない。
+- [ ] DB に管理者の行が入ったことを確認する（管理者のみの確認用 SQL。`customer_id` が空で `role = 'admin'` の行が 1 件）：`select auth_user_id, role, customer_id from user_accounts where role = 'admin';`（未実行）。この行が無いと API は 401 を返す。
+- [ ] **作業が終わったら Proxy を止め、`DATABASE_URL` などの環境変数を消す。**
+
+#### (b) パスワードの設定と TOTP の登録（Web）
+
+- [ ] 1. 出力されたリンクを開き、管理者のパスワードを設定する。リンクの遷移先は、現状のコードでは指定しない（Firebase 既定のページ。3.2 と同じ）。
+- [ ] 2. `https://app.<ドメイン>/admin/login` から「初回の2段階認証の登録」を開く（直接 `/admin/enroll` でもよい）。
+- [ ] 3. `/admin/enroll` で、**メールアドレスとパスワード**でサインインし、「登録を開始」を押す。
+- [ ] 4. 画面に **秘密鍵と otpauth URI が文字で表示される（QR 画像はない）**。認証アプリで「設定キーを入力」を選び、**秘密鍵を手入力**する。秘密鍵は画面を閉じると消える。人に見せない・保存しない。
+- [ ] 5. 認証アプリに表示された **6 桁のコード**を入力し、「登録する」を押す。
+- [ ] 6. 成功の表示が出たら「サインアウト」を押す。
+- [ ] 7. `/admin/login` に戻り、**メール＋パスワード → TOTP の 6 桁コード**でログインする。`/admin` の画面に入れること、2 段階認証なしでは管理 API が 403 になることを確認する（6 章の #7）。
+
+画面の表示と対処：
+
+| 表示 | 意味と対処 |
+|---|---|
+| 「このアカウントにはすでに2段階認証が登録されています」 | すでに登録済み。通常の `/admin/login` を使う |
+| 「セキュリティ確認のため、いったんログアウトし、もう一度ログインしてから登録してください」 | 再認証が必要。サインインし直して最初からやり直す |
+| 「2段階認証の登録を開始できません。管理者に設定状況をご確認ください」 | Identity Platform の MFA（TOTP）が無効の可能性（3.3） |
+| 「コードを確認できませんでした」 | 最新の 6 桁を入力する。端末の時刻のずれにも注意 |
+
+**Firebase の実環境での TOTP の登録とログインは未確認**（Identity Platform の MFA（TOTP）の有効化が前提）。最初の 1 件は [O] が画面を見ながら行い、結果をこの手順書に反映する。
 
 ---
 
@@ -439,8 +501,9 @@ gcloud run jobs execute <prefix>-retention --region=<リージョン> --project=
 | 入金が反映されない | 管理画面「今日やること」の**支払いの要確認**（Webhook の受信箱で処理できなかったイベント）と**失敗した請求**。KOMOJU 管理画面の Webhook 配信履歴 |
 | メールが届かない | 管理画面「今日やること」の**通知の送信失敗**（理由：`mail_http_4xx` / `mail_http_5xx` / `mail_network_error` など）と再送、Resend の管理画面、`notifications` Job の実行履歴 |
 | PDF が出ない | Cloud Run のログ（`Invoice Chromium executable is not configured`、タイムアウト 15 秒など）、GCS のバケット、`pdf_storage_gcs_enabled` の設定 |
+| マイグレーションが失敗する | Cloud Run Jobs の `<prefix>-migrate` の実行履歴とログ（接続情報は出ない）。`kobito_app` の `public` スキーマへの作成権限、`DATABASE_URL` Secret の版 |
 | 定時処理が動かない | Cloud Scheduler の状態（paused）とログ、Cloud Run Jobs の実行履歴と標準出力（JSON の結果）、Job の環境変数（7 章の `WEB_ORIGIN`） |
-| 管理者がログインできない | Firebase の MFA 設定、`user_accounts` に管理者の行があるか（無いと 401）、TOTP の時刻ずれ |
+| 管理者がログインできない | Firebase の MFA（TOTP）設定、`/admin/enroll` の登録が済んでいるか、`user_accounts` に管理者の行があるか（無いと 401）、TOTP の時刻ずれ |
 
 ---
 
@@ -461,7 +524,9 @@ gcloud run jobs execute <prefix>-retention --region=<リージョン> --project=
 | Terraform | `fmt` / `validate` / `plan` / `apply` を未実施。provider の属性は未検証 |
 | Docker イメージ内での Job 起動 | 未確認（`dist/jobs/*-script.js`） |
 | Cloud SQL の復元訓練 | 未実施。監視の通知チャンネルも未設定 |
-| 管理者の本番 TOTP | Auth Emulator の SMS（電話）で通し確認済みだが、**本番の TOTP の通し確認は未実施**（`docs/implementation-status.md`）。TOTP の登録手段が未整備（3.3） |
+| 管理者の本番 TOTP | 登録画面（`/admin/enroll`）と `admin:bootstrap` は #59 で実装済み。**Firebase の実環境での TOTP 登録とログインは未確認**（Identity Platform の MFA（TOTP）の有効化が前提。3.3・4.7） |
+| `migrate` Job の本番実行 | イメージは本物の PostgreSQL 16 で確認済み（8 本適用、2 回目は 0 本）。**Cloud Run Jobs 上での実行と Cloud SQL への実接続は未確認**（4.5）。`kobito_app` の `public` スキーマへの権限付与（DB 管理者としての接続方法）と、`pgcrypto` の作成権限も未確認 |
+| `gcloud` コマンドの書式 | この手順書の `gcloud run jobs execute`、`--args` による dry-run、`gcloud scheduler jobs pause`、`cloud-sql-proxy` などの書式は未検証 |
 | LINE | 連携ログイン・LIFF のコードはあるが、本番チャネル・LIFF・通知送信は未接続。`LINE_ENABLED` / `VITE_LINE_ENABLED` は `false` のままにする（Terraform は LINE の変数を一切渡さない） |
 | パスワード再設定メール | 実際のメールの受信、テンプレート、遷移は未確認 |
 | `api.<ドメイン>` の接続 | Cloud Run のドメインマッピングが Terraform に無い（4.2） |
