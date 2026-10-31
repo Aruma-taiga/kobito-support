@@ -4,6 +4,8 @@ import {
   adminReferralsResponseSchema,
   buildReferralReport,
   calculatePartnerReward,
+  payReferralRewardsRequestSchema,
+  payReferralRewardsResponseSchema,
   type ReferralRewardRow,
   rewardPayableYen,
 } from "./referrals.js";
@@ -44,6 +46,46 @@ describe("referral month query", () => {
   });
   it("rejects unknown keys", () => {
     expect(adminReferralsQuerySchema.safeParse({ x: "1" }).success).toBe(false);
+  });
+});
+
+describe("referral reward payment schemas", () => {
+  it("validates a payment request and result", () => {
+    expect(
+      payReferralRewardsRequestSchema.safeParse({
+        month: "2026-11",
+        partnerId: "00000000-0000-4000-8000-000000000001",
+        paidOn: "2026-11-14",
+      }).success,
+    ).toBe(true);
+    expect(
+      payReferralRewardsResponseSchema.parse({
+        paidCount: 2,
+        totalPayable: 4400,
+      }),
+    ).toEqual({ paidCount: 2, totalPayable: 4400 });
+  });
+  it.each([
+    {
+      month: "2026-13",
+      partnerId: "00000000-0000-4000-8000-000000000001",
+      paidOn: "2026-11-14",
+    },
+    { month: "2026-11", partnerId: "bad", paidOn: "2026-11-14" },
+    {
+      month: "2026-11",
+      partnerId: "00000000-0000-4000-8000-000000000001",
+      paidOn: "2026-02-30",
+    },
+    {
+      month: "2026-11",
+      partnerId: "00000000-0000-4000-8000-000000000001",
+      paidOn: "0000-01-01",
+    },
+  ])("rejects invalid payment input", (input) => {
+    expect(payReferralRewardsRequestSchema.safeParse(input).success).toBe(
+      false,
+    );
   });
 });
 
@@ -102,6 +144,8 @@ describe("buildReferralReport", () => {
       rewardAmount: 4000,
       taxAmount: 400,
       payableAmount: 4400,
+      unpaidPayableAmount: 4400,
+      paidPayableAmount: 0,
     });
     expect(report.partners[1]?.rows[0]?.status).toBe("paid");
     expect(first?.rows[0]?.status).toBe("unpaid");
@@ -111,6 +155,8 @@ describe("buildReferralReport", () => {
       rewardAmount: 4500,
       taxAmount: 450,
       payableAmount: 4950,
+      unpaidPayableAmount: 4400,
+      paidPayableAmount: 550,
     });
     expect(adminReferralsResponseSchema.safeParse(report).success).toBe(true);
   });

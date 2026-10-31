@@ -6,7 +6,9 @@ export interface AuditEvent {
   action: string;
   targetType: string;
   targetId: string;
-  detail?: Readonly<Record<string, unknown>>;
+  detail?:
+    | Readonly<Record<string, unknown>>
+    | ((result: unknown) => Readonly<Record<string, unknown>>);
 }
 
 const detailKeys = new Set([
@@ -18,6 +20,8 @@ const detailKeys = new Set([
   "removalRequested",
   "removablePermissionsRemoved",
   "checklistComplete",
+  "month",
+  "paidCount",
   "outcome",
 ]);
 
@@ -72,7 +76,13 @@ export async function withAdminAudit<T>(
         event.action,
         event.targetType,
         event.targetId,
-        JSON.stringify(allowlistedDetail(event.detail)),
+        JSON.stringify(
+          allowlistedDetail(
+            typeof event.detail === "function"
+              ? event.detail(result)
+              : event.detail,
+          ),
+        ),
       ],
     );
     return result;

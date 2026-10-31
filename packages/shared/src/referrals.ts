@@ -11,6 +11,49 @@ export const adminReferralsQuerySchema = z
   .strict();
 export type AdminReferralsQuery = z.infer<typeof adminReferralsQuerySchema>;
 
+const calendarDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const [year, month, day] = value.split("-").map(Number);
+    if (!year || !month || !day || month > 12) return false;
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const daysInMonth = [
+      31,
+      leapYear ? 29 : 28,
+      31,
+      30,
+      31,
+      30,
+      31,
+      31,
+      30,
+      31,
+      30,
+      31,
+    ];
+    return day <= (daysInMonth[month - 1] ?? 0);
+  });
+export const payReferralRewardsRequestSchema = z
+  .object({
+    month: referralMonthSchema,
+    partnerId: z.string().uuid(),
+    paidOn: calendarDate,
+  })
+  .strict();
+export type PayReferralRewardsRequest = z.infer<
+  typeof payReferralRewardsRequestSchema
+>;
+export const payReferralRewardsResponseSchema = z
+  .object({
+    paidCount: z.number().int().positive(),
+    totalPayable: z.number().int().nonnegative(),
+  })
+  .strict();
+export type PayReferralRewardsResponse = z.infer<
+  typeof payReferralRewardsResponseSchema
+>;
+
 export const referralRewardTypes = ["appointment", "closing"] as const;
 export type ReferralRewardType = (typeof referralRewardTypes)[number];
 
@@ -43,6 +86,10 @@ export const referralAmountsSchema = z
     taxAmount: yen,
     /** 支払い額＝報酬（税抜）＋消費税 */
     payableAmount: yen,
+    /** 未払い行の報酬（税抜）＋消費税 */
+    unpaidPayableAmount: yen,
+    /** 支払済み行の報酬（税抜）＋消費税 */
+    paidPayableAmount: yen,
   })
   .strict();
 export type ReferralAmounts = z.infer<typeof referralAmountsSchema>;
@@ -121,6 +168,14 @@ function sumAmounts(lines: readonly ReferralRewardLine[]): ReferralAmounts {
     count: lines.length,
     ...totals,
     payableAmount: rewardPayableYen(totals.rewardAmount, totals.taxAmount),
+    unpaidPayableAmount: lines.reduce(
+      (sum, line) => sum + (line.status === "unpaid" ? line.payableAmount : 0),
+      0,
+    ),
+    paidPayableAmount: lines.reduce(
+      (sum, line) => sum + (line.status === "paid" ? line.payableAmount : 0),
+      0,
+    ),
   };
 }
 

@@ -57,6 +57,10 @@ import {
   invoiceDetailSchema,
   invoiceListSchema,
   invoiceReadinessSchema,
+  type PayReferralRewardsRequest,
+  type PayReferralRewardsResponse,
+  payReferralRewardsRequestSchema,
+  payReferralRewardsResponseSchema,
   pendingBankTransfersSchema,
   type RequestEstimate,
   type RetentionItem,
@@ -267,6 +271,20 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
       return request(
         `/api/v1/admin/referrals${search}`,
         adminReferralsResponseSchema,
+      );
+    },
+    payAdminReferralRewards(
+      input: PayReferralRewardsRequest,
+    ): Promise<PayReferralRewardsResponse> {
+      const parsed = payReferralRewardsRequestSchema.safeParse(input);
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      return request(
+        "/api/v1/admin/referrals/payments",
+        payReferralRewardsResponseSchema,
+        {
+          method: "POST",
+          body: JSON.stringify(parsed.data),
+        },
       );
     },
     getApplications(

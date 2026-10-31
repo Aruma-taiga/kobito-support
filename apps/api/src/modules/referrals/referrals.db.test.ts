@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { adminReferralsResponseSchema } from "@kobito/shared";
+import {
+  adminReferralsResponseSchema,
+  payReferralRewardsResponseSchema,
+} from "@kobito/shared";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type AppDependencies, createApp } from "../../app.js";
@@ -46,6 +49,7 @@ const ids = {
   payments: [] as string[],
   partners: [] as string[],
   referrals: [] as string[],
+  rewards: [] as string[],
 };
 
 function requireRow<T>(row: T | undefined): T {
@@ -178,9 +182,9 @@ async function makeReward(
   );
   const referralId = requireRow(referral.rows[0]).id;
   ids.referrals.push(referralId);
-  await pool.query(
+  const result = await pool.query<{ id: string }>(
     `insert into partner_rewards(referral_id,payment_id,target_month,month_index,base_amount,reward_amount,tax_amount,paid_on)
-     values($1,$2,$3,1,$4,$5,$6,$7)`,
+     values($1,$2,$3,1,$4,$5,$6,$7) returning id`,
     [
       referralId,
       paymentId,
@@ -191,6 +195,9 @@ async function makeReward(
       paidOn,
     ],
   );
+  const rewardId = requireRow(result.rows[0]).id;
+  ids.rewards.push(rewardId);
+  return rewardId;
 }
 
 const get = (
@@ -200,6 +207,16 @@ const get = (
 ) =>
   app.request(`/api/v1/admin/referrals${query}`, {
     headers: { authorization: `Bearer ${token}` },
+  });
+
+const postPayment = (body: unknown, token = adminToken) =>
+  makeApp().request("/api/v1/admin/referrals/payments", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
   });
 
 let partnerA: Awaited<ReturnType<typeof makePartner>>;
@@ -247,6 +264,12 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  await pool.query("delete from audit_logs where actor=any($1::text[])", [
+    [adminUid, noMfaUid],
+  ]);
+  await pool.query("delete from partner_rewards where id=any($1::uuid[])", [
+    ids.rewards,
+  ]);
   await pool.query(
     "delete from partner_rewards where referral_id=any($1::uuid[])",
     [ids.referrals],
@@ -301,6 +324,8 @@ describe("GET /api/v1/admin/referrals", () => {
       rewardAmount: 4000,
       taxAmount: 400,
       payableAmount: 4400,
+      unpaidPayableAmount: 4400,
+      paidPayableAmount: 0,
     });
     const hidamari = requireRow(
       a.rows.find((r) => r.shopName.endsWith("ひだまり")),
@@ -366,6 +391,8 @@ describe("GET /api/v1/admin/referrals", () => {
       rewardAmount: 0,
       taxAmount: 0,
       payableAmount: 0,
+      unpaidPayableAmount: 0,
+      paidPayableAmount: 0,
     });
   });
 
@@ -401,5 +428,90 @@ describe("GET /api/v1/admin/referrals", () => {
     expect((await get(app, "?month=2026-11", noMfaToken)).status).toBe(403);
     expect((await app.request("/api/v1/admin/referrals")).status).toBe(401);
     expect((await get(app, "?month=2026-11", customerToken)).status).toBe(404);
+  });
+});
+
+describe("POST /api/v1/admin/referrals/payments", () => {
+  it("marks only the partner/month unpaid rows, preserves paid rows, totals reward plus stored tax, and audits", async () => {
+    const partner = await makePartner("payment-target", "closing", "0.200");
+    const otherPartner = await makePartner("payment-other", "closing", "0.200");
+    const unpaid1 = await makeReward(partner, "pay-one", "2026-11", {
+      base: 5000,
+      reward: 1000,
+      tax: 100,
+    });
+    const unpaid2 = await makeReward(partner, "pay-two", "2026-11", {
+      base: 15000,
+      reward: 3000,
+      tax: 300,
+    });
+    const paid = await makeReward(
+      partner,
+      "pay-already-paid",
+      "2026-11",
+      { base: 5000, reward: 500, tax: 0 },
+      "2026-11-03",
+    );
+    const other = await makeReward(
+      otherPartner,
+      "pay-other-partner",
+      "2026-11",
+      { base: 5000, reward: 700, tax: 70 },
+    );
+    const otherMonth = await makeReward(partner, "pay-other-month", "2026-10", {
+      base: 5000,
+      reward: 900,
+      tax: 90,
+    });
+    const request = {
+      month: "2026-11",
+      partnerId: partner.id,
+      paidOn: "2026-11-14",
+    };
+    const response = await postPayment(request);
+    expect(response.status).toBe(200);
+    expect(
+      payReferralRewardsResponseSchema.parse(await response.json()),
+    ).toEqual({ paidCount: 2, totalPayable: 4400 });
+    const states = await pool.query<{ id: string; paid_on: string | null }>(
+      "select id, paid_on::text as paid_on from partner_rewards where id=any($1::uuid[])",
+      [[unpaid1, unpaid2, paid, other, otherMonth]],
+    );
+    expect(
+      Object.fromEntries(states.rows.map((row) => [row.id, row.paid_on])),
+    ).toEqual({
+      [unpaid1]: "2026-11-14",
+      [unpaid2]: "2026-11-14",
+      [paid]: "2026-11-03",
+      [other]: null,
+      [otherMonth]: null,
+    });
+    expect((await postPayment(request)).status).toBe(409);
+    const audit = await pool.query<{
+      detail: { month: string; paidCount: string };
+    }>(
+      "select detail from audit_logs where actor=$1 and target_id=$2 and action='partner_reward.paid' order by at desc limit 1",
+      [adminUid, partner.id],
+    );
+    expect(audit.rows[0]?.detail).toEqual({ month: "2026-11", paidCount: "2" });
+  });
+
+  it("rejects future and before-month dates, reports zero unpaid rows, and requires second factor", async () => {
+    const partner = await makePartner("payment-empty", "appointment", "0.100");
+    const base = { month: "2026-11", partnerId: partner.id };
+    expect((await postPayment({ ...base, paidOn: "2026-11-15" })).status).toBe(
+      422,
+    );
+    expect((await postPayment({ ...base, paidOn: "2026-10-31" })).status).toBe(
+      422,
+    );
+    expect((await postPayment({ ...base, paidOn: "2026-11-14" })).status).toBe(
+      409,
+    );
+    const noMfa = await postPayment(
+      { ...base, paidOn: "2026-11-14" },
+      noMfaToken,
+    );
+    expect(noMfa.status).toBe(403);
   });
 });

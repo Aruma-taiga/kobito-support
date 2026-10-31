@@ -9,7 +9,10 @@ const admin: Principal = {
   secondFactor: "phone",
 };
 const make = () => {
-  const repository = { listRewards: vi.fn(async () => []) };
+  const repository = {
+    listRewards: vi.fn(async () => []),
+    payRewards: vi.fn(async () => ({ paidCount: 1, totalPayable: 1100 })),
+  };
   const service = new ReferralService(
     repository,
     () => new Date("2026-11-30T16:00:00.000Z"), // 東京では 12/1
@@ -51,5 +54,20 @@ describe("ReferralService", () => {
       service.getAdmin({ ...admin, role: "customer" }, {}),
     ).rejects.toMatchObject({ status: 404 });
     expect(repository.listRewards).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "2026-12-02",
+    "2026-10-31",
+  ])("rejects payment date %s outside month-to-Tokyo-today range", async (paidOn) => {
+    const { repository, service } = make();
+    await expect(
+      service.payAdmin(admin, {
+        month: "2026-11",
+        partnerId: "00000000-0000-4000-8000-000000000001",
+        paidOn,
+      }),
+    ).rejects.toMatchObject({ status: 422, code: "validation_error" });
+    expect(repository.payRewards).not.toHaveBeenCalled();
   });
 });
