@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithCustomToken,
   signInWithEmailAndPassword,
   signOut,
@@ -81,6 +82,9 @@ export function createFirebaseAuthClient(config: WebConfig): AuthClient {
         password,
       );
       return wrapUser(credential.user);
+    },
+    sendPasswordReset: async (email) => {
+      await sendPasswordResetEmail(auth, email);
     },
     signOut: async () => {
       try {

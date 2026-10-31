@@ -23,6 +23,7 @@ export interface AuthClient {
   signInWithCustomToken(token: string): Promise<AuthUser>;
   signUp(email: string, password: string): Promise<AuthUser>;
   signOut(): Promise<void>;
+  sendPasswordReset(email: string): Promise<void>;
 }
 
 export type SessionState =

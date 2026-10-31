@@ -25,6 +25,7 @@ describe("protected session loading", () => {
         email: null,
         getIdToken: async () => "token",
       }),
+      sendPasswordReset: async () => undefined,
       signUp: async () => ({
         uid: "customer-test",
         email: null,

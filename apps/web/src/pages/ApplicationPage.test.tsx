@@ -123,6 +123,7 @@ function setup(
       signedIn = true;
       listener?.(user);
     }),
+    sendPasswordReset: async () => undefined,
     signUp: signUpImpl,
     signOut: vi.fn(async () => {
       listener?.(null);

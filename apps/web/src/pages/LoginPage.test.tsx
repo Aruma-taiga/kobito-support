@@ -14,6 +14,7 @@ function setup(
   contactEmail: string | null = null,
 ) {
   let user: AuthUser | null = null;
+  const sendPasswordReset = vi.fn(async (_email: string) => undefined);
   const listeners = new Set<(current: AuthUser | null) => void>();
   const authClient: AuthClient = {
     currentUser: () => user,
@@ -37,6 +38,7 @@ function setup(
       email: "shop@example.jp",
       getIdToken: async () => "token",
     })),
+    sendPasswordReset,
     signUp: vi.fn(async () => ({
       uid: "new-shop-test",
       email: null,
@@ -122,5 +124,95 @@ describe("login screen copy", () => {
         .getAttribute("href"),
     ).toBe("mailto:info@cingulata.jp");
     expect(document.body.textContent).not.toContain("LINE");
+  });
+});
+
+describe("password reset", () => {
+  afterEach(cleanup);
+  const done =
+    "登録されているメールアドレスの場合、再設定のご案内を送信しました。";
+
+  async function openForm() {
+    const client = setup("/login");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "パスワードを忘れた方" }),
+    );
+    return client;
+  }
+  function fill(value: string) {
+    fireEvent.change(screen.getByLabelText(/メールアドレス/), {
+      target: { value },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /再設定のご案内を送る/ }),
+    );
+  }
+
+  it("shows the entry point and the reset form", async () => {
+    await openForm();
+    expect(
+      screen.getByRole("button", { name: /再設定のご案内を送る/ }),
+    ).toBeTruthy();
+  });
+
+  it("shows the completion text after sending", async () => {
+    const client = await openForm();
+    fill("shop@example.jp");
+    expect(await screen.findByText(new RegExp(done))).toBeTruthy();
+    expect(client.sendPasswordReset).toHaveBeenCalledWith("shop@example.jp");
+  });
+
+  it("shows the same text for an unregistered email", async () => {
+    const client = await openForm();
+    (
+      client.sendPasswordReset as ReturnType<typeof vi.fn>
+    ).mockRejectedValueOnce(
+      Object.assign(new Error("x"), { code: "auth/user-not-found" }),
+    );
+    fill("nobody@example.jp");
+    expect(await screen.findByText(new RegExp(done))).toBeTruthy();
+  });
+
+  it("rejects a malformed email without sending", async () => {
+    const client = await openForm();
+    fill("not-an-email");
+    expect(
+      await screen.findByText("メールアドレスの形式を確認してください。"),
+    ).toBeTruthy();
+    expect(client.sendPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it("disables the button while sending", async () => {
+    const client = await openForm();
+    let release: () => void = () => undefined;
+    (
+      client.sendPasswordReset as ReturnType<typeof vi.fn>
+    ).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    fill("shop@example.jp");
+    const button = await screen.findByRole("button", {
+      name: /送信しています/,
+    });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(button);
+    release();
+    await screen.findByText(new RegExp(done));
+    expect(client.sendPasswordReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a generic error on failure", async () => {
+    const client = await openForm();
+    (
+      client.sendPasswordReset as ReturnType<typeof vi.fn>
+    ).mockRejectedValueOnce(
+      Object.assign(new Error("x"), { code: "auth/network-request-failed" }),
+    );
+    fill("shop@example.jp");
+    expect(await screen.findByText(/送信できませんでした/)).toBeTruthy();
+    expect(screen.queryByText(new RegExp(done))).toBeNull();
   });
 });
