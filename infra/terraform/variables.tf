@@ -30,7 +30,12 @@ variable "database_password_secret_version" {
   type        = string
 }
 variable "scheduler_paused" {
-  description = "外部連携の確認完了まで Scheduler を停止しておく"
+  description = "daily（請求）と notifications（通知）の Scheduler を停止しておく。外部連携の確認完了まで true。匿名化（retention）は retention_scheduler_paused で別に制御する"
+  type        = bool
+  default     = true
+}
+variable "retention_scheduler_paused" {
+  description = "retention（個人情報の匿名化）の Scheduler を停止しておく。本番データを変更する処理のため、初回運用手順の承認まで true のままにする。scheduler_paused とは独立"
   type        = bool
   default     = true
 }
@@ -97,4 +102,10 @@ variable "pdf_storage_gcs_enabled" {
   description = "true にすると API と Jobs の PDF 保存先を既存の非公開請求書バケットに切り替える。本番有効化の承認と GCS の実環境検証後に有効にする。"
   type        = bool
   default     = false
+}
+
+variable "pdf_render_memory" {
+  description = "請求書PDF（Chromium）を生成する Cloud Run（API と日次ジョブ）のメモリ。既定の 512MiB では足りない可能性が高いので 2Gi。実測のうえ調整する。"
+  type        = string
+  default     = "2Gi"
 }

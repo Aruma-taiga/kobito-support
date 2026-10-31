@@ -20,7 +20,7 @@ Cloud Storage は請求書 PDF 用の非公開バケットと 2,555 日（約7�
 3. ドメインの正式な綴りを確認する。設計書には `cingulata.jp` と記載がありますが確認待ちのため、この草案では決め打ちしていません。
 4. KOMOJU 本番審査・加盟店表示名の変更、Resend の本番アカウントと送信ドメインの SPF/DKIM 検証を行う。DNS 値は各サービスが発行した値を変数で渡す。
 5. DB パスワード用 Secret (`<prefix>-database-password`) を Secret Manager に作成し、値を安全な手段で登録する。Terraform の管理対象に取り込んでから、バージョン番号を `database_password_secret_version` に渡す。Terraform の SQL User に設定するため state にパスワードが含まれる可能性がある。GCS backend を有効化する前に state を厳格に保護し、アクセス権を限定する。
-6. アプリ Secret の枠は Terraform が作りますが、値・バージョンは作りません。Cloud Run を起動する前に `DATABASE_URL`、`KOMOJU_WEBHOOK_SECRET`、`RESEND_API_KEY`、`MAIL_FROM` などを登録します。`DATABASE_URL` は Cloud SQL Unix socket (`/cloudsql/<接続名>`) に接続する形式にします。`KOMOJU_SECRET_KEY` と `KOMOJU_WEBHOOK_SECRET` は、変数 `komoju_enabled`（既定 false）が false の間は Cloud Run に渡しません。**この間はカード決済が無効**です（Cloud Run は、版のない Secret を参照すると起動に失敗するため、版を作らないだけでは無効になりません）。カードを有効にする承認後に、Secret の版を登録してから `komoju_enabled = true` にしてください。メールも同様に `mail_enabled`（既定 false）で、`RESEND_API_KEY`・`MAIL_FROM`・`MAIL_PROVIDER` の受け渡しを切り替えます。
+6. アプリ Secret の枠は Terraform が作りますが、値・バージョンは作りません。Cloud Run を起動する前に `DATABASE_URL`、`KOMOJU_WEBHOOK_SECRET`、`RESEND_API_KEY`、`MAIL_FROM` などを登録します。`DATABASE_URL` は Cloud SQL Unix socket に接続する形式にします。例：`postgresql://<ユーザー>:<URLエンコードしたパスワード>@localhost/<DB名>?host=/cloudsql/<プロジェクトID>:<リージョン>:<インスタンス名>`。空ホスト形式（`@/<DB名>?host=...`）は API の環境変数検証（`.url()`）に拒否されるので使いません。`@localhost/` の形は検証を通り、`pg` が `host` のパスをソケットとして解釈することを確認済みです（Cloud SQL への実接続は未検証）。`KOMOJU_SECRET_KEY` と `KOMOJU_WEBHOOK_SECRET` は、変数 `komoju_enabled`（既定 false）が false の間は Cloud Run に渡しません。**この間はカード決済が無効**です（Cloud Run は、版のない Secret を参照すると起動に失敗するため、版を作らないだけでは無効になりません）。カードを有効にする承認後に、Secret の版を登録してから `komoju_enabled = true` にしてください。メールも同様に `mail_enabled`（既定 false）で、`RESEND_API_KEY`・`MAIL_FROM`・`MAIL_PROVIDER` の受け渡しを切り替えます。
 7. Identity Platform を有効化し、Firebase/Identity Platform のプロジェクトを GCP プロジェクトに揃える。メール＋パスワードのサインインを有効にし、管理者アカウントを作成する。管理者には TOTP（二段階認証）を必須化し、API が検証する二段階認証証拠の運用を確認する。Terraform の API 有効化だけでは Identity Platform のテナント・ログイン方式・管理者 MFA は完了しません。
 8. Cloudflare Pages の Git 連携先・アカウント・Zone、Firebase の Web アプリ値を確認する。Pages のデプロイ設定は誤デプロイ防止のため無効です。Web ビルドが `VITE_*` をビルド時に必要とするので、デプロイ手順側にも同じ値を設定します。
 
@@ -31,13 +31,13 @@ Cloud Storage は請求書 PDF 用の非公開バケットと 2,555 日（約7�
 3. Artifact Registry に Dockerfile から API イメージをビルド・登録する。Terraform に `api_image` を渡す。
 4. アプリ Secret の必要な版を登録してから Cloud Run API を起動し、ヘルスチェック・認証・Webhook の疎通を確認する。
 5. Web をビルド/Pages へ接続し、API CORS と Firebase 設定を確認する。
-6. メール送信、決済、バックアップ復元、各 Job の dry run 相当の手順を検証する。最後に `scheduler_paused=false` として Scheduler を有効化する。初期値は `true` です。
+6. メール送信、決済、バックアップ復元、各 Job の dry run 相当の手順を検証する。最後に `scheduler_paused=false` として `daily` と `notifications` の Scheduler を有効化する。初期値は `true` です。個人情報を匿名化する `retention` の Scheduler は別の変数 `retention_scheduler_paused`（初期値 `true`）で制御し、`job:retention --dry-run` の確認と運用手順の承認が済むまで `true` のままにします。
 
 ### Job の実行コマンドと制約
 
 `apps/api/package.json` の `job:*` は `tsx` を呼びますが、`apps/api/Dockerfile` は `pnpm deploy --prod` で本番依存だけを配置するため、`tsx` コマンドは本番イメージにありません。このため Cloud Run Jobs は TypeScript ビルド出力 `node dist/jobs/daily-billing-script.js`、`notifications-script.js`、`retention-script.js` を直接実行する設定です。Dockerfile のビルド出力パスと実際のイメージ内で各ジョブの起動を確認するまでは、稼働可能とみなさないでください。Scheduler の起動リクエストは Google API の OAuth を使います（Cloud Run の HTTP サービス向け OIDC ではなく Cloud Run Jobs API の認証方式）。
 
-`job:retention` は個人情報の匿名化を行う本番データ変更処理です。実行前に削除対象・保持期間・監査を確認し、初回運用手順を承認してください。現在の処理は Firebase アカウント自体を削除しません。
+`retention-script.js` に `--dry-run` を引数で付けると、変更せずに件数だけを出力します（`daily` と `notifications` に dry-run はありません）。`job:retention` は個人情報の匿名化を行う本番データ変更処理です。実行前に削除対象・保持期間・監査を確認し、初回運用手順を承認してください。現在の処理は Firebase アカウント自体を削除しません。
 
 ## PDF の GCS 保存を有効にする前
 

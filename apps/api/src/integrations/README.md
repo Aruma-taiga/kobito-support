@@ -2,9 +2,15 @@
 
 ## KOMOJU
 
-The KOMOJU adapter currently verifies webhook signatures against exact raw request bytes with HMAC-SHA256. It makes no outbound provider HTTP calls and does not process financial events. See `../webhooks/README.md` for the durable inbox and its storage allowlist.
+`komoju/client.ts` creates Hosted Page sessions for single card payments, passing the invoice number plus a short identifier as `payment_data.external_order_num` (see `../webhooks/README.md` for how it is reversed). No card data is handled here; entry happens on KOMOJU's hosted page. `komoju/fake-client.ts` is a test double. `komoju/webhook-signature.ts` verifies webhook signatures against exact raw request bytes with HMAC-SHA256. Processing of stored events is in `../webhooks/`, which also describes the durable inbox and its storage allowlist. Recurring billing (Subscriptions) is not used. Real-merchant behavior was checked only in test mode (W1).
 
-Payment API and other external-service calls are not implemented yet.
+## Mail
+
+`mail/sender.ts` defines the `MailSender` port and a `LogMailSender` development sink. `mail/resend.ts` is the Resend adapter, selected with `MAIL_PROVIDER=resend` together with `RESEND_API_KEY` and `MAIL_FROM`. Real sending has not been verified against a production Resend account and sender domain.
+
+## Storage
+
+`storage/pdf-store.ts` is the invoice PDF store port. `storage/postgres.ts` (default, `PDF_STORAGE=postgres`) is the local adapter. `storage/gcs.ts` stores PDFs in a private Cloud Storage bucket (`PDF_STORAGE=gcs`, `PDF_BUCKET`); `storage/configured.ts` chooses the adapter from configuration. The GCS adapter has not been exercised against a real bucket.
 
 ## LINE Login
 
@@ -16,6 +22,6 @@ Use the API-local `smoke:line-auth` script to exercise the real API composition,
 
 Invoice PDFs are rendered from escaped, self-contained HTML with Playwright Chromium. JavaScript is disabled, the browser context denies every network request, and the HTML CSP blocks network and embedded content. Configure `INVOICE_CHROMIUM_EXECUTABLE` to an absolute Chromium path; the production image installs Debian Chromium and Noto CJK fonts at `/usr/bin/chromium`. PDF generation has a 15-second browser/page timeout and a 5 MiB output limit.
 
-The first deployment stores frozen PDF bytes, MIME type, and SHA-256 in PostgreSQL (`invoice_documents`) in the same transaction as the invoice. This is a temporary local document adapter; production must use a Cloud Storage adapter before issuing invoices externally. If the production document adapter is unavailable, issuance must fail closed. Reads return the stored bytes and never render a replacement.
+The first deployment stores frozen PDF bytes, MIME type, and SHA-256 in PostgreSQL (`invoice_documents`) in the same transaction as the invoice. This is a temporary local document adapter; production should set `PDF_STORAGE=gcs` (see Storage above) before issuing invoices externally. If the production document adapter is unavailable, issuance must fail closed. Reads return the stored bytes and never render a replacement.
 
 For local sample issuance, set `DEV_INVOICE_PREVIEW=1`, run the demo Firebase Auth emulator and use only the loopback `kobito_support` database, then run `pnpm --filter @kobito/api seed:dev-billing`. This helper only sets `invoice_preview_enabled`; it preserves company identity, registration numbers, and bank details. Preview PDFs visibly say `開発用サンプル・お支払い不要 / 正式な請求書ではありません` and show absent registration or bank values as `未設定`. Preview issuance does not queue email notifications. Production configuration cannot enable this flag.
