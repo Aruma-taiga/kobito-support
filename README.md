@@ -1,176 +1,94 @@
 # コビトサポート
 
-TypeScript の基幹システムです。設計と作業順は `docs/`、残りの実装と外部検証は [実装状況](docs/implementation-status.md) を参照してください。
+TypeScript の基幹システムです（`apps/web`＝画面、`apps/api`＝API、`packages/shared`＝共通の計算・検証、`db`＝マイグレーション、`infra`＝インフラ草案、`docs`＝設計書）。
+
+- 設計の正本：[docs/system-design-v1.md](docs/system-design-v1.md)（ほかの設計書も `docs/` にあります）
+- 実装と検証の記録：[docs/implementation-status.md](docs/implementation-status.md)
+- 本番切替の手順と未確認一覧：[infra/GO-LIVE.md](infra/GO-LIVE.md)
+- Terraform の草案：[infra/terraform/README.md](infra/terraform/README.md)
 
 ## 現在の段階
 
-開発基盤、共通計算・入力検証、認証付きAPI、顧客ログイン、5手順の申込フォームと受付保存、管理者の2段階認証・申込審査、審査完了からの初月請求書発行・PDF保存、顧客と管理者の請求書一覧・詳細・ダウンロード、銀行振込の入金確認と契約成立まで実装しています。顧客ホームには店舗名・担当者名、契約状態と利用期間・残りクレジットを表示します。依頼登録・見積の版管理・顧客了承とクレジット予約も実装しています。完了時の予約取消・実績消費も実装しています。審査・入金待ち、初回案内、申込み終了後の画面とAPIの閲覧制限も実装しています。月次処理・実際の通知送信は後続の実装です。
+開発中です。**本番へのデプロイ、実顧客の運用、実メール送信はまだ行っていません。**
+
+### 現在できること（実装済み）
+
+- 申込み（5手順）、受付保存、審査（承認・「承諾しない」）、個別見積り（版管理・顧客の了承）
+- 請求書の発行（PDF 保存）、顧客・管理者の一覧・詳細・ダウンロード、請求書の取消（取消 PDF の表示つき）
+- 入金：銀行振込の確認、カード（KOMOJU の支払いリンクと Webhook の反映）、「要確認」の入金の解決。契約成立とクレジット付与
+- 依頼・見積（版管理）・顧客の了承とクレジット予約・完了時の消費、追加クレジットの購入
+- 毎日の定時処理（期間の切り替え、月額請求書、クレジットの失効、期限切れの失効、解約の終了）
+- メール通知（送信待ちの記録、送信、3回までの再送）と、管理画面での送信失敗の確認
+- 紹介・報酬の計算、報酬の支払日の記録
+- 解約予定・取消・終了、削除予定と匿名化
+- 管理画面（共通UI・左メニュー・今日やること・顧客・請求書・依頼・振込・紹介と報酬・削除予定・発行者設定）と、管理者の TOTP 登録画面
+- お客様のマイページ（契約内容・請求書・依頼と見積・初回案内）
+
+### 実環境で確認済みのもの
+
+- KOMOJU テストモード：支払いリンクの作成、カード決済、拒否カードの失敗から同じ画面でのやり直し、署名つき Webhook の手元配信による入金反映（再配信しても二重にならない）
+- 本番用 Docker イメージ（非 root）での日本語 PDF の生成
+- `migrate` イメージによるマイグレーションと seed（PostgreSQL 16 で、2回目は 0 本適用）
+- 実 PostgreSQL に対する DB テスト（`pnpm test:db`）
+
+### 未確認・未実装のもの
+
+- Cloud Run / Cloud Run Jobs 上での動作、Terraform の `plan`/`apply`（草案のみ）
+- Cloud Storage（`PDF_STORAGE=gcs`）の実バケットでの動作
+- メールの実送信（Resend のアカウント・送信ドメイン設定を含む）
+- Firebase の本番での管理者 TOTP の登録とログイン（ローカルは Auth Emulator の SMS 方式で確認）
+- KOMOJU の本番キー、KOMOJU から公開 URL への実際の Webhook 配信
+- 定期課金は未採用。カードは**請求書ごとの単発の支払いリンク**（毎月お客様が支払う）
+- 報酬の消費税は、パートナーが課税事業者である前提の暫定計算。パートナーの登録・編集画面は未実装
+- LINE は `LINE_ENABLED=false` が既定で、画面・API とも非表示。本番チャネルと通知送信は未接続
+- Firebase アカウントの削除（匿名化 job は削除が必要な uid を返すのみ）
+- 請求書の取消後の出し直し、通知文面の設定化
+
+全体の一覧は [infra/GO-LIVE.md の第10章](infra/GO-LIVE.md) と [docs/implementation-status.md](docs/implementation-status.md) を参照してください。
 
 ## 必要なもの
 
-- Node.js 22.22.2 以上（web test toolchain の jsdom が Node 22.22.2 以上を要求）
-- Corepack
-- Docker Compose
+- Node.js 22.22.2 以上
+- Corepack（pnpm 10.22.0 は `packageManager` で固定）
+- Docker Compose（ローカルの PostgreSQL と Auth Emulator 用）
 
-リポジトリに pnpm 10.22.0 を `packageManager` で固定しています。既存の Volta などのグローバル設定は変更せず、このリポジトリ内だけで Corepack shim を使うには:
+既存のグローバル設定を変えず、このリポジトリ内だけで Corepack shim を使う場合：
 
 ```sh
 mkdir -p .tools/bin
 corepack enable --install-directory "$PWD/.tools/bin"
 export PATH="$PWD/.tools/bin:$PATH"
-pnpm --version
 pnpm install --frozen-lockfile
 ```
 
-`.tools/` は Git 管理外です。Node.js 22.22.2 以上と pnpm 10.22.0 が使われていることを確認してください。
+`.tools/` は Git 管理外です。
 
-## ローカル設定と DB
+## ローカル確認
 
-空欄の `.env.example` はそのまま実行設定には使えません。コピーして、次のローカル開発値を `.env` に設定してください。会社名、住所、インボイス登録番号、銀行口座は空欄のままです。カードは `KOMOJU_SECRET_KEY` が設定されている場合だけ申込みと審査完了が有効になり、請求書に記載した期限までにマイページから支払います。未設定時はカード選択肢を無効にし、APIもカードの申込み・審査完了を拒否します。実KOMOJUでの決済動作は未検証です。コンビニ決済は対象外で、画面・請求書PDFにも表示しません（過去データの支払方法 `konbini` は管理画面で履歴として読めます）。
+### 1. 設定と DB
+
+`.env.example` は空欄の見本です。コピーして `.env`（Git 管理外）を作り、ローカル開発値を設定します。
 
 ```sh
 cp .env.example .env
 ```
 
+最低限の値：
+
 ```dotenv
 NODE_ENV=development
 PORT=3000
 DATABASE_URL=postgres://kobito:kobito@127.0.0.1:55433/kobito_support
-TEST_DATABASE_URL=
 FIREBASE_PROJECT_ID=demo-kobito-support
 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099
 WEB_ORIGIN=http://localhost:5173
-SERVICE_NAME=
-COMPANY_NAME=
 INVOICE_PREFIX=KS
-INVOICE_REGISTRATION_NO=
-BANK_ACCOUNT_NAME=
-BANK_ACCOUNT_BRANCH=
-BANK_ACCOUNT_TYPE=
-BANK_ACCOUNT_NUMBER=
 POSTGRES_USER=kobito
 POSTGRES_PASSWORD=kobito
 POSTGRES_DB=kobito_support
 POSTGRES_PORT=55433
-DEV_AUTH_EMAIL=
-DEV_AUTH_PASSWORD=
-```
-
-Auth Emulator に登録するため、`DEV_AUTH_EMAIL` と `DEV_AUTH_PASSWORD` はローカル専用の値で埋めてください（password は8文字以上）。
-
-PostgreSQL は `127.0.0.1:55433`、Auth Emulator は `127.0.0.1:9099` のみに公開します。Postgres の既定 port を使う場合は `DATABASE_URL` と `POSTGRES_PORT` を合わせてください。reset は Postgres が起動中なら loopback 接続を最大30回（各接続500ms timeout、半秒間隔）試し、準備前は DROP を行いません。`pnpm db:reset` は loopback 上の `kobito_support` のみを削除して作り直します。データが消えるので、必要な値があるときは先に退避してください。テストも `kobito_support_test` だけを自動作成・初期化し、他 DB は使いません。
-
-```sh
-docker compose up -d
-docker compose ps
-pnpm db:reset
-pnpm test:db
-```
-
-## 申込フォームのローカル確認
-
-`/apply/shop` から、お店・プラン・お支払い・ご要望・確認の5手順を進めます。現段階の支払方法は銀行振込で、申込完了時点の契約状態は「審査待ち」です。申込を送信するだけでは請求書の発行や契約成立は行いません。
-
-公開用の法務文書が未確定の場合、ローカル開発でのみ草案を参照できます。`.env` に確認用の文書URLと、その文書に明記された版を設定してください。公開リポジトリに文書の非公開部分や住所・口座などをコピーしないでください。
-
-```dotenv
-LEGAL_TERMS_URL=
-LEGAL_TERMS_VERSION=
-LEGAL_PRIVACY_URL=
-LEGAL_PRIVACY_VERSION=
-LEGAL_DISCLOSURE_URL=
-LEGAL_DISCLOSURE_VERSION=
-OPERATIONS_EMAIL=
-```
-
-URLはHTTPSを指定します。`OPERATIONS_EMAIL` は任意の運営通知先で、空欄なら運営宛通知は作成しません。開発用の設定は次のコマンドで反映します。既存データを残す場合は `db:reset` を使わないでください。
-
-```sh
-pnpm db:migrate
-pnpm dev:seed-auth
-```
-
-草案の受付は開発モード・デモ認証プロジェクト・loopback上のAuth Emulatorと開発DBに限定します。法務設定がない場合や、本番で草案のままの場合は受付を停止します。草案の参照を設定しても、本番公開の承認を意味しません。
-
-新規アカウントの作成は最終送信時にFirebase SDKで行い、申込APIにはIDトークンとパスワードを除いた入力を送ります。DB側の顧客・アカウント対応・申込・契約・同意・通知予定は同じトランザクションで保存します。途中でDB保存に失敗しても、作成した認証ユーザーを使って同じ受付キーで再試行できます。ID PlatformとPostgreSQLを同じトランザクションにはできないため、認証ユーザー作成とDB保存はこの境界で分けています。
-
-固定プランは[公開料金表](https://cingulata.jp/kobito-support/)に合わせ、ライト税別5,000円（税込5,500円）・1C、スタンダード税別10,000円（税込11,000円）・3C、プレミアム税別15,000円（税込16,500円）・5Cです。追加1Cは税別4,000円（税込4,400円）です。DBの金額は税抜で保存し（`docs/schema-v1.sql` と同一の `001_initial.sql`）、消費税は請求書ごとに小計×10%を一度だけ切り捨てて計算します。請求書の税込合計は小計＋消費税で、銀行振込の照合額も税込合計です。申込画面では税別を主、税込を併記します。発行済み請求書とPDFの金額は書き換えません。
-
-確認画面の料金・条件と法務文書の版をサーバーで照合し、変更時は再確認を求めます。通知は `notifications` に送信待ちとして記録するだけで、外部へのメール送信は行いません。既存の紹介コードがある場合は有効性を確認し、紹介先への情報提供の同意も保存します。
-
-## 管理者のローカル審査確認
-
-`.env` の `DEV_ADMIN_EMAIL`、`DEV_ADMIN_PASSWORD`（12文字以上）、`DEV_ADMIN_PHONE`（確認用のE.164形式番号）を設定します。これらはローカルAuth Emulator専用です。通常の顧客アカウントを管理者へ変更する用途には使えません。
-
-```sh
-pnpm dev:seed-admin
-```
-
-起動済みの画面で `http://localhost:5173/admin/login` を開き、上記のメールアドレス・パスワードでログインします。確認コードの入力画面に進んだ後、別のターミナルで次を実行して、最新のローカル確認コードを入力してください。
-
-```sh
-pnpm dev:admin-code
-```
-
-Auth EmulatorはSMS方式の二段階認証に対応していますが、TOTPは未対応です。この手順は実際のSMSを送らずに、エミュレータの認証処理で第2要素付きトークンを得て、通常の管理API制限を検証します。本番は登録済みのTOTPを使う画面実装で、ローカルのSMS確認は本番TOTPの通し確認を代替しません。認証トークンやカスタムクレームを偽造して管理APIを通す仕組みはありません。
-
-`/admin/customers` から審査待ちの一覧を検索し、顧客詳細で申込時の料金・クレジット・同意内容を確認できます。「承諾しない」は申込・契約の状態と操作記録・通知予定を同じトランザクションで保存します。同じ理由での再送は結果を変えず、異なる理由での上書きは拒否します。固定プランの「審査完了・請求書を発行」は初月請求書を作成し、契約を入金待ちへ進めます。個別見積りは見積作成待ちへ進み、金額を仮定した請求書は作りません。見積作成待ちの顧客は `/admin/customers/:id/plan-quote` で月額（税抜）・毎月のクレジット・内容・有効期限（既定は14日後）を入力して送ります。送った版は直せず、直すときは新しい版にして前の版を無効にします（了承済みの版には新しい版を作れません）。顧客は `/me/plan-quote` で税抜の月額と税込額を見て了承でき、期限切れ・差し替え済みの版は了承できません。了承すると初月の請求書を発行します（見積送付のメール・LINE通知はまだありません）。管理画面のトップ `/admin` は「今日やること」で、審査待ち・見積りを作る申込み・振込の消し込み・期限が近い請求（期限まで7日以内または超過）・依頼を件数と短い一覧で表示します。通知は送信待ちの記録のみで、実際のメールは送りません。
-
-管理者セッションは通常の顧客ログインと分離しています。ブラウザ表示の制限に加えて、API側でもDB上の管理者役割・第2要素・トークン失効状態を検証します。
-
-## 発行者設定の管理
-
-管理者の2段階認証で `/admin/settings` を開き、サービス名・会社名・住所・インボイス登録番号・請求番号の接頭辞・振込先を編集します。未確定の会社情報や銀行口座を架空の値で補わず、空欄のまま保存できます。画面に表示する発行者情報の入力状況は、本番PDF保管や法務文書の準備完了を意味しません。
-
-保存時は取得した版を照合します。別の管理者が先に変更した場合は競合を表示し、最新の内容を読み直してから編集します。発行済み請求書・PDFは発行時の情報を保持し、変更後の設定は今後の発行分に使います。接頭辞を変更しても年ごとの採番をリセットしません。公開APIにはサービス名だけを反映し、会社情報や振込先を追加公開しません。
-
-ここで編集できるのは発行者情報です。外部サービスの鍵、料金、通知文面や決済の有効化は扱いません。ローカル確認では既存の会社・銀行設定を変更せず、表示と同じ内容の保存で動作を確認できます。
-
-## 初月請求書のローカル確認
-
-既存データを残してスキーマを更新し、開発専用の請求書プレビューを有効にします。
-
-```dotenv
-DEV_INVOICE_PREVIEW=1
-INVOICE_CHROMIUM_EXECUTABLE=/absolute/path/to/chromium
-```
-
-PDF生成にはChromiumと日本語フォントが必要です。ローカルではインストール済みChromiumの実行ファイルを絶対パスで指定してください。APIコンテナにはChromiumとNoto CJKフォントを含めています。
-
-```sh
-pnpm db:migrate
-pnpm dev:seed-billing
-```
-
-`dev:seed-billing` は開発モード・デモ認証プロジェクト・loopbackのAuth Emulatorと開発DBだけで使え、既存の会社・登録番号・銀行設定を上書きしません。APIを再起動後、管理者の申込詳細から審査を完了してください。プレビューには「開発用サンプル・お支払い不要」と明示し、未設定の登録番号・口座を架空の値で補いません。プレビュー発行時のメール通知予定は作成しません。
-
-`/admin/invoices` と顧客本人の `/me/invoices` で請求書を確認できます。PDFはIDトークンをヘッダーに付けて取得し、公開URLやURL内のトークンは使いません。発行時点の宛先・会社情報・振込先・申込時の料金とクレジット・PDFを保存し、後からプランや設定が変わっても発行済み内容を変えません。発行・採番・状態変更・操作記録・PDF保存は同じトランザクションで確定します。
-
-現段階の文書保管アダプターはローカル確認用のPostgreSQL保存です。設計上の本番保管先であるCloud Storageの接続は未実装で、本番では設定を埋めても発行とPDF取得を拒否します。正式な発行には公開済み法務文書、会社・登録番号・銀行設定と本番文書保管の準備が必要です。デプロイや実際のメール送信は行いません。
-
-## 振込入金確認と契約成立のローカル確認
-
-管理者で `/admin/bank-transfers` を開くと、初月の振込請求が並びます。通帳の入金日と請求に一致する金額を入力し、確認画面から記録します。開発用請求書では「実際の入金ではない」ことへの確認が必要です。プレビュー操作は上記の厳格なローカル環境だけで許可し、成立・クレジット付与の通知予定を作成しません。実際の銀行との通信やメール・LINE送信はありません。
-
-入金日 `paid_on` は通帳の入金日、契約日 `anchor_date` は管理者が確認した日本時間の日付です。契約日から期間1を作り、発行済み請求書に保存したプラン・料金・クレジットを使って付与します。入金・支払い済み・契約成立・期間・付与・操作記録は同じトランザクションで確定し、同じ入力の再送で入金や付与を増やしません。
-
-初月は発行日から支払期限までの入金で、契約が入金待ちの場合に限ります。未来の日付、過不足のある金額、期限後の初月入金、失効した契約の自動再開は拒否します。期限内に入金済みなら、管理者の確認が後日でも入金日を保存できます。期限後の入金や失効後の再開・返金の運用は設計上の確認事項です。
-
-顧客本人は `/me` で契約日・今期の利用期間・残りクレジットを確認できます。入金待ちでは利用可能とは表示しません。対象期間の開始前・終了後のクレジットを今期の残りとして表示しません。請求書のPDFは発行時のまま保ち、画面の支払い状態だけが更新されます。
-
-## 依頼と見積のローカル確認
-
-管理者で `/admin/requests` を開き、利用中の契約を選んで依頼を登録します。見積ではクレジット数・目安日・作業内容・完了の状態を入力し、必要に応じて含まれないもの・準備事項を記載します。送り直した見積は新しい版になり、以前の内容を上書きしません。目安日は作業の予定であり、見積の了承期限ではありません。
-
-顧客本人は `/me/requests` で最新の見積を確認し、内容を了承できます。今期のクレジットが不足する場合や、見積が差し替えられている場合は了承できません。了承とクレジット予約は同じトランザクションで保存し、二重操作や別依頼の同時了承で残高を超えて予約しません。今期の判定は日本時間の日付を使います。
-
-管理者の依頼登録・見積送信は `Idempotency-Key` を付け、同じキーの再送で依頼や見積を増やしません。内容・操作・管理者が異なるキーの再利用は拒否します。管理者の操作記録・通知予定も同じトランザクションで確定します。開発用の契約では見積・作業開始の通知予定を作成せず、実際のメール・LINE送信は行いません。作業中の依頼は、管理者が完了日・実作業時間（分）・実績クレジットを別々に入力して完了できます。見積より実績が少ない場合は差額を戻し、実績が多い場合は警告を確認して実績を記録します。時間からクレジットを自動計算したり、超過分の金額を自動請求したりはしません。予約取消と消費は必ず予約元の期間に記録し、終了済みの期間の未使用差額はその期間で失効させます。完了の同一入力を再送しても消費を増やさず、完了結果・期間・時間・実績クレジットは顧客本人の画面でも確認できます。
-
-## Web ログイン画面
-
-`.env` に次のローカル用 Vite 設定を追加してください。これらは Firebase Auth Emulator のデモ値です。
-
-```dotenv
+DEV_AUTH_EMAIL=<ローカル専用のメールアドレス>
+DEV_AUTH_PASSWORD=<8文字以上のローカル専用パスワード>
 VITE_FIREBASE_API_KEY=fake-api-key
 VITE_FIREBASE_AUTH_DOMAIN=demo-kobito-support.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=demo-kobito-support
@@ -179,94 +97,120 @@ VITE_API_BASE_URL=http://127.0.0.1:3000
 VITE_FIREBASE_AUTH_EMULATOR_URL=http://127.0.0.1:9099
 ```
 
-`.env` の `DEV_AUTH_EMAIL` と `DEV_AUTH_PASSWORD` にローカル専用値を設定し、上の DB 初期化後に開発ユーザーを登録してから API と web dev server を起動します。
+- 会社名・住所・インボイス登録番号・振込先の実行時の正本は `settings` テーブル（管理画面 `/admin/settings`）です。`.env` の同名の変数（`COMPANY_NAME`、`INVOICE_REGISTRATION_NO`、`BANK_ACCOUNT_*` など）は請求書の発行には使われません。架空の値で補わないでください。
+- PostgreSQL（`.env` の `POSTGRES_PORT`。上の例は 55433。未設定の docker-compose の既定は 5432 で、`DATABASE_URL` と揃える）と Auth Emulator（`127.0.0.1:9099`）は loopback のみに公開します。
 
 ```sh
-pnpm dev:seed-auth
-pnpm dev
+docker compose up -d
+docker compose ps
+pnpm db:reset        # kobito_support を削除して作り直し、migration と seed を適用（データが消えます）
+pnpm db:migrate      # reset を使わず、スキーマだけ更新する場合
+pnpm db:seed         # プランと初期設定の追加（既存の設定は上書きしない）
 ```
 
-`http://localhost:5173/login` を開き、`.env` に設定した認証情報でログインしてください。
+`db:reset` は loopback 上の `kobito_support` だけを対象にし、DB の準備ができるまで待ってから実行します。migration は 1 本ずつトランザクションで適用し、checksum を `schema_migrations` に記録します。
 
-ログイン後は `/api/v1/me/access` の契約状態に従い、審査・入金待ちなら `/me/waiting`、利用開始時の初回は `/me/welcome`、以後は `/me` に進みます。案内は表示しただけでは既読にせず、確認ボタンを押したときに一度だけ記録します。利用中の `/me` は本人の店舗名・担当者名・契約と残りクレジットを表示します。`/me/contract` では、受諾済みプランの金額・クレジット数、契約状態・契約日、保存済みの現在の利用期間と残高を確認できます。次回請求日の算出は後続です。LINE連携は下記の設定を行った場合に利用できます。審査待ち・終了済み・契約なしの顧客に契約内容を開放しません。
-
-### LINEログインとLIFF
-
-LINE関連は既定で**無効**です。APIの `LINE_ENABLED` とwebの `VITE_LINE_ENABLED`（どちらも既定 `false`）が `true` のときだけ有効になります。`false` の間は、ログイン画面の「LINEでログイン」、`/liff`（ホームへ戻す）、契約内容ページのLINE連携欄、申込フォームのLINE表示名欄を出さず、APIもLINE関連ルートを登録しません。連絡手段の案内は「メール」になり、宛先は設定値 `contact_email`（`settings` テーブル、公開設定APIの `contactEmail`）から表示します。未設定の場合はアドレスを表示せず文言のみとなります。コードは削除していません。以下は有効化した場合の説明です。
-
-APIの `LINE_LOGIN_CHANNEL_ID` とwebの `VITE_LINE_LIFF_ID` は任意設定です。未設定の間も既存のメールログインは利用でき、LINEの入口は無効です。APIのLINE認証・連携機能は未設定時に503を返します。`LINE_LOGIN_CHANNEL_ID` は**LINEログインチャネル**のIDであり、Messaging APIチャネルのIDではありません。LIFFも同じLINEログインチャネルに登録し、Messaging APIとLINEログインは承認済みの同一プロバイダー配下に統一してください。チャネルシークレットやアクセストークンを `VITE_` 変数に入れません。
-
-設定後のログイン画面にはLINEの入口、契約画面には連携状態と連携の入口を表示します。`/liff?to=home` はマイページ、`/liff?to=estimate&id=<依頼UUID>` はその依頼の詳細を開きます。遷移先はこの2種類に限定し、任意の戻り先URLを受け付けません。LINE内の連携済みユーザーはSDK初期化後にログインを復元して進みます。外部ブラウザでLINE未ログインの場合は、明示的なログイン操作を案内します。LIFF SDKから得たIDトークンだけをAPIで検証し、クライアントのプロフィールやデコード済み情報では本人を判定しません。
-
-`POST /api/v1/auth/line` は、既にLINEを連携した顧客に対応する既存Firebase UIDのカスタムトークンを返します。未連携は404です。未連携の場合はメール・パスワードで本人のアカウントにログインして、明示操作で `POST /api/v1/me/line/link` を実行します。ログイン済みであっても自動では連携しません。別のLINEへの上書きや他の顧客との重複は409となり、同じLINEへの再送は重複した変更を作りません。連携状態は `GET /api/v1/me/line` で取得します。LINEとFirebaseで異なるアカウントの場合は、切り替えの確認を表示します。
-
-アプリ自身はLINEのIDトークンとFirebaseのカスタムトークンをURL・ブラウザの永続ストレージ・ログに保存しません。SDK内部の認証状態管理とは区別します。[公式のLIFF初期化手順](https://developers.line.biz/en/docs/liff/developing-liff-apps/)に従い、初期化前にSDK用のURLパラメーターを変更しません。コードのローカル検証と、実際のLINEチャネル・LINE内ブラウザでの検証は別です。本番プロバイダーの承認、正式URL、公開法務文書、LINEログインチャネルとLIFFの登録を終えるまでは、架空の値で有効化したり、リッチメニューを公開したりしません。Messaging APIによる実際の通知送信はこの段階では未実装です。
-
-`dev:seed-auth` はログイン確認用の契約なしアカウントを作るため、登録情報だけを表示します。業務フローは、申込フォームから作成し、管理者の審査・確認用入金記録を通したローカル顧客で確認してください。
-
-承諾しない・失効したアカウントは終了メッセージとログアウトだけを表示し、APIも顧客データを返しません。終了した契約は、終了した日本日付の翌年同日まで請求書だけを閲覧できます（2/29の翌年は2/28まで）。匿名化後は閲覧できません。
-
-web は起動時に public config API からサービス名を取得します。本番 web build には実プロジェクトの Firebase public config と HTTPS API URL を指定してください。開発用 demo project、fake API key、Auth Emulator は本番 build で拒否されます。Vite の `VITE_` 変数は bundle に含まれるため、server secret を設定しないでください。
-
-## API と Auth Emulator
-
-API は Firebase Admin SDK で ID token を検証し、`user_accounts` の UID・role・customer ID を認証情報として使います。顧客 API は認証された customer ID で必ず絞り、管理 API の namespace は DB role と ID token の第2要素の両方を要求します。公開configはサービス名と公開申込み条件・法務文書の参照を返し、当社の住所・登録番号・銀行情報などは含みません。
-
-上記のローカルセットアップで DB を初期化し、`pnpm dev:seed-auth` を実行してから API を起動してください。API だけを別起動するときは次を使います。
+### 2. 起動と顧客ログイン
 
 ```sh
-pnpm dev:api
+pnpm dev:seed-auth   # Auth Emulator に開発ユーザーを登録（契約なしのアカウント）
+pnpm dev             # API（:3000）と web（:5173）を起動
 ```
 
-`pnpm dev:seed-auth` は設定済みのローカル Auth Emulator に開発ユーザーを登録し、DB に customer account を用意します。`pnpm dev:smoke-auth` は Auth Emulator の sign-in REST API から ID token をメモリ上で取得し `/api/v1/me` を呼びます。token とプロフィールは表示しません。
+`http://localhost:5173/login` でログインします。業務の流れは、`/apply/shop` の申込みから作ったローカル顧客と、管理者の審査・確認用の入金記録で確認してください。API だけの起動は `pnpm dev:api`、`pnpm dev:smoke-auth` は Auth Emulator のトークンで `/api/v1/me` を呼ぶ確認です（トークンは表示しません）。
+
+申込みの法務文書は、ローカル開発に限り草案を参照できます。`.env` に `LEGAL_TERMS_URL`／`LEGAL_TERMS_VERSION`、`LEGAL_PRIVACY_*`、`LEGAL_DISCLOSURE_*`（URL は HTTPS）と、任意の運営通知先 `OPERATIONS_EMAIL` を設定し、`pnpm db:migrate` と `pnpm dev:seed-auth` で反映します。法務設定がない場合、本番で草案のままの場合は受付を停止します。草案の参照は本番公開の承認ではありません。
+
+### 3. 管理者（ローカル）
+
+`.env` に `DEV_ADMIN_EMAIL`、`DEV_ADMIN_PASSWORD`（12文字以上）、`DEV_ADMIN_PHONE`（E.164 形式）を設定します（ローカルの Auth Emulator 専用）。
 
 ```sh
-# 別ターミナル
-pnpm dev:smoke-auth
+pnpm dev:seed-admin
+# http://localhost:5173/admin/login でログインし、確認コード画面で別ターミナルから：
+pnpm dev:admin-code
 ```
 
-Container image は repository root を build context にして作ります。設定値と secrets は image に含めず、Cloud Run の environment variables・secret injection から渡します。
+Auth Emulator は SMS 方式の第2要素のみ対応で、TOTP は未対応です。本番は TOTP（`/admin/enroll` で登録）で、ローカルの SMS 確認は本番 TOTP の通し確認の代わりにはなりません。
+
+### 4. 請求書プレビューと PDF
+
+PDF の生成には Chromium と日本語フォントが必要です（API の Docker イメージには含まれます）。ローカルで試すには `.env` に次を設定します。
+
+```dotenv
+DEV_INVOICE_PREVIEW=1
+INVOICE_CHROMIUM_EXECUTABLE=/absolute/path/to/chromium
+```
 
 ```sh
-docker build -f apps/api/Dockerfile -t kobito-support-api .
+pnpm dev:seed-billing   # 開発専用。既存の会社・登録番号・銀行設定は上書きしない
 ```
 
-API の unit / integration tests と package build は CI で実行します。ローカルでは `pnpm test`、`pnpm test:db`、`pnpm build:api` を使います。
+プレビュー請求書には「開発用サンプル・お支払い不要」と表示し、通知予定を作りません。本番（`NODE_ENV=production`）では `DEV_INVOICE_PREVIEW=1` を拒否します。
 
-`db:reset` を使わずスキーマだけ適用する場合:
-
-```sh
-pnpm db:migrate
-pnpm db:seed
-```
-
-初期 migration は `docs/schema-v1.sql` の byte-for-byte copy です。migration ごとに checksum と適用日時を `schema_migrations` に保存し、1 migration 単位の transaction と PostgreSQL advisory lock で二重適用を防ぎます。`db:seed` はプランと初期設定を追加し、既存の設定値を上書きしません。サービス名の初期値は「コビトサポート（kobITo Support）」、請求番号 prefix は `KS` です。
-
-## KOMOJU Webhook受信箱
-
-`POST /webhooks/komoju` は `X-Komoju-Signature` で原文バイト列のHMAC-SHA256を検証します。`.env` の `KOMOJU_WEBHOOK_SECRET` が未設定なら503を返し、イベントを受け付けません。秘密値はKOMOJU側の設定と一致させ、Gitには保存しないでください。外部へAPIリクエストを送る設定ではありません。
-
-現段階では受信箱への永続化までを扱い、支払い済み・契約成立・クレジット付与には進めません。保存完了前に成功応答を返さず、DB障害は再送可能な503とします。本文のイベントIDで重複を排除し、配信ヘッダーのIDは重複判定に使いません。同じイベントIDで意味のある内容が変わった場合は元の記録を保持して競合を記録し、409を返します。隔離されたイベントは自動処理しません。
-
-公式の決済データにはカード情報が含まれ得るため、受信JSONやカード情報を保存・ログ出力せず、イベントID・種類と、決済ID・状態・金額・通貨・請求番号の許可した項目だけを保存します。署名・秘密値・カード詳細・任意のmetadataは保存しません。外部KOMOJUとのテスト接続はまだ実施していません。
-
-## 検査
+### 5. 検査
 
 ```sh
 pnpm lint
 pnpm typecheck
 pnpm test
-pnpm test:db
+pnpm test:db      # 実 PostgreSQL が必要（kobito_support_test を自動作成）
+pnpm check        # lint + typecheck + test
 ```
 
-Pull Request CI は PostgreSQL 16 に対して migration を2回実行し、seed と DB integration tests を確認します。
+CI は PostgreSQL 16 で migration を2回実行し、seed と DB テストを確認します。
 
-## 共通 domain package
+## 運用コマンドと環境変数
 
-`@kobito/shared` は Node と web で共有する純粋な計算・型・validation です。DB やネットワークへ接続せず、利用側で料金表示や申込 API validation に使います。package をビルドするには:
+環境変数の定義と検証は [apps/api/src/platform/config.ts](apps/api/src/platform/config.ts) です。必須は `DATABASE_URL`・`FIREBASE_PROJECT_ID`・`WEB_ORIGIN` の3つで、設定エラーには変数名だけを出し、値は出しません。
+
+### 定時処理（jobs）
 
 ```sh
-pnpm build:shared
+pnpm --filter @kobito/api job:daily                    # 期間の切り替え・月額請求書・失効・解約の終了
+pnpm --filter @kobito/api job:notifications            # メール通知の送信（3回まで再送）
+pnpm --filter @kobito/api job:retention -- --dry-run   # 匿名化の対象件数だけ確認（変更しない）
+pnpm --filter @kobito/api job:retention                # 匿名化（データを変更する）
 ```
 
-主な API は `invoiceTotals(lineExclYen[])`（税抜小計・消費税・税込合計）/ `taxOnExcl(exclYen)` / `inclYenFor(exclYen)`、`periodFor(anchor, zeroBasedSeq)`、`balanceOf(entries)` / `canApprove(estimateCredits, balance)`、`formatInvoiceNo(prefix, year, sequence)` と申込フォーム schema です。請求期間の `zeroBasedSeq` は開始を 0 とし、DB の `billing_periods.seq` に保存するときは 1 を加えます。請求書の税額は明細ごとではなく、請求書の税抜小計に対して一度だけ計算します。
+- `--dry-run` は `job:retention` だけが対応します。`job:daily` は何度走らせても二重になりません。
+- `job:notifications` は `MAIL_PROVIDER` が未設定だと送らず、予定のまま残します。
+- 本番イメージには `tsx` がなく、`node dist/jobs/*-script.js` で実行します。詳細は [apps/api/src/jobs/README.md](apps/api/src/jobs/README.md)。
+
+### 管理者の作成とイメージ
+
+```sh
+pnpm --filter @kobito/api admin:bootstrap -- --email=<メール>   # 管理者アカウントの作成（本番向け）
+docker build -f apps/api/Dockerfile -t kobito-support-api .                         # API 用（Chromium・日本語フォント入り）
+docker build -f apps/api/Dockerfile --target migrate -t kobito-support-migrate .    # マイグレーション＋seed 用
+```
+
+`admin:bootstrap` による本番での TOTP 登録・ログインは未確認です。設定値と秘密はイメージに含めず、実行環境から渡します。
+
+### 主な環境変数
+
+| 変数 | 意味 |
+|---|---|
+| `MAIL_PROVIDER` | `log`（開発用。件名と宛先の一部だけをログに出し、送らない）／`resend`。未設定なら送信しない |
+| `RESEND_API_KEY`、`MAIL_FROM` | `MAIL_PROVIDER=resend` のとき必須。`MAIL_FROM` は `名前 <a@b.c>` または `a@b.c` |
+| `KOMOJU_SECRET_KEY` | 設定するとカードが有効（申込み・審査完了・支払いリンク）。未設定ならカードは無効 |
+| `KOMOJU_WEBHOOK_SECRET` | `POST /webhooks/komoju` の署名（HMAC-SHA256）検証用。未設定なら 503 |
+| `PDF_STORAGE`、`PDF_BUCKET` | PDF の保管先。`postgres`（既定・ローカル確認用）／`gcs`（`PDF_BUCKET` 必須。実バケットは未確認） |
+| `LINE_ENABLED`、`VITE_LINE_ENABLED` | LINE 連携の有効化（API／web）。既定 `false`（画面・API とも非表示） |
+| `LINE_LOGIN_CHANNEL_ID`、`VITE_LINE_LIFF_ID` | LINE ログインチャネル／LIFF。有効化する場合のみ |
+| `DEV_INVOICE_PREVIEW`、`FIREBASE_AUTH_EMULATOR_HOST` | ローカル専用。本番では拒否 |
+
+`VITE_` 変数は bundle に含まれるため、秘密を入れないでください。本番の web build には実プロジェクトの Firebase public config と HTTPS の API URL が必要で、demo project・fake API key・Auth Emulator は拒否されます。
+
+## 設計上の決まり
+
+- カード番号・セキュリティコード・有効期限・カードトークンは受け取らず、保存もログ出力もしません。カード入力は KOMOJU の画面で行い、Webhook からは許可した項目（イベント ID・種類・決済 ID・状態・金額・通貨・請求番号）だけを保存します。
+- 顧客 API は認証された顧客 ID で必ず絞り、管理 API は DB 上の管理者役割と第2要素の両方を要求します。web は API だけを通して業務データにアクセスします。
+- 金額は税抜で保存し、消費税は請求書ごとに小計×10% を一度だけ切り捨てます。固定プラン（税別）はライト 5,000円・1C、スタンダード 10,000円・3C、プレミアム 15,000円・5C、追加 1C は 4,000円です。発行済み請求書と PDF は書き換えません。
+- 支払方法はカードと銀行振込です。コンビニ決済は対象外です（過去データの `konbini` は履歴として読めるだけ）。
+- Webhook は原文バイト列で署名を検証し、本文のイベント ID で重複を排除します。当方が作っていない支払いの通知は再送され続けないよう受けて無視し、金額の不一致などは「要確認」として財務記録を変えずに残します。
+- 申込みでは、Firebase のアカウント作成（SDK）と DB 保存を同じトランザクションにできないため、境界を分け、同じ受付キーで再試行できるようにしています。
+
+## 共通パッケージ
+
+`@kobito/shared`（`pnpm build:shared`）は DB・ネットワークに触れない料金・期間・クレジット・請求番号の計算と入力検証です。請求期間の `zeroBasedSeq` は 0 始まりで、DB の `billing_periods.seq` には 1 を加えて保存します。
