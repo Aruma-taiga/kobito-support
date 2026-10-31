@@ -52,7 +52,10 @@ function makeApp(overrides: Record<string, unknown> = {}) {
       declineApplication: vi.fn(),
     },
     invoices: {},
-    publicSettings: { getServiceName: vi.fn() },
+    publicSettings: {
+      getServiceName: vi.fn(),
+      getContactEmail: vi.fn(),
+    },
     logger: { info: vi.fn(), error: vi.fn() },
     komojuInbox: { receive: vi.fn(async () => "accepted" as const) },
   } as unknown as AppDependencies;

@@ -18,6 +18,7 @@ import { SignOutAction } from "../auth/SignOutAction.js";
 import { useAuthSession } from "../auth/session.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
 import { ApiClientError } from "../platform/api-client.js";
+import { ContactEmailLink, useContact } from "../platform/contact.js";
 import { MyInvoiceListPage } from "./InvoicePages.js";
 import { MePage } from "./MePage.js";
 
@@ -268,6 +269,7 @@ export function CustomerWelcomePage({
   apiClient: ReturnTypeApiClient;
 }) {
   const { markWelcomeSeen } = useCustomerAccess();
+  const { lineEnabled } = useContact();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
@@ -294,11 +296,24 @@ export function CustomerWelcomePage({
           ✓
         </div>
         <h1 id="welcome-title">{webMessages.meWelcomeTitle}</h1>
-        <p className="muted-text">{webMessages.meWelcomeDescription}</p>
+        <p className="muted-text">
+          {lineEnabled
+            ? webMessages.meWelcomeDescription
+            : webMessages.meWelcomeDescriptionEmail}
+        </p>
         <section className="welcome-guidance">
           <h2>{webMessages.meWelcomeFlowTitle}</h2>
           <ol>
-            <li>{webMessages.meWelcomeFlowRequest}</li>
+            <li>
+              {lineEnabled ? (
+                webMessages.meWelcomeFlowRequest
+              ) : (
+                <>
+                  {webMessages.meWelcomeFlowRequestEmail}
+                  <ContactEmailLink />
+                </>
+              )}
+            </li>
             <li>{webMessages.meWelcomeFlowEstimate}</li>
             <li>{webMessages.meWelcomeFlowApprove}</li>
             <li>{webMessages.meWelcomeFlowWork}</li>

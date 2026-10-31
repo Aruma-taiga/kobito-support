@@ -34,6 +34,7 @@ try {
         adminAuthClient={adminAuthClient}
         apiClient={apiClient}
         authClient={authClient}
+        lineEnabled={config.lineEnabled}
         lineLiffId={config.lineLiffId}
       />
     </StrictMode>,

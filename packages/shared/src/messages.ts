@@ -138,6 +138,9 @@ export const webMessages = {
     "今期の残りクレジットが不足しています。LINEでご相談ください。",
   myRequestConflict: "見積の状況が変わりました。最新の状況をご確認ください。",
   myRequestContactLine: "LINEで相談",
+  myRequestInsufficientCreditsEmail:
+    "今期の残りクレジットが不足しています。メールでご相談ください。",
+  contactEmailLabel: "連絡先メール：",
   myRequestDetails: "依頼の詳細",
   myRequestAvailableCredits: "今期の残り",
   myRequestCompletionDate: "完了日",
@@ -523,6 +526,8 @@ export const webMessages = {
   contractNextInvoiceNotice: "次回の請求日は、請求書でご案内します。",
   contractPlanChangeGuidance:
     "プランの変更・追加・解約はLINEでご連絡ください。",
+  contractPlanChangeGuidanceEmail:
+    "プランの変更・追加・解約はメールでご連絡ください。",
   contractPlanChangeHeading: "プランの変更・追加・解約",
   contractBackHome: "マイページへ戻る",
   meWaitingTitle: "お申し込みの状況",
@@ -535,6 +540,9 @@ export const webMessages = {
   meWelcomeTitle: "ご契約が始まりました",
   meWelcomeDescription:
     "LINEなどでご相談いただいた内容を、当社が依頼として登録します。マイページでは、お見積りの確認・了承と作業状況を確認できます。",
+  meWelcomeDescriptionEmail:
+    "メールでご相談いただいた内容を、当社が依頼として登録します。マイページでは、お見積りの確認・了承と作業状況を確認できます。",
+  meWelcomeFlowRequestEmail: "メールで担当者へご相談ください。",
   meWelcomeFlowTitle: "ご依頼から作業まで",
   meWelcomeFlowRequest: "LINEなどで担当者へご相談ください。",
   meWelcomeFlowEstimate:

@@ -29,6 +29,7 @@ import {
   ApiClientError,
   type ReturnTypeApiClient,
 } from "../platform/api-client.js";
+import { ContactEmailLink, useContact } from "../platform/contact.js";
 
 function requestStatusLabel(status: RequestStatus): string {
   switch (status) {
@@ -1124,6 +1125,7 @@ export function MyRequestDetailPage({
   apiClient: ReturnTypeApiClient;
 }) {
   const { id = "" } = useParams();
+  const { lineEnabled, contactEmail } = useContact();
   const [detail, setDetail] = useState<CustomerRequestDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -1255,7 +1257,9 @@ export function MyRequestDetailPage({
         {actionError === "insufficient" ||
         (awaitingApproval && insufficient) ? (
           <p className="notice info" role="note">
-            {webMessages.myRequestInsufficientCredits}
+            {lineEnabled
+              ? webMessages.myRequestInsufficientCredits
+              : webMessages.myRequestInsufficientCreditsEmail}
           </p>
         ) : null}
         {actionError === "conflict" ? (
@@ -1289,11 +1293,16 @@ export function MyRequestDetailPage({
           </p>
         ) : null}
         {awaitingApproval &&
+        (lineEnabled || contactEmail) &&
         (insufficient ||
           actionError === "insufficient" ||
           actionError === "conflict") ? (
           <p className="request-contact-line">
-            {webMessages.myRequestContactLine}
+            {lineEnabled ? (
+              webMessages.myRequestContactLine
+            ) : (
+              <ContactEmailLink />
+            )}
           </p>
         ) : null}
         {awaitingApproval &&

@@ -13,4 +13,18 @@ describe("public settings repository", () => {
       "コビトサポート（kobITo Support）",
     );
   });
+
+  it("reads the contact email only when it is a configured valid address", async () => {
+    const settings = new PublicSettingsRepository(pool);
+    await pool.query("delete from settings where key = 'contact_email'");
+    await expect(settings.getContactEmail()).resolves.toBeNull();
+    await pool.query(
+      "insert into settings (key, value) values ('contact_email', to_jsonb($1::text))",
+      ["hello@contact.example"],
+    );
+    await expect(settings.getContactEmail()).resolves.toBe(
+      "hello@contact.example",
+    );
+    await pool.query("delete from settings where key = 'contact_email'");
+  });
 });

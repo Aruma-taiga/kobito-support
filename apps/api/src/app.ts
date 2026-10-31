@@ -45,7 +45,10 @@ export interface AppDependencies {
   invoices: InvoiceModule;
   requests?: RequestModule;
   customerAccess: CustomerAccessModule;
-  publicSettings: { getServiceName(): Promise<string> };
+  publicSettings: {
+    getServiceName(): Promise<string>;
+    getContactEmail(): Promise<string | null>;
+  };
   logger: ApiLogger;
   komojuInbox: KomojuInbox;
   line?: LineModule;
@@ -86,15 +89,22 @@ export function createApp(dependencies: AppDependencies) {
       inbox: dependencies.komojuInbox,
     }),
   );
-  if (dependencies.line) {
+  const lineRoutesEnabled =
+    dependencies.config.lineEnabled === true && dependencies.line !== undefined;
+  if (dependencies.line && lineRoutesEnabled) {
     app.route("/api/v1", createLinePublicRoutes(dependencies.line));
   }
   app.get("/api/v1/public/config", async (context) => {
-    const [serviceName, catalog] = await Promise.all([
+    const [serviceName, contactEmail, catalog] = await Promise.all([
       dependencies.publicSettings.getServiceName(),
+      dependencies.publicSettings.getContactEmail(),
       dependencies.applications.getPublicCatalog(),
     ]);
-    return context.json({ serviceName, application: catalog.application });
+    return context.json({
+      serviceName,
+      ...(contactEmail ? { contactEmail } : {}),
+      application: catalog.application,
+    });
   });
 
   app.use(
@@ -109,7 +119,7 @@ export function createApp(dependencies: AppDependencies) {
     requireCustomer(),
     requireCustomerAccess(dependencies.customerAccess),
   );
-  if (dependencies.line)
+  if (dependencies.line && lineRoutesEnabled)
     app.route("/api/v1", createLineCustomerRoutes(dependencies.line));
   app.route("/api/v1", createCustomerAccessRoutes(dependencies.customerAccess));
   app.route(

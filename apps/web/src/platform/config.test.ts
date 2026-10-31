@@ -19,6 +19,30 @@ describe("web public configuration", () => {
     });
   });
 
+  it("keeps LINE hidden unless VITE_LINE_ENABLED is explicitly true", () => {
+    expect(loadWebConfig(localEnvironment, "development").lineEnabled).toBe(
+      false,
+    );
+    expect(
+      loadWebConfig(
+        { ...localEnvironment, VITE_LINE_ENABLED: "false" },
+        "development",
+      ).lineEnabled,
+    ).toBe(false);
+    expect(
+      loadWebConfig(
+        { ...localEnvironment, VITE_LINE_ENABLED: "true" },
+        "development",
+      ).lineEnabled,
+    ).toBe(true);
+    expect(() =>
+      loadWebConfig(
+        { ...localEnvironment, VITE_LINE_ENABLED: "maybe" },
+        "development",
+      ),
+    ).toThrowError("Invalid web configuration: VITE_LINE_ENABLED");
+  });
+
   it("keeps LIFF optional and exposes only its public LIFF id", () => {
     expect(
       loadWebConfig(localEnvironment, "development").lineLiffId,

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useAuthSession } from "../auth/session.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
 import { ApiClientError } from "../platform/api-client.js";
+import { ContactEmailLink, useContact } from "../platform/contact.js";
 
 type ContractPageState =
   | { status: "loading" }
@@ -26,6 +27,7 @@ export function ContractPage({
     getSessionGeneration,
     signOut,
   } = useAuthSession();
+  const { lineEnabled } = useContact();
   const [state, setState] = useState<ContractPageState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [logoutError, setLogoutError] = useState(false);
@@ -66,7 +68,7 @@ export function ContractPage({
   useEffect(() => {
     let current = true;
     const requestGeneration = getSessionGeneration();
-    if (lineLiffId && lineStatusUserId) {
+    if (lineEnabled && lineLiffId && lineStatusUserId) {
       setLineLinked("loading");
       void apiClient.getLineLinkStatus(lineStatusUserId).then(
         ({ linked }) => {
@@ -86,6 +88,7 @@ export function ContractPage({
     apiClient,
     getSessionGeneration,
     lineAttempt,
+    lineEnabled,
     lineLiffId,
     lineStatusUserId,
     sessionGeneration,
@@ -199,7 +202,7 @@ export function ContractPage({
                 {webMessages.contractPreview}
               </p>
             ) : null}
-            {lineLiffId ? (
+            {lineEnabled && lineLiffId ? (
               <section
                 className="contract-summary"
                 aria-label={webMessages.lineLogin}
@@ -237,7 +240,16 @@ export function ContractPage({
             <p>{webMessages.contractNextInvoiceNotice}</p>
             <section className="contract-summary">
               <h2>{webMessages.contractPlanChangeHeading}</h2>
-              <p>{webMessages.contractPlanChangeGuidance}</p>
+              <p>
+                {lineEnabled ? (
+                  webMessages.contractPlanChangeGuidance
+                ) : (
+                  <>
+                    {webMessages.contractPlanChangeGuidanceEmail}
+                    <ContactEmailLink />
+                  </>
+                )}
+              </p>
             </section>
           </>
         ) : null}

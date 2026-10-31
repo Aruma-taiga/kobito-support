@@ -51,6 +51,11 @@ const environmentSchema = z
     BANK_ACCOUNT_NUMBER: optionalText,
     DEV_INVOICE_PREVIEW: z.enum(["0", "1"]).default("0"),
     KOMOJU_WEBHOOK_SECRET: optionalSecret,
+    LINE_ENABLED: z.preprocess(
+      (value) =>
+        typeof value === "string" && value.trim() === "" ? undefined : value,
+      z.enum(["true", "false"]).default("false"),
+    ),
     LINE_LOGIN_CHANNEL_ID: optionalText,
   })
   .superRefine((environment, context) => {
@@ -94,6 +99,7 @@ export interface RuntimeConfig {
   bankAccountNumber?: string;
   devInvoicePreview?: boolean;
   komojuWebhookSecret?: string;
+  lineEnabled?: boolean;
   lineLoginChannelId?: string;
 }
 
@@ -154,6 +160,7 @@ export function loadConfig(
     ...(value.KOMOJU_WEBHOOK_SECRET === undefined
       ? {}
       : { komojuWebhookSecret: value.KOMOJU_WEBHOOK_SECRET }),
+    lineEnabled: value.LINE_ENABLED === "true",
     ...(value.LINE_LOGIN_CHANNEL_ID === undefined
       ? {}
       : { lineLoginChannelId: value.LINE_LOGIN_CHANNEL_ID }),

@@ -110,7 +110,10 @@ function makeApp(
       new PostgresCustomerAccessRepository(pool, () => now),
       () => now,
     ),
-    publicSettings: { getServiceName: async () => "Test service" },
+    publicSettings: {
+      getServiceName: async () => "Test service",
+      getContactEmail: async () => null,
+    },
     komojuInbox: { receive: async () => "accepted" as const },
     logger: { info: () => {}, error: () => {} },
   };

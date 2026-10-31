@@ -17,6 +17,11 @@ const webEnvironmentSchema = z.object({
   VITE_FIREBASE_APP_ID: z.string().trim().min(1),
   VITE_API_BASE_URL: z.string().trim().url(),
   VITE_FIREBASE_AUTH_EMULATOR_URL: optionalUrl,
+  VITE_LINE_ENABLED: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.enum(["true", "false"]).default("false"),
+  ),
   VITE_LINE_LIFF_ID: z.preprocess(
     (value) =>
       typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -34,6 +39,7 @@ export interface WebConfig {
   firebaseAppId: string;
   apiBaseUrl: string;
   authEmulatorUrl?: string;
+  lineEnabled: boolean;
   lineLiffId?: string;
 }
 
@@ -117,6 +123,7 @@ export function loadWebConfig(
     firebaseProjectId: value.VITE_FIREBASE_PROJECT_ID,
     firebaseAppId: value.VITE_FIREBASE_APP_ID,
     apiBaseUrl: apiUrl.origin,
+    lineEnabled: value.VITE_LINE_ENABLED === "true",
     ...(authEmulatorUrl ? { authEmulatorUrl: authEmulatorUrl.origin } : {}),
     ...(value.VITE_LINE_LIFF_ID ? { lineLiffId: value.VITE_LINE_LIFF_ID } : {}),
   };

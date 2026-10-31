@@ -22,11 +22,12 @@ import { LoginPage } from "./pages/LoginPage.js";
 import { MyRequestDetailPage, MyRequestsPage } from "./pages/RequestPages.js";
 import type { AdminApiClient } from "./platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "./platform/api-client.js";
+import { ContactProvider } from "./platform/contact.js";
 import { BrandHeader } from "./ui/index.js";
 
 type PublicConfigState =
   | { status: "loading"; attempt: number }
-  | { status: "ready"; serviceName: string }
+  | { status: "ready"; serviceName: string; contactEmail: string | null }
   | { status: "error" };
 
 export function App({
@@ -34,14 +35,17 @@ export function App({
   authClient,
   adminApiClient,
   adminAuthClient,
+  lineEnabled = false,
   lineLiffId,
 }: {
   apiClient: ReturnTypeApiClient;
   authClient: AuthClient;
   adminApiClient: AdminApiClient;
   adminAuthClient: AdminAuthClient;
+  lineEnabled?: boolean | undefined;
   lineLiffId?: string | undefined;
 }) {
+  const effectiveLiffId = lineEnabled ? lineLiffId : undefined;
   const [configState, setConfigState] = useState<PublicConfigState>({
     status: "loading",
     attempt: 0,
@@ -59,7 +63,11 @@ export function App({
       .getPublicConfig()
       .then((config) => {
         if (current) {
-          setConfigState({ status: "ready", serviceName: config.serviceName });
+          setConfigState({
+            status: "ready",
+            serviceName: config.serviceName,
+            contactEmail: config.contactEmail ?? null,
+          });
         }
       })
       .catch(() => {
@@ -104,94 +112,110 @@ export function App({
         </main>
       ) : null}
       {configState.status === "ready" ? (
-        <AuthProvider client={authClient}>
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Navigate to="/me" replace />} />
-              <Route
-                path="/login"
-                element={
-                  <LoginPage authClient={authClient} lineLiffId={lineLiffId} />
-                }
-              />
-              <Route
-                path="/liff"
-                element={
-                  <LiffPage
-                    liffId={lineLiffId}
-                    apiClient={apiClient}
-                    authClient={authClient}
-                  />
-                }
-              />
-              <Route
-                path="/apply/*"
-                element={
-                  <ApplicationPage
-                    apiClient={apiClient}
-                    authClient={authClient}
-                  />
-                }
-              />
-              <Route
-                path="/admin/*"
-                element={
-                  <AdminApp
-                    apiClient={adminApiClient}
-                    authClient={adminAuthClient}
-                  />
-                }
-              />
-              <Route element={<RequireAuth />}>
-                <Route element={<CustomerAccessGuard apiClient={apiClient} />}>
+        <ContactProvider
+          value={{ lineEnabled, contactEmail: configState.contactEmail }}
+        >
+          <AuthProvider client={authClient}>
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Navigate to="/me" replace />} />
+                <Route
+                  path="/login"
+                  element={
+                    <LoginPage
+                      authClient={authClient}
+                      lineLiffId={effectiveLiffId}
+                    />
+                  }
+                />
+                {lineEnabled ? (
                   <Route
-                    path="/me"
-                    element={<CustomerHomePage apiClient={apiClient} />}
-                  />
-                  <Route path="/me/waiting" element={<CustomerWaitingPage />} />
-                  <Route
-                    path="/me/welcome"
-                    element={<CustomerWelcomePage apiClient={apiClient} />}
-                  />
-                  <Route
-                    path="/me/contract"
+                    path="/liff"
                     element={
-                      <ContractPage
+                      <LiffPage
+                        liffId={lineLiffId}
                         apiClient={apiClient}
-                        lineLiffId={lineLiffId}
+                        authClient={authClient}
                       />
                     }
                   />
+                ) : (
+                  <Route path="/liff" element={<Navigate to="/" replace />} />
+                )}
+                <Route
+                  path="/apply/*"
+                  element={
+                    <ApplicationPage
+                      apiClient={apiClient}
+                      authClient={authClient}
+                    />
+                  }
+                />
+                <Route
+                  path="/admin/*"
+                  element={
+                    <AdminApp
+                      apiClient={adminApiClient}
+                      authClient={adminAuthClient}
+                    />
+                  }
+                />
+                <Route element={<RequireAuth />}>
                   <Route
-                    path="/me/finished"
-                    element={<CustomerFinishedPage />}
-                  />
-                  <Route
-                    path="/me/plan-quote"
-                    element={<CustomerPlanQuoteUnavailablePage />}
-                  />
-                  <Route
-                    path="/me/requests"
-                    element={<MyRequestsPage apiClient={apiClient} />}
-                  />
-                  <Route
-                    path="/me/requests/:id"
-                    element={<MyRequestDetailPage apiClient={apiClient} />}
-                  />
-                  <Route
-                    path="/me/invoices"
-                    element={<CustomerInvoicesPage apiClient={apiClient} />}
-                  />
-                  <Route
-                    path="/me/invoices/:id"
-                    element={<MyInvoiceDetailPage apiClient={apiClient} />}
-                  />
+                    element={<CustomerAccessGuard apiClient={apiClient} />}
+                  >
+                    <Route
+                      path="/me"
+                      element={<CustomerHomePage apiClient={apiClient} />}
+                    />
+                    <Route
+                      path="/me/waiting"
+                      element={<CustomerWaitingPage />}
+                    />
+                    <Route
+                      path="/me/welcome"
+                      element={<CustomerWelcomePage apiClient={apiClient} />}
+                    />
+                    <Route
+                      path="/me/contract"
+                      element={
+                        <ContractPage
+                          apiClient={apiClient}
+                          lineLiffId={effectiveLiffId}
+                        />
+                      }
+                    />
+                    <Route
+                      path="/me/finished"
+                      element={<CustomerFinishedPage />}
+                    />
+                    <Route
+                      path="/me/plan-quote"
+                      element={<CustomerPlanQuoteUnavailablePage />}
+                    />
+                    <Route
+                      path="/me/requests"
+                      element={<MyRequestsPage apiClient={apiClient} />}
+                    />
+                    <Route
+                      path="/me/requests/:id"
+                      element={<MyRequestDetailPage apiClient={apiClient} />}
+                    />
+                    <Route
+                      path="/me/invoices"
+                      element={<CustomerInvoicesPage apiClient={apiClient} />}
+                    />
+                    <Route
+                      path="/me/invoices/:id"
+                      element={<MyInvoiceDetailPage apiClient={apiClient} />}
+                    />
+                  </Route>
                 </Route>
-              </Route>
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </BrowserRouter>
-        </AuthProvider>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </BrowserRouter>
+          </AuthProvider>
+        </ContactProvider>
       ) : null}
     </div>
   );

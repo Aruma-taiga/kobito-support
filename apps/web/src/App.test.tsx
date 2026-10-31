@@ -55,6 +55,10 @@ function setup(
   adminOverrides: Record<string, unknown> = {},
   customerOverrides: Record<string, unknown> = {},
   authUserOverrides: Partial<AuthUser> = {},
+  appProps: {
+    lineEnabled?: boolean;
+    lineLiffId?: string;
+  } = {},
 ) {
   window.history.replaceState({}, "", path);
   const user: AuthUser = {
@@ -154,6 +158,7 @@ function setup(
       authClient={authClient}
       adminApiClient={adminApiClient}
       adminAuthClient={adminAuthClient}
+      {...appProps}
     />,
   );
   return {
@@ -166,6 +171,120 @@ function setup(
     },
   };
 }
+
+describe("LINE and contact visibility flag", () => {
+  const liffId = "2000000000-AbCdEfGh";
+
+  it("hides the LINE login entry and the /liff route when the flag is off", async () => {
+    setup("/login", {}, {}, {}, { lineLiffId: liffId });
+    await screen.findByRole("heading", { name: webMessages.loginTitle });
+    expect(screen.queryByText(webMessages.lineLogin)).toBeNull();
+    cleanup();
+    setup("/liff?to=home", {}, {}, {}, { lineLiffId: liffId });
+    await waitFor(() => expect(window.location.pathname).not.toBe("/liff"));
+    expect(screen.queryByText(webMessages.lineLogin)).toBeNull();
+    expect(screen.queryByText(webMessages.lineNotConfigured)).toBeNull();
+  });
+
+  it("keeps the LINE login entry when the flag is on", async () => {
+    setup("/login", {}, {}, {}, { lineEnabled: true, lineLiffId: liffId });
+    const link = await screen.findByRole("link", {
+      name: webMessages.lineLogin,
+    });
+    expect(link.getAttribute("href")).toBe("/liff?to=home");
+  });
+
+  it("hides the contract LINE section and guides to the configured contact email", async () => {
+    const contract = {
+      contract: {
+        status: "active",
+        plan: { name: "ライト", priceExclTax: 5000, credits: 3 },
+        anchorDate: "2026-10-01",
+        currentPeriod: {
+          startsOn: "2026-10-01",
+          endsOn: "2026-10-31",
+          balance: 3,
+        },
+        preview: false,
+      },
+    };
+    setup(
+      "/me/contract",
+      {},
+      {
+        getContract: vi.fn(async () => contract),
+        getPublicConfig: vi.fn(async () => ({
+          serviceName: "コビトサポート",
+          contactEmail: "hello@contact.example",
+        })),
+        getLineLinkStatus: vi.fn(async () => ({ linked: false })),
+      },
+      {},
+      { lineLiffId: liffId },
+    );
+    await screen.findByText(webMessages.contractPlanChangeGuidanceEmail);
+    expect(screen.queryByText(webMessages.lineLinked)).toBeNull();
+    expect(screen.queryByText(webMessages.lineLink)).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "hello@contact.example" })
+        .getAttribute("href"),
+    ).toBe("mailto:hello@contact.example");
+    expect(document.body.textContent).not.toContain("LINE");
+  });
+
+  it("uses the original LINE guidance when the flag is on", async () => {
+    setup(
+      "/me/contract",
+      {},
+      {
+        getContract: vi.fn(async () => ({
+          contract: {
+            status: "active",
+            plan: { name: "ライト", priceExclTax: 5000, credits: 3 },
+            anchorDate: "2026-10-01",
+            currentPeriod: null,
+            preview: false,
+          },
+        })),
+      },
+      {},
+      { lineEnabled: true },
+    );
+    expect(
+      await screen.findByText(webMessages.contractPlanChangeGuidance),
+    ).toBeTruthy();
+  });
+
+  it("shows email guidance on the welcome page without mentioning LINE", async () => {
+    const welcome = {
+      contractStatus: "active",
+      landingPath: "/me/welcome",
+      access: "active",
+      welcomeRequired: true,
+      invoiceAccess: true,
+      invoiceAccessUntil: null,
+    };
+    setup(
+      "/me/welcome",
+      {},
+      {
+        getCustomerAccess: vi.fn(async () => welcome),
+        getPublicConfig: vi.fn(async () => ({
+          serviceName: "コビトサポート",
+          contactEmail: "hello@contact.example",
+        })),
+      },
+    );
+    expect(
+      await screen.findByText(webMessages.meWelcomeDescriptionEmail),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toContain("LINE");
+    expect(
+      screen.getByRole("link", { name: "hello@contact.example" }),
+    ).toBeTruthy();
+  });
+});
 
 describe("application request routes", () => {
   it("shows the accepted contract snapshot and current balance on its own page", async () => {
@@ -637,7 +756,9 @@ describe("application request routes", () => {
     expect(
       await screen.findByRole("heading", { name: webMessages.meWelcomeTitle }),
     ).toBeTruthy();
-    expect(screen.getByText(webMessages.meWelcomeDescription)).toBeTruthy();
+    expect(
+      screen.getByText(webMessages.meWelcomeDescriptionEmail),
+    ).toBeTruthy();
     expect(screen.queryByRole("link", { name: /LINE/ })).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: webMessages.meWelcomeContinue }),
@@ -646,9 +767,9 @@ describe("application request routes", () => {
       await screen.findByRole("heading", { name: webMessages.homeTitle }),
     ).toBeTruthy();
     expect(window.location.pathname).toBe("/me");
-    expect(markWelcomeSeen).toHaveBeenCalledOnce();
-    expect(getCustomerAccess).toHaveBeenCalledTimes(3);
-    expect(apiClient.getMe).toHaveBeenCalledOnce();
+    await waitFor(() => expect(markWelcomeSeen).toHaveBeenCalledOnce());
+    await waitFor(() => expect(getCustomerAccess).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(apiClient.getMe).toHaveBeenCalledOnce());
   });
 
   it("does not show welcome again when the active customer's welcome was already seen", async () => {
