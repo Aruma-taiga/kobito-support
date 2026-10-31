@@ -9,10 +9,18 @@ import {
   welcomeSeenResponseSchema,
 } from "@kobito/shared";
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from "vitest";
 import { type AppDependencies, createApp } from "../../app.js";
 import { FakeKomojuClient } from "../../integrations/komoju/fake-client.js";
 import { DailyBillingJob } from "../../jobs/daily-billing.js";
+import { DailyLifecycleJob } from "../../jobs/daily-lifecycle.js";
 import type { VerifiedIdentity } from "../../platform/auth.js";
 import type { RuntimeConfig } from "../../platform/config.js";
 import { customerScopeFor } from "../../platform/scope.js";
@@ -298,6 +306,10 @@ afterAll(async () => {
   ]);
   await pool.query(
     "delete from billing_periods where contract_id = any($1::uuid[])",
+    [contractIds],
+  );
+  await pool.query(
+    "delete from plan_quotes where contract_id = any($1::uuid[])",
     [contractIds],
   );
   await pool.query("delete from contracts where id = any($1::uuid[])", [
@@ -1025,6 +1037,192 @@ describe("initial invoice approval and customer access", () => {
       periods: "2",
       monthly_invoices: "1",
     });
+  });
+
+  it("lapses an unpaid initial invoice only after its due date and is idempotent", async () => {
+    const fixture = await makeApplication();
+    const response = await approve(makeApp(), fixture.applicationId);
+    expect(response.status).toBe(200);
+    const invoiceId = ((await response.json()) as { invoice: { id: string } })
+      .invoice.id;
+    await pool.query("update invoices set due_on='2026-03-07' where id=$1", [
+      invoiceId,
+    ]);
+    const job = new DailyLifecycleJob(pool);
+
+    expect(
+      await job.runDailyLifecycle("2026-03-07", {
+        contractIds: [fixture.contractId],
+      }),
+    ).toMatchObject({ lapsed: 0, failed: 0 });
+    expect(
+      await job.runDailyLifecycle("2026-03-08", {
+        contractIds: [fixture.contractId],
+      }),
+    ).toMatchObject({ lapsed: 1, failed: 0 });
+    expect(
+      await job.runDailyLifecycle("2026-03-08", {
+        contractIds: [fixture.contractId],
+      }),
+    ).toMatchObject({ lapsed: 0, failed: 0 });
+    const state = await pool.query<{ contract: string; invoice: string }>(
+      `select c.status contract,i.status invoice from contracts c join invoices i on i.contract_id=c.id
+       where c.id=$1 and i.kind='initial'`,
+      [fixture.contractId],
+    );
+    expect(state.rows[0]).toEqual({ contract: "lapsed", invoice: "overdue" });
+  });
+
+  it("ends a cancellation after its final period, expires its balance, and creates no later invoice", async () => {
+    const fixture = await makeApplication();
+    const planId = planIds.at(-1);
+    if (!planId) throw new Error("Lifecycle test plan fixture missing");
+    await pool.query(
+      "update contracts set status='cancel_scheduled',anchor_date='2026-01-01',ends_on='2026-01-31' where id=$1",
+      [fixture.contractId],
+    );
+    const period = await pool.query<{ id: string }>(
+      `insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_excl_tax,credits)
+       values($1,1,'2026-01-01','2026-01-31',$2,5000,1) returning id`,
+      [fixture.contractId, planId],
+    );
+    const periodId = period.rows[0]?.id;
+    if (!periodId) throw new Error("Lifecycle test period fixture missing");
+    await pool.query(
+      "insert into credit_entries(contract_id,period_id,kind,amount) values($1,$2,'grant',1)",
+      [fixture.contractId, periodId],
+    );
+    const job = new DailyBillingJob(
+      pool,
+      new InvoiceRepository(pool, config, { render: async () => pdf }),
+    );
+    const result = await job.runDailyBilling("2026-02-01", {
+      contractIds: [fixture.contractId],
+    });
+    expect(result).toMatchObject({
+      processedContracts: 1,
+      createdPeriods: 0,
+      issuedInvoices: 0,
+      expiredCredits: 1,
+      failed: 0,
+    });
+    const state = await pool.query<{
+      status: string;
+      ended_at: string | null;
+      expires: string;
+      invoices: string;
+    }>(
+      `select c.status,c.ended_at::text,
+       (select count(*)::text from credit_entries where period_id=$2 and kind='expire') expires,
+       (select count(*)::text from invoices where contract_id=c.id) invoices
+       from contracts c where c.id=$1`,
+      [fixture.contractId, periodId],
+    );
+    expect(state.rows[0]).toMatchObject({
+      status: "ended",
+      expires: "1",
+      invoices: "0",
+    });
+    expect(state.rows[0]?.ended_at).toBeTruthy();
+  });
+
+  it("lapses only the selected expired quote and ignores approved or paid applications", async () => {
+    const quoteFixture = await makeApplication({ custom: true });
+    const approvedQuoteFixture = await makeApplication({ custom: true });
+    const paidFixture = await makeApplication();
+    const dueFixture = await makeApplication();
+    const activeFixture = await makeApplication();
+    const reviewFixture = await makeApplication();
+    const quote = await pool.query<{ id: string }>(
+      `insert into plan_quotes(contract_id,version,price_excl_tax,credits,description,expires_on,sent_at)
+       values($1,1,10000,3,'fixture','2026-03-07',now()) returning id`,
+      [quoteFixture.contractId],
+    );
+    const approvedQuote = await pool.query<{ id: string }>(
+      `insert into plan_quotes(contract_id,version,price_excl_tax,credits,description,expires_on,sent_at,approved_at)
+       values($1,1,10000,3,'fixture','2026-03-07',now(),now()) returning id`,
+      [approvedQuoteFixture.contractId],
+    );
+    await pool.query(
+      "update contracts set status='awaiting_quote_approval' where id=any($1::uuid[])",
+      [[quoteFixture.contractId, approvedQuoteFixture.contractId]],
+    );
+    await pool.query(
+      "update contracts set status='awaiting_payment' where id=any($1::uuid[])",
+      [[paidFixture.contractId, dueFixture.contractId]],
+    );
+    await pool.query(
+      "update contracts set status='active',anchor_date='2026-02-01' where id=$1",
+      [activeFixture.contractId],
+    );
+    await pool.query(
+      `insert into invoices(invoice_no,contract_id,kind,status,payment_method,issued_on,due_on,total_excl_tax,tax_amount,total_incl_tax,billing_name,issuer_snapshot)
+       values($1,$2,'initial','paid','bank_transfer','2026-02-28','2026-03-07',5000,500,5500,'fixture','{}'::jsonb),
+             ($3,$4,'initial','issued','bank_transfer','2026-02-28','2026-03-07',5000,500,5500,'fixture','{}'::jsonb)`,
+      [
+        `${prefix}-paid-${randomUUID()}`,
+        paidFixture.contractId,
+        `${prefix}-due-${randomUUID()}`,
+        dueFixture.contractId,
+      ],
+    );
+    // 空のスナップショットの請求書は、他のテストの一覧（入金確認待ちなど）を壊すので、このテストの終了時に必ず消す。
+    onTestFinished(async () => {
+      await pool.query(
+        "delete from invoices where invoice_no like $1 or invoice_no like $2",
+        [`${prefix}-paid-%`, `${prefix}-due-%`],
+      );
+    });
+    const job = new DailyLifecycleJob(pool);
+    expect(
+      await job.runDailyLifecycle("2026-03-07", {
+        contractIds: [quoteFixture.contractId],
+      }),
+    ).toMatchObject({ lapsed: 0, failed: 0 });
+    const results = await Promise.all([
+      job.runDailyLifecycle("2026-03-08", {
+        contractIds: [quoteFixture.contractId],
+      }),
+      job.runDailyLifecycle("2026-03-08", {
+        contractIds: [quoteFixture.contractId],
+      }),
+    ]);
+    expect(results.reduce((sum, result) => sum + result.lapsed, 0)).toBe(1);
+    expect(
+      await job.runDailyLifecycle("2026-03-08", {
+        contractIds: [
+          approvedQuoteFixture.contractId,
+          paidFixture.contractId,
+          activeFixture.contractId,
+          reviewFixture.contractId,
+        ],
+      }),
+    ).toMatchObject({ lapsed: 0, failed: 0 });
+    const statuses = await pool.query<{ id: string; status: string }>(
+      "select id,status from contracts where id=any($1::uuid[])",
+      [
+        [
+          quoteFixture.contractId,
+          approvedQuoteFixture.contractId,
+          paidFixture.contractId,
+          dueFixture.contractId,
+          activeFixture.contractId,
+          reviewFixture.contractId,
+        ],
+      ],
+    );
+    expect(
+      Object.fromEntries(statuses.rows.map((row) => [row.id, row.status])),
+    ).toEqual({
+      [quoteFixture.contractId]: "lapsed",
+      [approvedQuoteFixture.contractId]: "awaiting_quote_approval",
+      [paidFixture.contractId]: "awaiting_payment",
+      [dueFixture.contractId]: "awaiting_payment",
+      [activeFixture.contractId]: "active",
+      [reviewFixture.contractId]: "under_review",
+    });
+    expect(quote.rows[0]?.id).toBeTruthy();
+    expect(approvedQuote.rows[0]?.id).toBeTruthy();
   });
 
   it("uses the Tokyo confirmation day independently from a leap-day bank date", async () => {

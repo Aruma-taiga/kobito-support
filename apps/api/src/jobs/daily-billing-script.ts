@@ -4,7 +4,7 @@ import { Pool } from "pg";
 import { ChromiumInvoicePdfRenderer } from "../modules/invoices/renderer.js";
 import { InvoiceRepository } from "../modules/invoices/repository.js";
 import { loadConfig } from "../platform/config.js";
-import { runDailyBilling } from "./daily-billing.js";
+import { runDaily } from "./daily-billing.js";
 
 if (process.env.NODE_ENV !== "production") {
   dotenv.config({
@@ -27,13 +27,14 @@ function todayInTokyo(now: Date): string {
 const config = loadConfig(process.env);
 const pool = new Pool({ connectionString: config.databaseUrl });
 try {
-  const result = await runDailyBilling(
+  const result = await runDaily(
     todayInTokyo(new Date()),
     pool,
     new InvoiceRepository(pool, config, new ChromiumInvoicePdfRenderer()),
   );
   process.stdout.write(`${JSON.stringify(result)}\n`);
-  if (result.failed > 0) process.exitCode = 1;
+  if (result.billing.failed > 0 || result.lifecycle.failed > 0)
+    process.exitCode = 1;
 } finally {
   await pool.end();
 }
