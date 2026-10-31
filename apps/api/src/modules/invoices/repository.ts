@@ -23,6 +23,8 @@ import {
   planCodes,
 } from "@kobito/shared";
 import type { Pool, PoolClient } from "pg";
+import type { PdfStore } from "../../integrations/storage/pdf-store.js";
+import { PostgresPdfStore } from "../../integrations/storage/postgres.js";
 import { withAdminAudit } from "../../platform/audit.js";
 import type { RuntimeConfig } from "../../platform/config.js";
 import { safePgInteger } from "../../platform/db/integers.js";
@@ -169,7 +171,14 @@ export class InvoiceRepository implements InvoiceModule {
     private readonly config: RuntimeConfig,
     private readonly renderer: InvoicePdfRenderer,
     private readonly clock: () => Date = () => new Date(),
+    private readonly pdfStore?: PdfStore,
   ) {}
+
+  private get invoiceStorageAvailable(): boolean {
+    return (
+      this.config.nodeEnv !== "production" || this.config.pdfStorage === "gcs"
+    );
+  }
 
   async listPendingBankTransfers(
     principal: Principal,
@@ -635,7 +644,7 @@ export class InvoiceRepository implements InvoiceModule {
     principal: Principal,
     applicationId: string,
   ): Promise<ApproveApplicationResponse> {
-    if (this.config.nodeEnv === "production")
+    if (!this.invoiceStorageAvailable)
       throw new ApiError(503, "invoice_unavailable");
     return withAdminAudit(
       this.pool,
@@ -652,7 +661,7 @@ export class InvoiceRepository implements InvoiceModule {
 
   async getReadiness(principal: Principal): Promise<InvoiceReadiness> {
     this.assertAdmin(principal);
-    if (this.config.nodeEnv === "production")
+    if (!this.invoiceStorageAvailable)
       return {
         canIssue: false,
         mode: "unavailable",
@@ -811,7 +820,7 @@ export class InvoiceRepository implements InvoiceModule {
     client: PoolClient,
     input: InitialInvoiceInput,
   ): Promise<InvoiceListItem> {
-    if (this.config.nodeEnv === "production")
+    if (!this.invoiceStorageAvailable)
       throw new ApiError(503, "invoice_unavailable");
     return this.issueInitialInvoice(client, input);
   }
@@ -825,6 +834,8 @@ export class InvoiceRepository implements InvoiceModule {
     client: PoolClient,
     input: InitialInvoiceInput,
   ): Promise<InvoiceListItem> {
+    if (!this.invoiceStorageAvailable)
+      throw new ApiError(503, "invoice_unavailable");
     const { monthlyExcl, planName, planId, planCode, credits } = input.plan;
     const currentSettings = await this.readIssuerSettings(client);
     const preview = localPreviewPermitted(
@@ -946,14 +957,24 @@ export class InvoiceRepository implements InvoiceModule {
         firstLine.amountExclTax,
       ],
     );
-    await client.query(
-      "insert into invoice_documents (invoice_id, mime_type, sha256, content) values ($1,'application/pdf',$2,$3)",
-      [
-        invoiceId,
-        createHash("sha256").update(pdf).digest("hex"),
-        Buffer.from(pdf),
-      ],
-    );
+    const sha256 = createHash("sha256").update(pdf).digest("hex");
+    if (this.config.pdfStorage === "gcs") {
+      if (!this.pdfStore) throw new ApiError(503, "invoice_unavailable");
+      const storageKey = `invoices/${invoiceId}.pdf`;
+      // Upload before transaction commit. A failed commit can leave an orphan;
+      // a retry uses the same immutable object key and verifies its contents.
+      await this.pdfStore.put(storageKey, pdf);
+      await client.query(
+        "insert into invoice_documents (invoice_id, mime_type, sha256, content, storage_key) values ($1,'application/pdf',$2,null,$3)",
+        [invoiceId, sha256, storageKey],
+      );
+    } else {
+      await PostgresPdfStore.putInTransaction(
+        client,
+        `invoices/${invoiceId}.pdf`,
+        pdf,
+      );
+    }
     if (kind === "initial")
       await client.query(
         "update contracts set status = 'awaiting_payment', first_invoice_due_on = $2 where id = $1",
@@ -1243,13 +1264,15 @@ export class InvoiceRepository implements InvoiceModule {
     invoiceId: string,
   ): Promise<{ invoiceNo: string; content: Uint8Array }> {
     if (kind === "customer" && !scope) throw new ApiError(404, "not_found");
-    if (this.config.nodeEnv === "production")
+    if (!this.invoiceStorageAvailable)
       throw new ApiError(503, "invoice_unavailable");
     const result = await this.pool.query<{
       invoice_no: string;
-      content: Buffer;
+      content: Buffer | null;
+      storage_key: string | null;
+      sha256: string;
     }>(
-      `select i.invoice_no, d.content from invoices i join invoice_documents d on d.invoice_id = i.id
+      `select i.invoice_no, d.content, d.storage_key, d.sha256 from invoices i join invoice_documents d on d.invoice_id = i.id
        join contracts c on c.id = i.contract_id where i.id = $1 and i.kind in ('initial','monthly','extra_credit')
        and ($2::text is null or c.customer_id::text = $2)`,
       [invoiceId, kind === "customer" ? (scope?.customerId ?? null) : null],
@@ -1258,7 +1281,19 @@ export class InvoiceRepository implements InvoiceModule {
     if (!row) throw new ApiError(404, "not_found");
     if (!/^[A-Za-z0-9-]{1,64}$/.test(row.invoice_no))
       throw new Error("Invalid persisted invoice number");
-    return { invoiceNo: row.invoice_no, content: row.content };
+    let content: Uint8Array;
+    if (row.storage_key) {
+      if (!this.pdfStore) throw new ApiError(503, "invoice_unavailable");
+      content = await this.pdfStore.get(row.storage_key);
+    } else if (row.content) {
+      content = row.content;
+    } else {
+      throw new Error("Persisted invoice document has no content");
+    }
+    const actualHash = createHash("sha256").update(content).digest("hex");
+    if (actualHash !== row.sha256)
+      throw new Error("Persisted invoice document checksum mismatch");
+    return { invoiceNo: row.invoice_no, content };
   }
 
   private listItem(detail: InvoiceDetail): InvoiceListItem {

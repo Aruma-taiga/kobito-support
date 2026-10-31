@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import { createApp } from "./app.js";
 import { HttpKomojuClient } from "./integrations/komoju/client.js";
 import { LineIdTokenVerifier } from "./integrations/line/verify-id-token.js";
+import { createPdfStore } from "./integrations/storage/configured.js";
 import { PostgresLineRepository } from "./modules/accounts/line/repository.js";
 import { LineService } from "./modules/accounts/line/service.js";
 import { AccountsRepository } from "./modules/accounts/repository.js";
@@ -58,6 +59,8 @@ const invoiceRepository = new InvoiceRepository(
   pool,
   config,
   new ChromiumInvoicePdfRenderer(),
+  undefined,
+  createPdfStore(config, pool),
 );
 const invoices = new InvoiceService(invoiceRepository);
 const app = createApp({

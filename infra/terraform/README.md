@@ -11,7 +11,7 @@ GCP の本番相当環境（東京 `asia-northeast1`）と Cloudflare Pages/DNS 
 
 Cloud Run API は Webhook を受けるため未認証呼び出しを許可します。顧客認証・管理者の二段階認証は API が検証します。Cloud SQL は PostgreSQL 16、東京の最小 `db-f1-micro`、自動バックアップ/PITR、削除保護を設定しています。Cloud Run の DB 接続は Cloud SQL 接続機能を使います。
 
-Cloud Storage は請求書 PDF 用の非公開バケットと 2,555 日（約7年）のライフサイクル枠です。ただし現状のアプリは PDF を PostgreSQL に保存し、本番 GCS 保存は未実装です。バケットを作ってもアプリの保存先は切り替わりません。
+Cloud Storage は請求書 PDF 用の非公開バケットと 2,555 日（約7年）のライフサイクル枠です。既定では PDF は PostgreSQL に保存し、バケットの作成だけでは保存先は切り替わりません。`pdf_storage_gcs_enabled = true` を明示した場合だけ、Cloud Run API と全 Jobs に `PDF_STORAGE=gcs` と `PDF_BUCKET=<この構成の invoices バケット名>` を渡します。同時に、実行サービスアカウントへ `storage.objects.create` / `storage.objects.get` だけを含むカスタムロールをこのバケットに限定して付与します。オブジェクトの一覧・上書き・削除・公開や署名 URL 発行のための権限は付与しません。認証付き API 経由で取得する構成です。既存 PostgreSQL 保存 PDF の移行は行いません。
 
 ## 事前に人が行うこと
 
@@ -39,13 +39,22 @@ Cloud Storage は請求書 PDF 用の非公開バケットと 2,555 日（約7�
 
 `job:retention` は個人情報の匿名化を行う本番データ変更処理です。実行前に削除対象・保持期間・監査を確認し、初回運用手順を承認してください。現在の処理は Firebase アカウント自体を削除しません。
 
+## PDF の GCS 保存を有効にする前
+
+`pdf_storage_gcs_enabled` の既定値は `false` です。切り替え前に、GCS 対応を含む API イメージ、バケットの保持方針、実行サービスアカウントの ADC、PDF の生成・取得・重複作成時の挙動、既存 PostgreSQL 保存 PDF の取得を実環境で確認してください。Cloud Run と Jobs は同じサービスアカウントを使い、サービスアカウント鍵は配布しません。外部サービス設定・本番有効化には別途承認が必要です。Terraform の `plan` / `apply` や GCS 接続検証はこの変更では実施していません。
+
+```hcl
+# 承認と実環境検証の完了後のみ有効にする
+pdf_storage_gcs_enabled = true
+```
+
 ## カード決済を有効にする前
 
 W1 のテストモード確認では、定期課金は作成時に初回課金され、定期課金由来の `payment.captured` には請求番号が入りません。現在の実装は請求書ごとの単発支払いリンクで、定期課金は未採用です。月末（29〜31日）の課金日と、失敗後の自動再試行は未確認です。決済の紐付け・月末周期・再試行方針・本番の Webhook と返金/取消運用を確定し、テストしてから、Secret の版を登録して `komoju_enabled = true` にしてください。有効にするとアプリのカード機能が有効になります。
 
 ## 未実装・未検証
 
-- 請求書 PDF の GCS 保存。現在は PostgreSQL 保存であり、GCS バケットは予約枠です。
+- 請求書 PDF の GCS 保存の実環境検証と本番有効化。設定は既定で無効です。
 - Resend によるメールの実送信、SPF/DKIM の実検証。
 - `job:retention` からの Firebase アカウント削除。
 - Docker イメージ内での Job 起動、Terraform `fmt` / `validate`、GCP/Cloudflare の実リソース検証。

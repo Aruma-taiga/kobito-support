@@ -92,3 +92,9 @@ variable "mail_enabled" {
   type        = bool
   default     = false
 }
+
+variable "pdf_storage_gcs_enabled" {
+  description = "true にすると API と Jobs の PDF 保存先を既存の非公開請求書バケットに切り替える。本番有効化の承認と GCS の実環境検証後に有効にする。"
+  type        = bool
+  default     = false
+}
