@@ -79,6 +79,7 @@ export type VoidInvoiceRequest = z.infer<typeof voidInvoiceRequestSchema>;
 
 export const invoiceDetailSchema = invoiceListItemSchema
   .extend({
+    voidedOn: isoDateSchema.optional(),
     acceptedPlan: z
       .object({
         planId: z.uuid(),

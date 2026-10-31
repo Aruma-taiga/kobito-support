@@ -29,6 +29,10 @@ function yen(value: number): string {
 export function invoiceHtml(invoice: InvoiceDetail): string {
   invoice = invoiceDetailSchema.parse(invoice);
   const preview = invoice.preview;
+  const voidedOn = invoice.voidedOn;
+  const voidedDate = voidedOn
+    ? `${Number(voidedOn.slice(0, 4))}年${Number(voidedOn.slice(5, 7))}月${Number(voidedOn.slice(8, 10))}日`
+    : undefined;
   const issuer = invoice.issuer;
   const bank = [
     issuer.bankAccountName,
@@ -53,6 +57,7 @@ export function invoiceHtml(invoice: InvoiceDetail): string {
       h1 { font-size:21pt; margin:0 0 5mm; letter-spacing:.12em; }
       h2 { font-size:12pt; margin:0 0 3mm; color:#334155; }
       .watermark { border:2px solid #b91c1c; color:#b91c1c; padding:2mm; font-weight:bold; text-align:center; margin-bottom:5mm; }
+      .void-mark { position:fixed; top:42%; left:12%; transform:rotate(-28deg); border:4px solid #b91c1c; color:#b91c1c; opacity:.28; padding:4mm 18mm; font-size:56pt; font-weight:bold; z-index:10; pointer-events:none; }
       .row { display:flex; justify-content:space-between; gap:12mm; }
       .recipient { flex:1; font-size:14pt; font-weight:bold; border-bottom:1px solid #64748b; padding:2mm 0; }
       .number { text-align:right; white-space:nowrap; }
@@ -67,11 +72,12 @@ export function invoiceHtml(invoice: InvoiceDetail): string {
       .small { color:#475569; font-size:8pt; margin:2mm 0 0; }
       .payment { margin-top:4mm; padding:3mm; background:#f8fafc; line-height:1.6; page-break-inside:avoid; }
     </style></head><body>
+    ${voidedOn ? '<div class="void-mark">取消</div>' : ""}
     ${preview ? '<div class="watermark">開発用サンプル・お支払い不要 / 正式な請求書ではありません</div>' : ""}
     <h1>請求書</h1>
     <div class="row"><div class="recipient">${escapeHtml(invoice.billingName)} 御中</div>
       <div class="meta">請求書番号：${escapeHtml(invoice.invoiceNo)}<br>発行日：${invoice.issuedOn}<br>お支払期限：${invoice.dueOn}</div></div>
-    <p>下記のとおりご請求申し上げます。</p>
+    <p>${voidedDate ? `この請求書は${escapeHtml(voidedDate)}に取り消されました。お支払いいただく必要はありません。` : "下記のとおりご請求申し上げます。"}</p>
     <div class="grand">ご請求金額　${yen(invoice.totalInclTax)}（税込）</div>
     <p>対象プラン：${escapeHtml(invoice.acceptedPlan.planName)}　月額${yen(invoice.acceptedPlan.monthlyPriceExclTax)}（税抜）　${invoice.acceptedPlan.credits}クレジット</p>
     <table><thead><tr><th>内容</th><th class="number">数量</th><th class="number">単価（税抜）</th><th class="number">金額（税抜）</th></tr></thead><tbody>${lines}</tbody></table>
