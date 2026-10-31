@@ -9,6 +9,7 @@ import type { AccountsDataRepository } from "./modules/accounts/repository.js";
 import { createAccountsRoutes } from "./modules/accounts/routes.js";
 import { AccountsService } from "./modules/accounts/service.js";
 import type { AdminModule } from "./modules/admin/contracts.js";
+import type { RetentionModule } from "./modules/admin/retention-contracts.js";
 import { createAdminRoutes } from "./modules/admin/routes.js";
 import type { ApplicationsModule } from "./modules/applications/contracts.js";
 import { createApplicationRoutes } from "./modules/applications/routes.js";
@@ -52,6 +53,7 @@ export interface AppDependencies {
   requests?: RequestModule;
   planQuotes?: PlanQuoteModule;
   referrals?: ReferralModule;
+  retention?: RetentionModule;
   customerAccess: CustomerAccessModule;
   publicSettings: {
     getServiceName(): Promise<string>;
@@ -192,6 +194,7 @@ export function createApp(dependencies: AppDependencies) {
         ? { planQuotes: dependencies.planQuotes }
         : {}),
       ...(dependencies.referrals ? { referrals: dependencies.referrals } : {}),
+      ...(dependencies.retention ? { retention: dependencies.retention } : {}),
     }),
   );
 

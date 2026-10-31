@@ -578,7 +578,7 @@ describe("initial invoice approval and customer access", () => {
       landingPath: "/me/invoices",
       access: "ended",
       invoiceAccess: true,
-      invoiceAccessUntil: "2026-03-01",
+      invoiceAccessUntil: "2026-02-28",
     });
     expect((await app.request("/api/v1/me", { headers: auth })).status).toBe(
       404,
@@ -689,6 +689,10 @@ describe("initial invoice approval and customer access", () => {
     const issued = await approve(app, fixture.applicationId);
     const invoiceId = ((await issued.json()) as { invoice: { id: string } })
       .invoice.id;
+    await pool.query(
+      "update customers set deletion_due_on='2026-01-01' where id=$1",
+      [fixture.customerId],
+    );
     const pending = await app.request("/api/v1/admin/bank-transfers/pending", {
       headers: { authorization: `Bearer ${adminToken}` },
     });
@@ -762,12 +766,14 @@ describe("initial invoice approval and customer access", () => {
       period_count: string;
       grant_count: string;
       payment_date: string;
+      deletion_due_on: string | null;
     }>(
       `select c.status, (select count(*)::text from payments where invoice_id=$2) payment_count,
        (select count(*)::text from billing_periods where contract_id=c.id) period_count,
        (select count(*)::text from credit_entries where contract_id=c.id and kind='grant' and invoice_id=$2) grant_count,
-       (select paid_on::text from payments where invoice_id=$2) payment_date
-       from contracts c where c.id=$1`,
+       (select paid_on::text from payments where invoice_id=$2) payment_date,
+       cu.deletion_due_on::text
+       from contracts c join customers cu on cu.id=c.customer_id where c.id=$1`,
       [fixture.contractId, invoiceId],
     );
     expect(state.rows[0]).toEqual({
@@ -776,6 +782,7 @@ describe("initial invoice approval and customer access", () => {
       period_count: "1",
       grant_count: "1",
       payment_date: "2026-01-31",
+      deletion_due_on: null,
     });
     const retry = await app.request(
       `/api/v1/admin/invoices/${invoiceId}/confirm-payment`,
@@ -1089,12 +1096,24 @@ describe("initial invoice approval and customer access", () => {
         contractIds: [fixture.contractId],
       }),
     ).toMatchObject({ lapsed: 0, failed: 0 });
-    const state = await pool.query<{ contract: string; invoice: string }>(
-      `select c.status contract,i.status invoice from contracts c join invoices i on i.contract_id=c.id
+    const state = await pool.query<{
+      contract: string;
+      invoice: string;
+      deletion_due_on: string;
+      transition_date: string | null;
+    }>(
+      `select c.status contract,i.status invoice,cu.deletion_due_on::text,
+         (select detail->>'transitionDate' from audit_logs where action='contract.lapsed' and target_id=c.id::text) transition_date
+         from contracts c join invoices i on i.contract_id=c.id join customers cu on cu.id=c.customer_id
        where c.id=$1 and i.kind='initial'`,
       [fixture.contractId],
     );
-    expect(state.rows[0]).toEqual({ contract: "lapsed", invoice: "overdue" });
+    expect(state.rows[0]).toEqual({
+      contract: "lapsed",
+      invoice: "overdue",
+      deletion_due_on: "2027-03-08",
+      transition_date: "2026-03-08",
+    });
   });
 
   it("ends a cancellation after its final period, expires its balance, and creates no later invoice", async () => {
@@ -1133,17 +1152,22 @@ describe("initial invoice approval and customer access", () => {
     const state = await pool.query<{
       status: string;
       ended_at: string | null;
+      ended_on_tokyo_date: string | null;
+      deletion_due_on: string;
       expires: string;
       invoices: string;
     }>(
-      `select c.status,c.ended_at::text,
+      `select c.status,c.ended_at::text,to_char(c.ended_at at time zone 'Asia/Tokyo','YYYY-MM-DD') ended_on_tokyo_date,
+       cu.deletion_due_on::text,
        (select count(*)::text from credit_entries where period_id=$2 and kind='expire') expires,
        (select count(*)::text from invoices where contract_id=c.id) invoices
-       from contracts c where c.id=$1`,
+       from contracts c join customers cu on cu.id=c.customer_id where c.id=$1`,
       [fixture.contractId, periodId],
     );
     expect(state.rows[0]).toMatchObject({
       status: "ended",
+      ended_on_tokyo_date: "2026-02-01",
+      deletion_due_on: "2027-02-01",
       expires: "1",
       invoices: "0",
     });

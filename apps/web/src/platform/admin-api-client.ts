@@ -52,6 +52,8 @@ import {
   invoiceReadinessSchema,
   pendingBankTransfersSchema,
   type RequestEstimate,
+  type RetentionItem,
+  retentionListSchema,
   updateAdminIssuerSettingsRequestSchema,
 } from "@kobito/shared";
 
@@ -241,6 +243,9 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
           body: JSON.stringify(parsed.data),
         },
       );
+    },
+    getRetention(): Promise<RetentionItem[]> {
+      return request("/api/v1/admin/retention", retentionListSchema);
     },
     getAdminReferrals(month?: string): Promise<AdminReferralsResponse> {
       const parsed = adminReferralsQuerySchema.safeParse(

@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { adminPaymentReviewsResponseSchema } from "@kobito/shared";
+import {
+  adminPaymentReviewsResponseSchema,
+  retentionDueDate,
+  retentionListSchema,
+  toTokyoDate,
+} from "@kobito/shared";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type AppDependencies, createApp } from "../../app.js";
@@ -60,6 +65,18 @@ function makeApp(): ReturnType<typeof createApp> {
       },
     },
     admin: new AdminService(new AdminRepository(pool)),
+    retention: {
+      listRetention: async () => [
+        {
+          customerId: "11111111-1111-4111-8111-111111111111",
+          shopName: "削除予定テスト店舗",
+          status: "ended" as const,
+          baseDate: "2025-11-01",
+          dueDate: "2026-11-01",
+          daysRemaining: 0,
+        },
+      ],
+    },
     invoices: {
       getReadiness: async () => ({
         canIssue: false,
@@ -268,6 +285,24 @@ afterAll(async () => {
 });
 
 describe("admin application review with PostgreSQL", () => {
+  it("requires the verified second factor for retention and returns no contact fields", async () => {
+    const app = makeApp();
+    const denied = await app.request("/api/v1/admin/retention", {
+      headers: { authorization: `Bearer ${noFactorToken}` },
+    });
+    expect(denied.status).toBe(403);
+    const response = await app.request("/api/v1/admin/retention", {
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(response.status).toBe(200);
+    const body: unknown = await response.json();
+    expect(retentionListSchema.parse(body)).toMatchObject([
+      { shopName: "削除予定テスト店舗", dueDate: "2026-11-01" },
+    ]);
+    expect(JSON.stringify(body)).not.toContain("email");
+    expect(JSON.stringify(body)).not.toContain("contact");
+  });
+
   it("returns only review events and failed invoices, validates DTO, caps rows, and requires second factor", async () => {
     const fixture = await makeReviewCase({
       shopName: `${testPrefix}-入金店舗`,
@@ -537,16 +572,17 @@ describe("admin application review with PostgreSQL", () => {
       notification_count: string;
       sent_at: Date | null;
       audit_count: string;
+      deletion_due_on: string;
     }>(
       `select c.status as contract_status, a.reviewed_at, a.review_result,
-              a.rejection_note,
+              a.rejection_note, cu.deletion_due_on::text,
               (select count(*)::text from notifications n
                 where n.kind = 'application_declined' and n.payload->>'applicationId' = a.id::text) as notification_count,
               (select n.sent_at from notifications n
                 where n.kind = 'application_declined' and n.payload->>'applicationId' = a.id::text) as sent_at,
               (select count(*)::text from audit_logs l
                 where l.action = 'application.declined' and l.target_id = a.id::text) as audit_count
-         from applications a join contracts c on c.application_id = a.id
+         from applications a join contracts c on c.application_id = a.id join customers cu on cu.id=c.customer_id
         where a.id = $1`,
       [fixture.applicationId],
     );
@@ -559,6 +595,11 @@ describe("admin application review with PostgreSQL", () => {
       audit_count: "2",
     });
     expect(stored.rows[0]?.reviewed_at).toBeInstanceOf(Date);
+    const reviewedAt = stored.rows[0]?.reviewed_at;
+    if (!reviewedAt) throw new Error("Declined application timestamp missing");
+    expect(stored.rows[0]?.deletion_due_on).toBe(
+      retentionDueDate("declined", toTokyoDate(reviewedAt)),
+    );
   });
 
   it("rejects a decline after the contract has moved on and returns 404 for missing application", async () => {

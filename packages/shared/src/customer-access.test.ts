@@ -50,19 +50,19 @@ describe("customer lifecycle access decisions", () => {
     });
   });
 
-  it("retains ended invoice access through the Tokyo calendar anniversary, not 365 days", () => {
+  it("retains ended invoice access until the Tokyo calendar anniversary", () => {
     expect(
       customerAccessFor({
         ...base,
         status: "ended",
         endedOnTokyoDate: "2024-02-29",
-        todayTokyoDate: "2025-02-28",
+        todayTokyoDate: "2025-02-27",
       }),
     ).toMatchObject({
       landingPath: "/me/invoices",
       access: "ended",
       invoiceAccess: true,
-      invoiceAccessUntil: "2025-02-28",
+      invoiceAccessUntil: "2025-02-27",
     });
     expect(
       customerAccessFor({
@@ -76,6 +76,17 @@ describe("customer lifecycle access decisions", () => {
       access: "finished",
       invoiceAccess: false,
     });
+  });
+
+  it("ends invoice access on the same anniversary date used for anonymization", () => {
+    expect(
+      customerAccessFor({
+        ...base,
+        status: "ended",
+        endedOnTokyoDate: "2024-02-29",
+        todayTokyoDate: "2025-02-28",
+      }),
+    ).toMatchObject({ access: "finished", invoiceAccess: false });
   });
 
   it.each(["declined", "lapsed"] as const)("hides %s records", (status) => {

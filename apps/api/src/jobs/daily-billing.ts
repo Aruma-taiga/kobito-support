@@ -1,4 +1,4 @@
-import { creditsToExpire, periodFor } from "@kobito/shared";
+import { creditsToExpire, periodFor, retentionDueDate } from "@kobito/shared";
 import type { Pool } from "pg";
 import type { InvoiceRepository } from "../modules/invoices/repository.js";
 import { runDailyLifecycle } from "./daily-lifecycle.js";
@@ -135,10 +135,16 @@ export class DailyBillingJob {
               );
               result.expiredCredits += amount;
             }
-            await client.query(
-              "update contracts set status='ended',ended_at=now() where id=$1 and status='cancel_scheduled'",
-              [contract.id],
+            const ended = await client.query(
+              "update contracts set status='ended',ended_at=($2::date::timestamp at time zone 'Asia/Tokyo') where id=$1 and status='cancel_scheduled' returning customer_id",
+              [contract.id, today],
             );
+            if (ended.rowCount === 1) {
+              await client.query(
+                "update customers set deletion_due_on=coalesce(deletion_due_on,$2::date) where id=$1",
+                [ended.rows[0].customer_id, retentionDueDate("ended", today)],
+              );
+            }
             changed = true;
             break;
           }

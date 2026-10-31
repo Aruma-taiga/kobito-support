@@ -9,6 +9,7 @@ import { PostgresLineRepository } from "./modules/accounts/line/repository.js";
 import { LineService } from "./modules/accounts/line/service.js";
 import { AccountsRepository } from "./modules/accounts/repository.js";
 import { AdminRepository } from "./modules/admin/repository.js";
+import { RetentionRepository } from "./modules/admin/retention-repository.js";
 import { AdminService } from "./modules/admin/service.js";
 import { ApplicationsRepository } from "./modules/applications/repository.js";
 import { ApplicationsService } from "./modules/applications/service.js";
@@ -65,6 +66,7 @@ const app = createApp({
   accounts,
   applications,
   admin: new AdminService(new AdminRepository(pool)),
+  retention: new RetentionRepository(pool),
   issuerSettings: new IssuerSettingsService(new IssuerSettingsRepository(pool)),
   invoices,
   paymentLinks: new PaymentLinkService(
