@@ -52,6 +52,8 @@ const invoiceEdges = new Set<string>([
   "issued>failed",
   "issued>overdue",
   "issued>void",
+  "failed>void",
+  "overdue>void",
   "failed>paid",
   "overdue>paid",
 ]);

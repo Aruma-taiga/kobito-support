@@ -1,12 +1,17 @@
 import {
-  type InvoiceDetail,
+  type AdminInvoiceDetail,
   type InvoiceListItem,
   webMessages,
 } from "@kobito/shared";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { AdminApiClient } from "../platform/admin-api-client.js";
-import { formatDate, formatSlashDate, formatYen } from "../platform/format.js";
+import {
+  formatDate,
+  formatSlashDate,
+  formatYen,
+  tokyoDateOf,
+} from "../platform/format.js";
 import {
   AdminColumns,
   AdminHeading,
@@ -190,10 +195,16 @@ export function AdminInvoiceDetailPage({
   apiClient: AdminApiClient;
 }) {
   const { id = "" } = useParams();
-  const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
+  const [invoice, setInvoice] = useState<AdminInvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [voidReason, setVoidReason] = useState("");
+  const [voiding, setVoiding] = useState(false);
+  const [voidFormOpen, setVoidFormOpen] = useState(false);
+  const [voidConfirmOpen, setVoidConfirmOpen] = useState(false);
+  const [voidError, setVoidError] = useState(false);
+  const [voidNotice, setVoidNotice] = useState(false);
 
   // Retry count is an intentional refetch trigger even though the request URL is unchanged.
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry state must trigger another fetch
@@ -221,6 +232,25 @@ export function AdminInvoiceDetailPage({
     apiClient,
     invoice,
   );
+
+  async function voidInvoice() {
+    if (voiding || !voidReason.trim()) return;
+    setVoiding(true);
+    setVoidError(false);
+    try {
+      const updated = await apiClient.voidInvoice(id, {
+        reason: voidReason.trim(),
+      });
+      setInvoice(updated);
+      setVoidFormOpen(false);
+      setVoidConfirmOpen(false);
+      setVoidNotice(true);
+    } catch {
+      setVoidError(true);
+    } finally {
+      setVoiding(false);
+    }
+  }
 
   const crumb = (
     <>
@@ -262,17 +292,92 @@ export function AdminInvoiceDetailPage({
           </Badge>
         }
         actions={
-          <Button
-            size="sm"
-            disabled={downloading}
-            onClick={() => void downloadPdf()}
-          >
-            {downloading
-              ? webMessages.invoiceDownloadWorking
-              : webMessages.invoiceDownload}
-          </Button>
+          <>
+            <Button
+              size="sm"
+              disabled={downloading}
+              onClick={() => void downloadPdf()}
+            >
+              {downloading
+                ? webMessages.invoiceDownloadWorking
+                : webMessages.invoiceDownload}
+            </Button>
+            {invoice.status === "issued" ||
+            invoice.status === "failed" ||
+            invoice.status === "overdue" ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={voiding}
+                onClick={() => setVoidFormOpen(true)}
+              >
+                {webMessages.adminInvoiceVoidAction}
+              </Button>
+            ) : null}
+          </>
         }
       />
+      {invoice.status === "void" ? (
+        <Card title={webMessages.invoiceStatusVoid}>
+          <DefinitionList
+            items={[
+              {
+                term: webMessages.adminInvoiceVoidedAt,
+                description: invoice.voidedAt
+                  ? formatDate(tokyoDateOf(invoice.voidedAt))
+                  : webMessages.invoiceNotSet,
+              },
+              {
+                term: webMessages.adminInvoiceVoidReasonDetail,
+                description: invoice.voidReason ?? webMessages.invoiceNotSet,
+              },
+            ]}
+          />
+        </Card>
+      ) : null}
+      {voidNotice ? (
+        <Notice live>{webMessages.adminInvoiceVoidSuccess}</Notice>
+      ) : null}
+      {voidError ? (
+        <Notice tone="warn">{webMessages.adminInvoiceVoidError}</Notice>
+      ) : null}
+      {voidFormOpen && invoice.status !== "void" ? (
+        <Card title={webMessages.adminInvoiceVoidAction}>
+          <label className="ui-field">
+            <span>{webMessages.adminInvoiceVoidReasonLabel}</span>
+            <textarea
+              maxLength={200}
+              value={voidReason}
+              onChange={(event) => setVoidReason(event.currentTarget.value)}
+            />
+          </label>
+          <Hint>{webMessages.adminInvoiceVoidReasonHint}</Hint>
+          {!voidConfirmOpen ? (
+            <Button
+              disabled={!voidReason.trim() || voiding}
+              onClick={() => setVoidConfirmOpen(true)}
+            >
+              {webMessages.adminInvoiceVoidAction}
+            </Button>
+          ) : (
+            <section aria-label={webMessages.adminInvoiceVoidConfirmPrompt}>
+              <p>{webMessages.adminInvoiceVoidConfirmPrompt}</p>
+              <Button disabled={voiding} onClick={() => void voidInvoice()}>
+                {voiding
+                  ? webMessages.adminApproveWorking
+                  : webMessages.adminInvoiceVoidConfirm}
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={voiding}
+                onClick={() => setVoidConfirmOpen(false)}
+              >
+                {webMessages.adminInvoiceVoidCancel}
+              </Button>
+            </section>
+          )}
+        </Card>
+      ) : null}
       {invoice.preview ? (
         <Notice tone="yellow">{webMessages.invoicePreviewWarning}</Notice>
       ) : null}

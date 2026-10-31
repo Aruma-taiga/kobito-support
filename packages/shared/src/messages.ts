@@ -769,6 +769,19 @@ export const webMessages = {
   invoiceStatusFailed: invoiceStatusLabels.failed,
   invoiceStatusOverdue: invoiceStatusLabels.overdue,
   invoiceStatusVoid: invoiceStatusLabels.void,
+  adminInvoiceVoidAction: "取り消す",
+  adminInvoiceVoidReasonLabel: "取消理由",
+  adminInvoiceVoidReasonHint: "理由を200文字以内で入力してください。",
+  adminInvoiceVoidConfirmPrompt:
+    "この請求書を取り消します。この操作は取り消せません。",
+  adminInvoiceVoidConfirm: "取消を確定する",
+  adminInvoiceVoidCancel: "戻る",
+  adminInvoiceVoidSuccess: "請求書を取り消しました。",
+  adminInvoiceVoidedAt: "取消日",
+  adminInvoiceVoidReasonDetail: "取消理由",
+  adminInvoiceVoidError:
+    "請求書を取り消せませんでした。状態を確認して、もう一度お試しください。",
+  adminInvoiceVoidReasonRequired: "取消理由を入力してください。",
   invoicePreviewShort:
     "開発用サンプル・お支払い不要（正式な請求書ではありません）",
   invoiceDetailError: "請求書の内容を読み込めませんでした。",

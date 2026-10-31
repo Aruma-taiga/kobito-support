@@ -141,6 +141,9 @@ function makeApp(
       confirmBankPayment: async () => {
         throw new Error("not used");
       },
+      voidInvoice: async () => {
+        throw new Error("not used");
+      },
       getCustomerContract: async () => ({ contract: null }),
       purchaseExtraCredits: async () => {
         throw new Error("not implemented");

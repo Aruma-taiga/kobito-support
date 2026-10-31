@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { addCalendarDays, invoiceDetailSchema } from "./invoice.js";
+import {
+  addCalendarDays,
+  invoiceDetailSchema,
+  voidInvoiceRequestSchema,
+} from "./invoice.js";
 import { invoiceTotals } from "./pricing.js";
 
 describe("addCalendarDays", () => {
@@ -18,6 +22,23 @@ describe("addCalendarDays", () => {
 });
 
 describe("invoiceDetailSchema", () => {
+  it("accepts a trimmed cancellation reason from one through 200 characters", () => {
+    expect(voidInvoiceRequestSchema.parse({ reason: "  重複請求  " })).toEqual({
+      reason: "重複請求",
+    });
+    expect(voidInvoiceRequestSchema.safeParse({ reason: "  " }).success).toBe(
+      false,
+    );
+    expect(
+      voidInvoiceRequestSchema.safeParse({ reason: "理由".repeat(101) })
+        .success,
+    ).toBe(false);
+    expect(
+      voidInvoiceRequestSchema.safeParse({ reason: "理由", extra: true })
+        .success,
+    ).toBe(false);
+  });
+
   it("accepts a monthly invoice kind", () => {
     const totals = invoiceTotals([5000]);
     expect(

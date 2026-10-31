@@ -298,6 +298,8 @@ describe("state transitions", () => {
       "issued>failed",
       "issued>overdue",
       "issued>void",
+      "failed>void",
+      "overdue>void",
       "failed>paid",
       "overdue>paid",
     ]);

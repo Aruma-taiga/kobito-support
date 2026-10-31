@@ -4,6 +4,7 @@ import {
   confirmBankPaymentRequestSchema,
   declineApplicationRequestSchema,
   updateCancellationChecklistSchema,
+  voidInvoiceRequestSchema,
 } from "@kobito/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -26,6 +27,7 @@ import type { RetentionModule } from "./retention-contracts.js";
 
 const maxDeclineBodyBytes = 16 * 1024;
 const maxApproveBodyBytes = 4 * 1024;
+const maxVoidInvoiceBodyBytes = 4 * 1024;
 
 export function createAdminRoutes(dependencies: {
   admin: AdminModule;
@@ -185,6 +187,38 @@ export function createAdminRoutes(dependencies: {
     context.json(
       await dependencies.invoices.listAdmin(context.get("principal")),
     ),
+  );
+  routes.post(
+    "/invoices/:id/void",
+    bodyLimit({
+      maxSize: maxVoidInvoiceBodyBytes,
+      onError: (context) =>
+        context.json({ error: { code: "invalid_request" } }, 400),
+    }),
+    async (context) => {
+      const contentType = context.req
+        .header("content-type")
+        ?.split(";", 1)[0]
+        ?.trim()
+        .toLowerCase();
+      if (contentType !== "application/json")
+        throw new ApiError(400, "invalid_request");
+      let raw: unknown;
+      try {
+        raw = await context.req.json();
+      } catch {
+        throw new ApiError(400, "invalid_request");
+      }
+      const body = voidInvoiceRequestSchema.safeParse(raw);
+      if (!body.success) throw new ApiError(422, "validation_error");
+      return context.json(
+        await dependencies.invoices.voidInvoice(
+          context.get("principal"),
+          context.req.param("id"),
+          body.data,
+        ),
+      );
+    },
   );
   routes.get("/bank-transfers/pending", async (context) =>
     context.json(

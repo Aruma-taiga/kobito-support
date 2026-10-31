@@ -651,6 +651,83 @@ describe("a07 invoices", () => {
     expect(screen.getByText("税込合計")).toBeTruthy();
     expect(screen.getByText("11,000円")).toBeTruthy();
   });
+
+  it("voids an unpaid invoice only after entering a reason and confirming", async () => {
+    const detailResponse = {
+      ...invoice,
+      acceptedPlan: {
+        planId: "55555555-5555-4555-8555-555555555555",
+        planCode: "standard",
+        planName: "スタンダード",
+        monthlyPriceExclTax: 10000,
+        credits: 3,
+      },
+      billingName: "そろばん教室 みらい",
+      billingAddress: "東京都1-1",
+      issuer: {
+        serviceName: "kobITo Support",
+        companyName: "運営会社",
+        companyAddress: "東京都千代田区1-1",
+        invoiceRegistrationNo: null,
+        bankAccountName: null,
+        bankAccountBranch: null,
+        bankAccountType: null,
+        bankAccountNumber: null,
+      },
+      lines: [
+        {
+          description: "スタンダード 初月利用料",
+          quantity: 1,
+          unitPriceExclTax: 10000,
+          amountExclTax: 10000,
+          taxRate: 0.1,
+        },
+      ],
+    };
+    const voidResponse = {
+      ...detailResponse,
+      status: "void" as const,
+      voidedAt: "2026-11-01T02:00:00.000Z",
+      voidReason: "請求内容の誤り",
+    };
+    let completeVoid: (value: typeof voidResponse) => void = () => {};
+    const voidInvoice = vi.fn(
+      () =>
+        new Promise<typeof voidResponse>((resolve) => {
+          completeVoid = resolve;
+        }),
+    );
+    setup(`/admin/invoices/${invoiceId}`, {
+      getInvoice: vi.fn(async () => detailResponse),
+      voidInvoice,
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "取り消す" }));
+    fireEvent.change(screen.getByLabelText("取消理由"), {
+      target: { value: "請求内容の誤り" },
+    });
+    expect(voidInvoice).not.toHaveBeenCalled();
+    const voidButtons = screen.getAllByRole("button", { name: "取り消す" });
+    const reasonConfirm = voidButtons.at(-1);
+    if (!reasonConfirm) throw new Error("Void reason confirmation is missing");
+    fireEvent.click(reasonConfirm);
+    fireEvent.click(screen.getByRole("button", { name: "取消を確定する" }));
+    await waitFor(() => expect(voidInvoice).toHaveBeenCalledOnce());
+    const confirmButton = screen.getByRole("button", {
+      name: "請求書を準備しています…",
+    }) as HTMLButtonElement;
+    expect(confirmButton.disabled).toBe(true);
+    fireEvent.click(confirmButton);
+    expect(voidInvoice).toHaveBeenCalledOnce();
+    completeVoid(voidResponse);
+    expect(voidInvoice).toHaveBeenCalledWith(invoiceId, {
+      reason: "請求内容の誤り",
+    });
+    await waitFor(() =>
+      expect(screen.getAllByText("取消済み").length).toBeGreaterThan(0),
+    );
+    expect(screen.getByText("請求内容の誤り")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "取り消す" })).toBeNull();
+  });
 });
 
 describe("settings", () => {
