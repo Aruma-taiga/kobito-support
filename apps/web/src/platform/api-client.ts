@@ -1,14 +1,18 @@
 import {
   type ApplicationReceipt,
   type ApproveEstimateResponse,
+  type ApprovePlanQuoteResponse,
   applicationReceiptSchema,
   approveEstimateResponseSchema,
+  approvePlanQuoteResponseSchema,
   type CustomerAccess,
   type CustomerContractResponse,
+  type CustomerPlanQuote,
   type CustomerRequestDetail,
   type CustomerRequestSummary,
   customerAccessSchema,
   customerContractResponseSchema,
+  customerPlanQuoteSchema,
   customerRequestDetailSchema,
   customerRequestListSchema,
   type InvoiceDetail,
@@ -62,6 +66,8 @@ export class ApiClientError extends Error {
       | "application_conflict"
       | "request_conflict"
       | "estimate_conflict"
+      | "plan_quote_conflict"
+      | "plan_quote_expired"
       | "insufficient_credits"
       | "validation_error"
       | "conflict"
@@ -225,6 +231,8 @@ export function createApiClient(options: ApiClientOptions) {
         responseCode === "conflict" ||
         responseCode === "request_conflict" ||
         responseCode === "estimate_conflict" ||
+        responseCode === "plan_quote_conflict" ||
+        responseCode === "plan_quote_expired" ||
         responseCode === "insufficient_credits" ||
         responseCode === "invalid_line_token"
       ) {
@@ -472,6 +480,16 @@ export function createApiClient(options: ApiClientOptions) {
       return postJson(
         `/api/v1/me/estimates/${encodeURIComponent(estimateId)}/approve`,
         approveEstimateResponseSchema,
+        {},
+      );
+    },
+    getPlanQuote(): Promise<CustomerPlanQuote> {
+      return getJson("/api/v1/me/plan-quote", customerPlanQuoteSchema, true);
+    },
+    approvePlanQuote(quoteId: string): Promise<ApprovePlanQuoteResponse> {
+      return postJson(
+        `/api/v1/me/plan-quote/${encodeURIComponent(quoteId)}/approve`,
+        approvePlanQuoteResponseSchema,
         {},
       );
     },

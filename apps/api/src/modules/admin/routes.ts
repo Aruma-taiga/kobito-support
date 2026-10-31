@@ -14,6 +14,10 @@ import {
 import { ApiError, type ApiVariables } from "../../platform/types.js";
 import type { AccountsDataRepository } from "../accounts/repository.js";
 import type { InvoiceModule } from "../invoices/contracts.js";
+import type { PlanQuoteModule } from "../plan-quotes/contracts.js";
+import { createPlanQuoteAdminRoutes } from "../plan-quotes/routes.js";
+import type { ReferralModule } from "../referrals/contracts.js";
+import { createReferralAdminRoutes } from "../referrals/routes.js";
 import type { RequestModule } from "../requests/contracts.js";
 import { createRequestAdminRoutes } from "../requests/routes.js";
 import type { AdminModule } from "./contracts.js";
@@ -27,6 +31,8 @@ export function createAdminRoutes(dependencies: {
   accounts: AccountsDataRepository;
   invoices: InvoiceModule;
   requests?: RequestModule;
+  planQuotes?: PlanQuoteModule;
+  referrals?: ReferralModule;
 }) {
   const routes = new Hono<{ Variables: ApiVariables }>();
   const authenticate = createAuthenticate(
@@ -39,6 +45,10 @@ export function createAdminRoutes(dependencies: {
   routes.get("/session", (context) => context.json({ role: "admin" as const }));
   if (dependencies.requests)
     createRequestAdminRoutes(routes, dependencies.requests);
+  if (dependencies.planQuotes)
+    createPlanQuoteAdminRoutes(routes, dependencies.planQuotes);
+  if (dependencies.referrals)
+    createReferralAdminRoutes(routes, dependencies.referrals);
 
   routes.post(
     "/applications/:id/approve",

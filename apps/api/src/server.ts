@@ -18,6 +18,10 @@ import { InvoiceRepository } from "./modules/invoices/repository.js";
 import { InvoiceService } from "./modules/invoices/service.js";
 import { IssuerSettingsRepository } from "./modules/issuer-settings/repository.js";
 import { IssuerSettingsService } from "./modules/issuer-settings/service.js";
+import { PlanQuoteRepository } from "./modules/plan-quotes/repository.js";
+import { PlanQuoteService } from "./modules/plan-quotes/service.js";
+import { ReferralRepository } from "./modules/referrals/repository.js";
+import { ReferralService } from "./modules/referrals/service.js";
 import { RequestRepository } from "./modules/requests/repository.js";
 import { RequestService } from "./modules/requests/service.js";
 import {
@@ -43,9 +47,12 @@ const applications = new ApplicationsService(
   new ApplicationsRepository(pool),
   config,
 );
-const invoices = new InvoiceService(
-  new InvoiceRepository(pool, config, new ChromiumInvoicePdfRenderer()),
+const invoiceRepository = new InvoiceRepository(
+  pool,
+  config,
+  new ChromiumInvoicePdfRenderer(),
 );
+const invoices = new InvoiceService(invoiceRepository);
 const app = createApp({
   config,
   verifier,
@@ -55,6 +62,10 @@ const app = createApp({
   issuerSettings: new IssuerSettingsService(new IssuerSettingsRepository(pool)),
   invoices,
   requests: new RequestService(new RequestRepository(pool)),
+  planQuotes: new PlanQuoteService(
+    new PlanQuoteRepository(pool, invoiceRepository),
+  ),
+  referrals: new ReferralService(new ReferralRepository(pool)),
   customerAccess: new CustomerAccessService(
     new PostgresCustomerAccessRepository(pool),
   ),

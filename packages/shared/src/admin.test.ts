@@ -164,3 +164,19 @@ describe("admin DTO validation", () => {
     ).toBe("declined");
   });
 });
+
+describe("due-soon rule", () => {
+  it("counts days to the due date and flags 7 days or fewer, including overdue", async () => {
+    const { adminDueSoonDays, daysUntil, isDueSoon } = await import(
+      "./admin.js"
+    );
+    expect(adminDueSoonDays).toBe(7);
+    expect(daysUntil("2026-11-17", "2026-11-14")).toBe(3);
+    expect(daysUntil("2026-12-01", "2026-11-30")).toBe(1);
+    expect(daysUntil("2026-11-14", "2026-11-14")).toBe(0);
+    expect(daysUntil("2026-11-10", "2026-11-14")).toBe(-4);
+    expect(isDueSoon("2026-11-21", "2026-11-14")).toBe(true);
+    expect(isDueSoon("2026-11-22", "2026-11-14")).toBe(false);
+    expect(isDueSoon("2026-11-01", "2026-11-14")).toBe(true);
+  });
+});

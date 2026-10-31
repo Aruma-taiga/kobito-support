@@ -489,10 +489,6 @@ export function CustomerFinishedPage() {
   );
 }
 
-export function CustomerPlanQuoteUnavailablePage() {
-  return <NotFoundPage />;
-}
-
 export function CustomerHomePage({
   apiClient,
 }: {

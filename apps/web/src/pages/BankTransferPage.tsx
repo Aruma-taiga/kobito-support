@@ -5,15 +5,24 @@ import {
   type AdminApiClient,
   AdminApiError,
 } from "../platform/admin-api-client.js";
+import { formatSlashDate, formatYen } from "../platform/format.js";
+import {
+  ActionBar,
+  AdminHeading,
+  Badge,
+  Button,
+  Card,
+  DefinitionList,
+  Field,
+  Hint,
+  Notice,
+  Table,
+} from "../ui/index.js";
 
 type Pending = Awaited<
   ReturnType<AdminApiClient["getPendingBankTransfers"]>
 >["items"][number];
 type Confirmed = Awaited<ReturnType<AdminApiClient["confirmBankPayment"]>>;
-
-function yen(value: number): string {
-  return `${value.toLocaleString("ja-JP")}円`;
-}
 
 function isAllowedDate(value: string, invoice: Pending["invoice"]): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -140,234 +149,253 @@ export function AdminBankTransferPage({
     }
   }
 
+  const amountError =
+    amount.length > 0 && !amountValid
+      ? webMessages.bankTransferAmountInvalid
+      : undefined;
+  const dateError =
+    paidOn.length > 0 && !dateValid
+      ? webMessages.bankTransferDateInvalid
+      : undefined;
   return (
-    <main className="page-main admin-bank-transfer-page">
-      <section
-        className="card admin-card"
-        aria-labelledby="bank-transfer-title"
-      >
-        <h1 id="bank-transfer-title">{webMessages.bankTransferTitle}</h1>
-        <p>{webMessages.bankTransferIntro}</p>
-        {result ? (
-          <section className="bank-transfer-result" aria-live="polite">
-            <h2>
-              {result.payment.preview
-                ? webMessages.bankTransferSuccessPreview
-                : webMessages.bankTransferSuccess}
-            </h2>
-            <dl className="admin-detail-list">
-              <dt>{webMessages.bankTransferCustomer}</dt>
-              <dd>{result.item.customer.shopName}</dd>
-              <dt>{webMessages.bankTransferInvoice}</dt>
-              <dd>{result.item.invoice.invoiceNo}</dd>
-              <dt>{webMessages.contractDate}</dt>
-              <dd>{result.payment.anchorDate}</dd>
-              <dt>{webMessages.contractPeriod}</dt>
-              <dd>
-                {result.payment.period.startsOn}〜{result.payment.period.endsOn}
-              </dd>
-              <dt>{webMessages.contractCredits}</dt>
-              <dd>
-                {result.payment.period.credits}{" "}
-                {webMessages.contractBalanceUnit}
-              </dd>
-            </dl>
-          </section>
-        ) : null}
-        {loading ? <output>{webMessages.bankTransferLoading}</output> : null}
-        {loadError ? (
-          <div>
-            <p className="error-message" role="alert">
-              {webMessages.bankTransferLoadError}
-            </p>
-            <button
-              className="secondary-button"
-              onClick={() => setRefresh((v) => v + 1)}
-              type="button"
-            >
-              {webMessages.retry}
-            </button>
-          </div>
-        ) : null}
-        {pageError ? (
-          <div>
-            <p className="error-message" role="alert">
-              {pageError}
-            </p>
-            <button
-              className="secondary-button"
-              onClick={() => setRefresh((value) => value + 1)}
-              type="button"
-            >
-              {webMessages.retry}
-            </button>
-          </div>
-        ) : null}
-        {!loading && !loadError && items.length === 0 ? (
-          <p>{webMessages.bankTransferEmpty}</p>
-        ) : null}
-        {items.length ? (
-          <div className="bank-transfer-list">
-            {items.map((item) =>
-              (() => {
-                const { invoice, customer } = item;
-                return (
-                  <article className="bank-transfer-item" key={invoice.id}>
-                    <h2>{customer.shopName}</h2>
-                    <dl className="admin-detail-list">
-                      <dt>{webMessages.bankTransferCustomer}</dt>
-                      <dd>{customer.billingName}</dd>
-                      <dt>{webMessages.bankTransferInvoice}</dt>
-                      <dd>
-                        <Link
-                          to={`/admin/invoices/${encodeURIComponent(invoice.id)}`}
-                        >
-                          {invoice.invoiceNo}
-                        </Link>
-                      </dd>
-                      <dt>{webMessages.bankTransferAmount}</dt>
-                      <dd>{yen(invoice.totalInclTax)}</dd>
-                      <dt>{webMessages.bankTransferDue}</dt>
-                      <dd>{invoice.dueOn}</dd>
-                    </dl>
-                    {invoice.preview ? (
-                      <p className="invoice-preview-warning" role="note">
-                        {webMessages.bankTransferPreviewWarning}
-                      </p>
-                    ) : null}
-                    <button
-                      className="primary-button"
-                      disabled={Boolean(activeId) || confirming}
-                      onClick={() => begin(item)}
-                      type="button"
-                    >
-                      {webMessages.bankTransferConfirm}
-                    </button>
-                  </article>
-                );
-              })(),
-            )}
-          </div>
-        ) : null}
-        {active ? (
-          <section
-            className="bank-transfer-confirmation"
-            aria-labelledby="bank-transfer-form-title"
+    <>
+      <AdminHeading
+        id="bank-transfer-title"
+        title={webMessages.bankTransferTitle}
+      />
+      <p className="ui-admin__lead">{webMessages.bankTransferIntro}</p>
+      {result ? (
+        <Notice
+          live
+          title={
+            result.payment.preview
+              ? webMessages.bankTransferSuccessPreview
+              : webMessages.bankTransferSuccess
+          }
+        >
+          <DefinitionList
+            items={[
+              {
+                term: webMessages.bankTransferCustomer,
+                description: result.item.customer.shopName,
+              },
+              {
+                term: webMessages.bankTransferInvoice,
+                description: result.item.invoice.invoiceNo,
+              },
+              {
+                term: webMessages.contractDate,
+                description: result.payment.anchorDate,
+              },
+              {
+                term: webMessages.contractPeriod,
+                description: `${result.payment.period.startsOn}〜${result.payment.period.endsOn}`,
+              },
+              {
+                term: webMessages.contractCredits,
+                description: `${result.payment.period.credits} ${webMessages.contractBalanceUnit}`,
+              },
+            ]}
+          />
+        </Notice>
+      ) : null}
+      {loading ? (
+        <output className="ui-admin__lead">
+          {webMessages.bankTransferLoading}
+        </output>
+      ) : null}
+      {loadError ? (
+        <>
+          <Notice tone="warn">{webMessages.bankTransferLoadError}</Notice>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRefresh((v) => v + 1)}
           >
-            <h2 id="bank-transfer-form-title">
-              {webMessages.bankTransferConfirmTitle}
-            </h2>
-            <p>
-              {active.customer.shopName} ／ {active.invoice.invoiceNo} ／{" "}
-              {yen(active.invoice.totalInclTax)}
-            </p>
-            <label className="field-label" htmlFor="bank-transfer-amount">
-              {webMessages.bankTransferAmount}
-            </label>
+            {webMessages.retry}
+          </Button>
+        </>
+      ) : null}
+      {pageError ? (
+        <>
+          <Notice tone="warn">{pageError}</Notice>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRefresh((value) => value + 1)}
+          >
+            {webMessages.retry}
+          </Button>
+        </>
+      ) : null}
+      {!loading && !loadError && items.length === 0 ? (
+        <Hint>{webMessages.bankTransferEmpty}</Hint>
+      ) : null}
+      {items.length ? (
+        <Table
+          caption={webMessages.bankTransferTableLabel}
+          highlightRows={items.flatMap((item, index) =>
+            item.invoice.id === activeId ? [index] : [],
+          )}
+          columns={[
+            { key: "invoice", header: webMessages.bankTransferColInvoice },
+            { key: "shop", header: webMessages.bankTransferColShop },
+            { key: "amount", header: webMessages.bankTransferColAmount },
+            { key: "due", header: webMessages.bankTransferColDue },
+            { key: "action", header: "" },
+          ]}
+          rows={items.map((item) => {
+            const { invoice, customer } = item;
+            return {
+              invoice: (
+                <>
+                  <Link
+                    to={`/admin/invoices/${encodeURIComponent(invoice.id)}`}
+                  >
+                    {invoice.invoiceNo}
+                  </Link>
+                  {invoice.preview ? (
+                    <span className="ui-table__sub">
+                      {webMessages.bankTransferPreviewWarning}
+                    </span>
+                  ) : null}
+                </>
+              ),
+              shop: (
+                <>
+                  <b>{customer.shopName}</b>
+                  <span className="ui-table__sub">{customer.billingName}</span>
+                </>
+              ),
+              amount: (
+                <>
+                  <span className="ui-table__sub">
+                    {webMessages.adminSubtotalExcl}{" "}
+                    {formatYen(invoice.totalExclTax)}
+                  </span>
+                  <span className="ui-table__sub">
+                    {webMessages.adminTaxAmount} {formatYen(invoice.taxAmount)}
+                  </span>
+                  <b>
+                    {webMessages.adminTotalIncl}{" "}
+                    {formatYen(invoice.totalInclTax)}
+                  </b>
+                </>
+              ),
+              due: formatSlashDate(invoice.dueOn),
+              action:
+                invoice.id === activeId ? (
+                  <Badge tone="yellow">
+                    {webMessages.bankTransferEntering}
+                  </Badge>
+                ) : (
+                  <Button
+                    size="sm"
+                    disabled={Boolean(activeId) || confirming}
+                    onClick={() => begin(item)}
+                  >
+                    {webMessages.bankTransferRowAction}
+                  </Button>
+                ),
+            };
+          })}
+        />
+      ) : null}
+      {active ? (
+        <Card title={webMessages.bankTransferConfirmTitle}>
+          <p>
+            {active.customer.shopName} ／ {active.invoice.invoiceNo} ／{" "}
+            {webMessages.adminTotalIncl}{" "}
+            {formatYen(active.invoice.totalInclTax)}
+          </p>
+          <Field
+            label={webMessages.bankTransferAmount}
+            hint={webMessages.bankTransferAmountHint.replace(
+              "{total}",
+              active.invoice.totalInclTax.toLocaleString("ja-JP"),
+            )}
+            error={amountError}
+          >
             <input
-              id="bank-transfer-amount"
               inputMode="numeric"
               autoComplete="off"
               value={amount}
               onChange={(event) => setAmount(event.currentTarget.value)}
-              aria-invalid={amount.length > 0 && !amountValid}
             />
-            {amount.length > 0 && !amountValid ? (
-              <p className="error-message" role="alert">
-                {webMessages.bankTransferAmountInvalid}
-              </p>
-            ) : null}
-            <label className="field-label" htmlFor="bank-transfer-date">
-              {webMessages.bankTransferDate}
-            </label>
+          </Field>
+          <Field label={webMessages.bankTransferDate} error={dateError}>
             <input
-              id="bank-transfer-date"
               type="date"
               value={paidOn}
               onChange={(event) => setPaidOn(event.currentTarget.value)}
               min={active.invoice.issuedOn}
               max={active.invoice.dueOn}
-              aria-invalid={paidOn.length > 0 && !dateValid}
             />
-            {paidOn.length > 0 && !dateValid ? (
-              <p className="error-message" role="alert">
-                {webMessages.bankTransferDateInvalid}
+          </Field>
+          {active.invoice.preview ? (
+            <label className="ui-check">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(event) =>
+                  setAcknowledged(event.currentTarget.checked)
+                }
+              />
+              <span>{webMessages.bankTransferPreviewAck}</span>
+            </label>
+          ) : null}
+          {error ? <Notice tone="warn">{error}</Notice> : null}
+          {reviewing ? (
+            <section aria-labelledby="bank-transfer-final-title">
+              <h4 className="ui-card__subtitle" id="bank-transfer-final-title">
+                {webMessages.bankTransferFinalTitle}
+              </h4>
+              <Hint>{webMessages.bankTransferAnchorNotice}</Hint>
+              <p>
+                {active.customer.shopName} ／ {active.invoice.invoiceNo} ／{" "}
+                {formatYen(parsedAmount)} ／ {paidOn}
               </p>
-            ) : null}
-            {active.invoice.preview ? (
-              <label className="preview-acknowledgement">
-                <input
-                  type="checkbox"
-                  checked={acknowledged}
-                  onChange={(event) =>
-                    setAcknowledged(event.currentTarget.checked)
-                  }
-                />{" "}
-                {webMessages.bankTransferPreviewAck}
-              </label>
-            ) : null}
-            {error ? (
-              <p className="error-message" role="alert">
-                {error}
-              </p>
-            ) : null}
-            {reviewing ? (
-              <section
-                className="bank-transfer-final-check"
-                aria-labelledby="bank-transfer-final-title"
-              >
-                <h3 id="bank-transfer-final-title">
-                  {webMessages.bankTransferFinalTitle}
-                </h3>
-                <p>{webMessages.bankTransferAnchorNotice}</p>
-                <p>
-                  {active.customer.shopName} ／ {active.invoice.invoiceNo} ／{" "}
-                  {yen(parsedAmount)} ／ {paidOn}
-                </p>
-                <div className="admin-actions">
-                  <button
-                    className="primary-button"
-                    disabled={!canReview}
-                    onClick={() => void submit()}
-                    type="button"
-                  >
-                    {confirming
-                      ? webMessages.bankTransferWorking
-                      : webMessages.bankTransferConfirm}
-                  </button>
-                  <button
-                    className="secondary-button"
-                    disabled={confirming}
-                    onClick={() => setReviewing(false)}
-                    type="button"
-                  >
-                    {webMessages.bankTransferCancel}
-                  </button>
-                </div>
-              </section>
-            ) : (
-              <div className="admin-actions">
-                <button
-                  className="primary-button"
+              <ActionBar>
+                <Button
+                  size="sm"
                   disabled={!canReview}
-                  onClick={() => setReviewing(true)}
-                  type="button"
+                  onClick={() => void submit()}
                 >
-                  {webMessages.bankTransferReview}
-                </button>
-                <button
-                  className="secondary-button"
+                  {confirming
+                    ? webMessages.bankTransferWorking
+                    : webMessages.bankTransferConfirm}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   disabled={confirming}
-                  onClick={cancel}
-                  type="button"
+                  onClick={() => setReviewing(false)}
                 >
                   {webMessages.bankTransferCancel}
-                </button>
-              </div>
-            )}
-          </section>
-        ) : null}
-      </section>
-    </main>
+                </Button>
+              </ActionBar>
+            </section>
+          ) : (
+            <ActionBar>
+              <Button
+                size="sm"
+                disabled={!canReview}
+                onClick={() => setReviewing(true)}
+              >
+                {webMessages.bankTransferReview}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={confirming}
+                onClick={cancel}
+              >
+                {webMessages.bankTransferCancel}
+              </Button>
+            </ActionBar>
+          )}
+        </Card>
+      ) : null}
+    </>
   );
 }

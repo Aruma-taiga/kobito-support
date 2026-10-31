@@ -173,9 +173,9 @@ describe("invoice pages", () => {
     expect(screen.getByText("本店")).toBeTruthy();
     expect(screen.getByText("ライトプラン 初月分")).toBeTruthy();
     expect(screen.getByText("ライト（申込時）")).toBeTruthy();
-    const totals = document.querySelector(".invoice-totals");
+    const totals = document.querySelector(".ui-amounts");
     expect(totals?.textContent).toBe(
-      `${webMessages.invoiceTotalExclTax}￥5,000${webMessages.invoiceTaxAmount}￥500${webMessages.invoiceTotalInclTax}￥5,500`,
+      `${webMessages.adminSubtotalExcl}5,000円${webMessages.invoiceTaxLabel}500円${webMessages.adminTotalIncl}5,500円`,
     );
     expect(adminApiClient.getInvoice).toHaveBeenCalledWith(invoiceId);
   });

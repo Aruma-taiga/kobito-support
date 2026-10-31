@@ -420,7 +420,7 @@ describe("admin MFA and review UI", () => {
 
     expect(await screen.findByText("喫茶ひだまり")).toBeTruthy();
     fireEvent.click(
-      screen.getByRole("button", { name: webMessages.bankTransferConfirm }),
+      screen.getByRole("button", { name: webMessages.bankTransferRowAction }),
     );
     expect(
       screen.getByLabelText(webMessages.bankTransferPreviewAck),
@@ -526,12 +526,13 @@ describe("admin MFA and review UI", () => {
     expect(await screen.findByText(queueItem.shopName)).toBeTruthy();
     expect(screen.getByText("terms-v1")).toBeTruthy();
     expect(
-      (
-        screen.getByLabelText(
-          webMessages.applicationConsentBusiness,
-        ) as HTMLInputElement
-      ).checked,
-    ).toBe(true);
+      screen.getByText(webMessages.adminConsentBusinessShort).nextElementSibling
+        ?.textContent,
+    ).toBe(webMessages.adminConsentYes);
+    expect(
+      screen.getByText(webMessages.adminConsentMarketingShort)
+        .nextElementSibling?.textContent,
+    ).toBe(webMessages.adminConsentNo);
     expect(
       screen.getByText(detail.application.freeText as string),
     ).toBeTruthy();
@@ -567,11 +568,12 @@ describe("admin MFA and review UI", () => {
       await screen.findByText(webMessages.adminDeclineSuccess),
     ).toBeTruthy();
     fireEvent.click(
-      screen.getByRole("link", { name: webMessages.adminQueueTitle }),
+      within(screen.getByRole("main")).getByRole("link", {
+        name: webMessages.adminQueueTitle,
+      }),
     );
     expect(await screen.findByText(webMessages.adminQueueEmpty)).toBeTruthy();
     expect(getApplications).toHaveBeenCalledWith({
-      status: "under_review",
       q: "",
       page: 1,
       pageSize: 25,
@@ -884,14 +886,18 @@ describe("admin MFA and review UI", () => {
     expect(apiClient.getCustomerDetail).toHaveBeenCalledWith(customerId);
   });
 
-  it("routes /admin to the protected review queue", async () => {
+  it("routes /admin to the protected 今日やること page", async () => {
     const { apiClient } = setup({
       initialPath: "/admin",
       signedIn: true,
     });
-    expect(await screen.findByText(queueItem.shopName)).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: webMessages.adminTodayTitle,
+      }),
+    ).toBeTruthy();
     expect(apiClient.getSession).toHaveBeenCalledOnce();
-    expect(apiClient.getApplications).toHaveBeenCalledOnce();
   });
 
   it("lets an MFA-authorized admin edit issuer settings and explains readiness and invoice snapshots", async () => {

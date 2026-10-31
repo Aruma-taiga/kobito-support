@@ -4,6 +4,8 @@ import {
   type AdminCustomerDetail,
   type AdminIssuerSettings,
   type AdminIssuerSettingsResponse,
+  type AdminPlanQuote,
+  type AdminReferralsResponse,
   type AdminRequestDetail,
   type AdminRequestSummary,
   type AdminSession,
@@ -11,6 +13,9 @@ import {
   adminApplicationQueueResponseSchema,
   adminCustomerDetailSchema,
   adminIssuerSettingsResponseSchema,
+  adminPlanQuoteSchema,
+  adminReferralsQuerySchema,
+  adminReferralsResponseSchema,
   adminRequestDetailSchema,
   adminRequestListSchema,
   adminSessionSchema,
@@ -19,6 +24,8 @@ import {
   type CompleteRequestResponse,
   type ConfirmBankPaymentRequest,
   type CreateEstimate,
+  type CreatePlanQuote,
+  type CreatePlanQuoteResponse,
   type CreateRequest,
   completeRequestResponseSchema,
   completeRequestSchema,
@@ -26,6 +33,7 @@ import {
   confirmBankPaymentResponseSchema,
   createEstimateResponseSchema,
   createEstimateSchema,
+  createPlanQuoteResponseSchema,
   createRequestResponseSchema,
   createRequestSchema,
   type DeclineApplicationRequest,
@@ -61,6 +69,7 @@ export type AdminApiErrorCode =
   | "request_conflict"
   | "estimate_conflict"
   | "insufficient_credits"
+  | "plan_quote_conflict"
   | "invalid_response"
   | "issuer_settings_conflict";
 
@@ -132,7 +141,8 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
       if (
         responseCode === "request_conflict" ||
         responseCode === "estimate_conflict" ||
-        responseCode === "insufficient_credits"
+        responseCode === "insufficient_credits" ||
+        responseCode === "plan_quote_conflict"
       ) {
         throw new AdminApiError(responseCode);
       }
@@ -230,6 +240,19 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
         },
       );
     },
+    getAdminReferrals(month?: string): Promise<AdminReferralsResponse> {
+      const parsed = adminReferralsQuerySchema.safeParse(
+        month === undefined ? {} : { month },
+      );
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      const search = parsed.data.month
+        ? `?month=${encodeURIComponent(parsed.data.month)}`
+        : "";
+      return request(
+        `/api/v1/admin/referrals${search}`,
+        adminReferralsResponseSchema,
+      );
+    },
     getApplications(
       query: Partial<AdminApplicationQueueQuery> = {},
     ): Promise<AdminApplicationQueueResponse> {
@@ -324,6 +347,22 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
         `/api/v1/admin/requests/${encodeURIComponent(requestId)}/complete`,
         completeRequestResponseSchema,
         { method: "POST", body: JSON.stringify(parsed.data) },
+      );
+    },
+    getPlanQuote(customerId: string): Promise<AdminPlanQuote> {
+      return request(
+        `/api/v1/admin/customers/${encodeURIComponent(customerId)}/plan-quote`,
+        adminPlanQuoteSchema,
+      );
+    },
+    sendPlanQuote(
+      customerId: string,
+      value: CreatePlanQuote,
+    ): Promise<CreatePlanQuoteResponse> {
+      return request(
+        `/api/v1/admin/customers/${encodeURIComponent(customerId)}/plan-quote`,
+        createPlanQuoteResponseSchema,
+        { method: "POST", body: JSON.stringify(value) },
       );
     },
     getInvoices(): Promise<InvoiceList> {
