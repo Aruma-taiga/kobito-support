@@ -5,6 +5,7 @@ import {
   type AdminCustomerDetail,
   type AdminIssuerSettings,
   type AdminIssuerSettingsResponse,
+  type AdminNotificationFailuresResponse,
   type AdminPaymentReviewsResponse,
   type AdminPlanQuote,
   type AdminReferralsResponse,
@@ -16,6 +17,8 @@ import {
   adminCancellationSchema,
   adminCustomerDetailSchema,
   adminIssuerSettingsResponseSchema,
+  adminNotificationFailureRetryResponseSchema,
+  adminNotificationFailuresResponseSchema,
   adminPaymentReviewsResponseSchema,
   adminPlanQuoteSchema,
   adminReferralsQuerySchema,
@@ -415,6 +418,19 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
       return request(
         "/api/v1/admin/payment-reviews",
         adminPaymentReviewsResponseSchema,
+      );
+    },
+    getNotificationFailures(): Promise<AdminNotificationFailuresResponse> {
+      return request(
+        "/api/v1/admin/notification-failures?limit=100",
+        adminNotificationFailuresResponseSchema,
+      );
+    },
+    retryNotificationFailure(notificationId: string) {
+      return request(
+        `/api/v1/admin/notification-failures/${encodeURIComponent(notificationId)}/retry`,
+        adminNotificationFailureRetryResponseSchema,
+        { method: "POST", body: JSON.stringify({}) },
       );
     },
     getPendingBankTransfers() {

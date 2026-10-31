@@ -63,6 +63,46 @@ export type AdminPaymentReviewsResponse = z.infer<
   typeof adminPaymentReviewsResponseSchema
 >;
 
+export const adminNotificationFailuresQuerySchema = z
+  .object({ limit: z.coerce.number().int().min(1).max(100).default(50) })
+  .strict();
+export type AdminNotificationFailuresQuery = z.infer<
+  typeof adminNotificationFailuresQuerySchema
+>;
+export const adminNotificationFailureIdSchema = z.uuid();
+export const adminNotificationFailureSchema = z
+  .object({
+    id: z.uuid(),
+    kind: z.string().regex(/^(NT|S)-\d{2}[a-z]?$/),
+    scheduledAt: z.iso.datetime(),
+    reasonCode: z.enum([
+      "recipient_unavailable",
+      "settings_unavailable",
+      "mail_http_4xx",
+      "mail_http_5xx",
+      "mail_network_error",
+      "send_failed",
+      "unknown",
+    ]),
+    shopName: z.string(),
+  })
+  .strict();
+export const adminNotificationFailuresResponseSchema = z
+  .object({
+    items: z.array(adminNotificationFailureSchema),
+    totalCount: z.number().int().nonnegative(),
+  })
+  .strict();
+export type AdminNotificationFailuresResponse = z.infer<
+  typeof adminNotificationFailuresResponseSchema
+>;
+export const adminNotificationFailureRetryResponseSchema = z
+  .object({ id: z.uuid(), scheduled: z.literal(true) })
+  .strict();
+export type AdminNotificationFailureRetryResponse = z.infer<
+  typeof adminNotificationFailureRetryResponseSchema
+>;
+
 export const adminSessionSchema = z
   .object({ role: z.literal("admin") })
   .strict();

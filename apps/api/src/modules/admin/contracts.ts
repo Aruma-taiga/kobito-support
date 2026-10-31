@@ -3,6 +3,8 @@ import type {
   AdminApplicationQueueResponse,
   AdminCancellation,
   AdminCustomerDetail,
+  AdminNotificationFailureRetryResponse,
+  AdminNotificationFailuresResponse,
   AdminPaymentReviewsResponse,
   DeclineApplicationRequest,
   DeclineApplicationResponse,
@@ -13,6 +15,13 @@ import type { InvoiceModule } from "../invoices/contracts.js";
 
 export interface AdminModule {
   listPaymentReviews(query: unknown): Promise<AdminPaymentReviewsResponse>;
+  listNotificationFailures(
+    query: unknown,
+  ): Promise<AdminNotificationFailuresResponse>;
+  retryNotificationFailure(
+    principal: Principal,
+    notificationId: string,
+  ): Promise<AdminNotificationFailureRetryResponse>;
   listApplications(
     query: AdminApplicationQueueQuery,
   ): Promise<AdminApplicationQueueResponse>;

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   adminCancellationSchema,
+  adminNotificationFailuresResponseSchema,
   adminPaymentReviewsResponseSchema,
   retentionDueDate,
   retentionListSchema,
@@ -38,6 +39,7 @@ const planIds: string[] = [];
 const applicationIds: string[] = [];
 const contractIds: string[] = [];
 const invoiceIds: string[] = [];
+const notificationIds: string[] = [];
 const eventIds: string[] = [];
 const triggerNames: string[] = [];
 const functionNames: string[] = [];
@@ -253,6 +255,15 @@ afterAll(async () => {
       [applicationIds],
     );
   }
+  if (notificationIds.length) {
+    await pool.query(
+      "delete from audit_logs where target_type='notification' and target_id = any($1::text[])",
+      [notificationIds],
+    );
+    await pool.query("delete from notifications where id = any($1::uuid[])", [
+      notificationIds,
+    ]);
+  }
   if (contractIds.length) {
     await pool.query(
       "delete from notifications where dedupe_key = any($1::text[])",
@@ -303,6 +314,97 @@ afterAll(async () => {
 });
 
 describe("admin application review with PostgreSQL", () => {
+  it("lists only unsent notifications stopped after three attempts and retries only the selected row", async () => {
+    const fixture = await makeReviewCase({
+      shopName: `${testPrefix}-通知店舗`,
+    });
+    const ids = Array.from({ length: 6 }, () => randomUUID());
+    notificationIds.push(...ids);
+    await pool.query(
+      `insert into notifications(id,customer_id,kind,channel,dedupe_key,scheduled_at,sent_at,attempts,last_error,payload)
+       values
+       ($1::uuid,$7,'NT-05','email',$1::text, '2100-01-06T00:00:00Z',null,3,'mail_network_error','{"private":"body-secret"}'),
+       ($2::uuid,$7,'NT-04','email',$2::text, '2100-01-05T00:00:00Z',null,3,'settings_unavailable','{}'),
+       ($3::uuid,$7,'NT-05','email',$3::text, '2100-01-04T00:00:00Z',null,2,'mail_network_error','{}'),
+       ($4::uuid,$7,'NT-05','email',$4::text, '2100-01-03T00:00:00Z','2100-01-03T00:01:00Z',3,'mail_network_error','{}'),
+       ($5::uuid,$7,'S-03','email',$5::text, '2100-01-02T00:00:00Z',null,3,'mail_http_5xx','{}'),
+       ($6::uuid,null,'NT-01','email',$6::text, '2100-01-01T00:00:00Z',null,3,'cancelled','{}')`,
+      [...ids, fixture.customerId],
+    );
+    const app = makeApp();
+    const noMfa = await app.request("/api/v1/admin/notification-failures", {
+      headers: { authorization: `Bearer ${noFactorToken}` },
+    });
+    expect(noMfa.status).toBe(403);
+    const response = await app.request(
+      "/api/v1/admin/notification-failures?limit=2",
+      {
+        headers: { authorization: `Bearer ${adminToken}` },
+      },
+    );
+    expect(response.status).toBe(200);
+    const parsed = adminNotificationFailuresResponseSchema.parse(
+      await response.json(),
+    );
+    expect(parsed.items.map((item) => item.id)).toEqual(ids.slice(0, 2));
+    expect(parsed.items[0]).toMatchObject({
+      kind: "NT-05",
+      shopName: `${testPrefix}-通知店舗`,
+      reasonCode: "mail_network_error",
+    });
+    expect(JSON.stringify(parsed)).not.toContain("body-secret");
+    expect(JSON.stringify(parsed)).not.toContain("email");
+    const all = adminNotificationFailuresResponseSchema.parse(
+      await (
+        await app.request("/api/v1/admin/notification-failures?limit=100", {
+          headers: { authorization: `Bearer ${adminToken}` },
+        })
+      ).json(),
+    );
+    expect(all.items.map((item) => item.id)).toContain(ids[4]);
+    expect(all.items.map((item) => item.id)).not.toContain(ids[2]);
+    expect(all.items.map((item) => item.id)).not.toContain(ids[3]);
+    expect(all.items.map((item) => item.id)).not.toContain(ids[5]);
+
+    const retryUrl = `/api/v1/admin/notification-failures/${ids[0]}/retry`;
+    const scheduled = await app.request(retryUrl, {
+      method: "POST",
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(scheduled.status).toBe(200);
+    expect(await scheduled.json()).toEqual({ id: ids[0], scheduled: true });
+    const retryAgain = await app.request(retryUrl, {
+      method: "POST",
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(retryAgain.status).toBe(409);
+    const state = await pool.query<{
+      attempts: number;
+      last_error: string | null;
+      scheduled_at: Date;
+    }>(
+      "select attempts,last_error,scheduled_at from notifications where id=$1",
+      [ids[0]],
+    );
+    expect(state.rows[0]).toMatchObject({ attempts: 0, last_error: null });
+    expect(state.rows[0]?.scheduled_at.getTime()).toBeGreaterThan(
+      Date.now() - 60_000,
+    );
+    const other = await pool.query<{
+      attempts: number;
+      last_error: string | null;
+    }>("select attempts,last_error from notifications where id=$1", [ids[1]]);
+    expect(other.rows[0]).toEqual({
+      attempts: 3,
+      last_error: "settings_unavailable",
+    });
+    const otherKind = await app.request(
+      `/api/v1/admin/notification-failures/${ids[4]}/retry`,
+      { method: "POST", headers: { authorization: `Bearer ${adminToken}` } },
+    );
+    expect(otherKind.status).toBe(200);
+  });
+
   it("schedules cancellation once from the current period end, records the checklist, and revokes the pending end notice", async () => {
     const fixture = await makeReviewCase({ status: "active" });
     const today = toTokyoDate(new Date());

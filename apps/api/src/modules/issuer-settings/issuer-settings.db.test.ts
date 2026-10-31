@@ -67,6 +67,11 @@ function makeApp(): ReturnType<typeof createApp> {
         eventCount: 0,
         failedInvoiceCount: 0,
       }),
+      listNotificationFailures: async () => ({ items: [], totalCount: 0 }),
+      retryNotificationFailure: async () => ({
+        id: "11111111-1111-4111-8111-111111111111",
+        scheduled: true as const,
+      }),
       listApplications: async () => ({
         items: [],
         page: 1,

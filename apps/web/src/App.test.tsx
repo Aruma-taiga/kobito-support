@@ -142,6 +142,11 @@ function setup(
       eventCount: 0,
       failedInvoiceCount: 0,
     })),
+    getNotificationFailures: vi.fn(async () => ({ items: [], totalCount: 0 })),
+    retryNotificationFailure: vi.fn(async () => ({
+      id: requestId,
+      scheduled: true as const,
+    })),
     ...customerOverrides,
   } as unknown as ReturnTypeApiClient;
   const adminApiClient = {

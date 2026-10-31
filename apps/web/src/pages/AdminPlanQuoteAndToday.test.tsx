@@ -127,6 +127,11 @@ function adminClient(over: Record<string, unknown> = {}) {
       eventCount: 0,
       failedInvoiceCount: 0,
     })),
+    getNotificationFailures: vi.fn(async () => ({ items: [], totalCount: 0 })),
+    retryNotificationFailure: vi.fn(async () => ({
+      id: luceId,
+      scheduled: true as const,
+    })),
     getInvoices: vi.fn(async () => ({
       invoices: [invoice({}), lateInvoice, farInvoice, paidInvoice],
     })),
@@ -200,6 +205,89 @@ function setup(path: string, apiClient: AdminApiClient) {
 const text = () => document.body.textContent ?? "";
 
 describe("a02 today's tasks", () => {
+  it("shows notification failures and asks before scheduling a retry once", async () => {
+    const retry = vi.fn(
+      () => new Promise<{ id: string; scheduled: true }>(() => {}),
+    );
+    const client = adminClient({
+      getNotificationFailures: vi.fn(async () => ({
+        totalCount: 1,
+        items: [
+          {
+            id: luceId,
+            kind: "NT-05",
+            scheduledAt: "2026-11-13T00:00:00.000Z",
+            reasonCode: "mail_network_error",
+            shopName: "通知先店舗",
+          },
+        ],
+      })),
+      retryNotificationFailure: retry,
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    setup("/admin", client);
+    expect(
+      await screen.findByText(
+        "通知先店舗・11/13・メール送信に失敗しました（3回）",
+      ),
+    ).toBeTruthy();
+    const button = screen.getByRole("button", { name: "再送する" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(retry).toHaveBeenCalledTimes(1));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "準備中…" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("shows the empty state when there are no failed notifications", async () => {
+    setup("/admin", adminClient());
+    const panel = (await screen.findByText("通知の送信失敗")).closest(
+      "section",
+    );
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(webMessages.adminTodayEmpty).length,
+      ).toBeGreaterThan(0),
+    );
+    expect(panel?.textContent).toContain(webMessages.adminTodayEmpty);
+  });
+
+  it("shows a polite message when scheduling a retry fails and honors cancel", async () => {
+    const retry = vi.fn(async () => {
+      throw new AdminApiError("conflict");
+    });
+    const client = adminClient({
+      getNotificationFailures: vi.fn(async () => ({
+        totalCount: 1,
+        items: [
+          {
+            id: luceId,
+            kind: "NT-04",
+            scheduledAt: "2026-11-13T00:00:00.000Z",
+            reasonCode: "settings_unavailable",
+            shopName: "通知先店舗",
+          },
+        ],
+      })),
+      retryNotificationFailure: retry,
+    });
+    const confirm = vi
+      .spyOn(window, "confirm")
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    setup("/admin", client);
+    const button = await screen.findByRole("button", { name: "再送する" });
+    fireEvent.click(button);
+    expect(retry).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    expect(
+      await screen.findByText(webMessages.adminNotificationRetryError),
+    ).toBeTruthy();
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(confirm).toHaveBeenCalledTimes(2);
+  });
   it("is the admin top page and appears first in the menu", async () => {
     setup("/admin", adminClient());
     expect(

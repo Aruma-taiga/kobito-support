@@ -3,6 +3,9 @@ import {
   adminApplicationQueueQuerySchema,
   adminApplicationQueueResponseSchema,
   adminCustomerDetailSchema,
+  adminNotificationFailureIdSchema,
+  adminNotificationFailuresQuerySchema,
+  adminNotificationFailuresResponseSchema,
   adminSessionSchema,
   approveApplicationResponseSchema,
   declineApplicationRequestSchema,
@@ -57,6 +60,48 @@ const customerDetail = {
 };
 
 describe("admin DTO validation", () => {
+  it("accepts only the safe notification failure fields", () => {
+    const item = {
+      id: "11111111-1111-4111-8111-111111111111",
+      kind: "NT-05",
+      scheduledAt: "2026-10-31T00:00:00.000Z",
+      reasonCode: "mail_network_error",
+      shopName: "当社あて",
+    };
+    expect(
+      adminNotificationFailuresResponseSchema.parse({
+        items: [item],
+        totalCount: 1,
+      }),
+    ).toEqual({ items: [item], totalCount: 1 });
+    expect(
+      adminNotificationFailuresResponseSchema.safeParse({
+        items: [{ ...item, email: "private@example.test" }],
+        totalCount: 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("bounds notification failure list input and retry ids", () => {
+    expect(adminNotificationFailuresQuerySchema.parse({ limit: "5" })).toEqual({
+      limit: 5,
+    });
+    expect(
+      adminNotificationFailuresQuerySchema.safeParse({ limit: "101" }).success,
+    ).toBe(false);
+    expect(
+      adminNotificationFailuresQuerySchema.safeParse({ extra: "x" }).success,
+    ).toBe(false);
+    expect(
+      adminNotificationFailureIdSchema.safeParse(
+        "11111111-1111-4111-8111-111111111111",
+      ).success,
+    ).toBe(true);
+    expect(
+      adminNotificationFailureIdSchema.safeParse("internal-id").success,
+    ).toBe(false);
+  });
+
   it("keeps approval status and invoice presence consistent", () => {
     const base = {
       applicationId: "22222222-2222-4222-8222-222222222222",

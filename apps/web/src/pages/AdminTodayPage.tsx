@@ -1,5 +1,6 @@
 import {
   type AdminApplicationQueueItem,
+  type AdminNotificationFailuresResponse,
   type AdminPaymentReviewsResponse,
   type AdminRequestSummary,
   daysUntil,
@@ -194,6 +195,31 @@ export function AdminTodayPage({ apiClient }: { apiClient: AdminApiClient }) {
     useSource<AdminPaymentReviewsResponse>(
       useCallback(() => apiClient.getPaymentReviews(), [apiClient]),
     );
+  const [notificationFailures, retryNotificationFailures] =
+    useSource<AdminNotificationFailuresResponse>(
+      useCallback(() => apiClient.getNotificationFailures(), [apiClient]),
+    );
+  const [retryingNotification, setRetryingNotification] = useState<
+    string | null
+  >(null);
+  const [notificationRetryError, setNotificationRetryError] = useState(false);
+  const retryNotification = async (id: string) => {
+    if (
+      retryingNotification ||
+      !window.confirm(webMessages.adminNotificationRetryConfirm)
+    )
+      return;
+    setRetryingNotification(id);
+    setNotificationRetryError(false);
+    try {
+      await apiClient.retryNotificationFailure(id);
+      retryNotificationFailures();
+    } catch {
+      setNotificationRetryError(true);
+    } finally {
+      setRetryingNotification(null);
+    }
+  };
   const [requests, retryRequests] = useSource(
     useCallback(() => apiClient.getAdminRequests(), [apiClient]),
   );
@@ -448,6 +474,70 @@ export function AdminTodayPage({ apiClient }: { apiClient: AdminApiClient }) {
                 : undefined
             }
           />
+          <Card
+            title={webMessages.adminTodayNotificationFailures}
+            action={
+              notificationFailures.status === "ready" ? (
+                <Badge
+                  tone={notificationFailures.value.totalCount ? "warn" : "gray"}
+                >
+                  {notificationFailures.value.totalCount}
+                </Badge>
+              ) : null
+            }
+          >
+            {notificationFailures.status === "loading" ? (
+              <output className="ui-hint">
+                {webMessages.adminTodayLoading}
+              </output>
+            ) : null}
+            {notificationFailures.status === "error" ? (
+              <>
+                <Hint>{webMessages.adminTodayPanelError}</Hint>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={retryNotificationFailures}
+                >
+                  {webMessages.adminTodayRetry}
+                </Button>
+              </>
+            ) : null}
+            {notificationRetryError ? (
+              <Hint>{webMessages.adminNotificationRetryError}</Hint>
+            ) : null}
+            {notificationFailures.status === "ready" &&
+            notificationFailures.value.items.length === 0 ? (
+              <Hint>{webMessages.adminTodayEmpty}</Hint>
+            ) : null}
+            {notificationFailures.status === "ready"
+              ? notificationFailures.value.items
+                  .slice(0, visibleRows)
+                  .map((item) => (
+                    <ListItem
+                      key={item.id}
+                      title={
+                        webMessages.adminNotificationKindNames[
+                          item.kind as keyof typeof webMessages.adminNotificationKindNames
+                        ] ?? "通知"
+                      }
+                      meta={`${item.shopName}・${formatSlashDate(tokyoDateOf(item.scheduledAt))}・${webMessages.adminNotificationFailureReason}`}
+                      badge={
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={retryingNotification !== null}
+                          onClick={() => void retryNotification(item.id)}
+                        >
+                          {retryingNotification === item.id
+                            ? webMessages.adminNotificationRetrying
+                            : webMessages.adminNotificationRetry}
+                        </Button>
+                      }
+                    />
+                  ))
+              : null}
+          </Card>
         </div>
         <div>
           <Panel

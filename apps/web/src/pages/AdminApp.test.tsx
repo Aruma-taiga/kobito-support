@@ -98,6 +98,7 @@ function setup(
     approveApplication?: ReturnType<typeof vi.fn>;
     getInvoices?: ReturnType<typeof vi.fn>;
     getPaymentReviews?: ReturnType<typeof vi.fn>;
+    getNotificationFailures?: ReturnType<typeof vi.fn>;
     getInvoice?: ReturnType<typeof vi.fn>;
     getInvoicePdf?: ReturnType<typeof vi.fn>;
     getInvoiceReadiness?: ReturnType<typeof vi.fn>;
@@ -242,6 +243,13 @@ function setup(
         eventCount: 0,
         failedInvoiceCount: 0,
       })),
+    getNotificationFailures:
+      options.getNotificationFailures ??
+      vi.fn(async () => ({ items: [], totalCount: 0 })),
+    retryNotificationFailure: vi.fn(async () => ({
+      id: customerId,
+      scheduled: true as const,
+    })),
     getInvoice:
       options.getInvoice ??
       vi.fn(async () => ({
