@@ -15,6 +15,8 @@ import {
   customerPlanQuoteSchema,
   customerRequestDetailSchema,
   customerRequestListSchema,
+  type ExtraCreditPurchaseRequest,
+  extraCreditPurchaseResponseSchema,
   type InvoiceDetail,
   type InvoiceList,
   invoiceDetailSchema,
@@ -171,6 +173,7 @@ export function createApiClient(options: ApiClientOptions) {
     },
     body: unknown,
     expectedAuthUserId?: string,
+    idempotencyKey?: string,
   ): Promise<T> {
     const user = options.getCurrentUser();
     if (!user) throw new ApiClientError("unauthorized");
@@ -201,6 +204,7 @@ export function createApiClient(options: ApiClientOptions) {
           Accept: "application/json",
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
+          ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
         },
         body: JSON.stringify(body),
         credentials: "omit",
@@ -459,6 +463,19 @@ export function createApiClient(options: ApiClientOptions) {
     postApplication,
     getMe: (): Promise<MeResponse> =>
       getJson("/api/v1/me", meResponseSchema, true),
+    createExtraCreditPurchase(
+      payload: ExtraCreditPurchaseRequest,
+      idempotencyKey: string,
+      expectedAuthUserId?: string,
+    ) {
+      return postJson(
+        "/api/v1/me/extra-credits",
+        extraCreditPurchaseResponseSchema,
+        payload,
+        expectedAuthUserId ?? options.getCurrentUser()?.uid,
+        idempotencyKey,
+      );
+    },
     getContract: (): Promise<CustomerContractResponse> =>
       getJson("/api/v1/me/contract", customerContractResponseSchema, true),
     getCustomerAccess: (): Promise<CustomerAccess> =>

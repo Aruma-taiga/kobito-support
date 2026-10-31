@@ -21,6 +21,31 @@ describe("notification templates", () => {
     expect(mail.text).not.toMatch(/NT-0|S-03|customerId|applicationId/);
   });
 
+  it("renders extra-credit issue and grant notices with the purchased quantity", () => {
+    const issued = renderNotification({
+      kind: "NT-03",
+      serviceName: "設定サービス",
+      contactEmail: "contact@example.test",
+      paymentMethod: "bank_transfer",
+      invoiceNo: "KS-PRIVATE-2",
+      dueOn: "2026-11-08",
+      amountInclTax: 13200,
+      extraCredits: 3,
+      bankDetails: "テスト銀行",
+    });
+    expect(issued.subject).toContain("追加クレジット");
+    expect(issued.text).toContain("3個");
+    expect(issued.text).toContain("お支払い確認後");
+    const paid = renderNotification({
+      kind: "NT-04",
+      serviceName: "設定サービス",
+      contactEmail: "contact@example.test",
+      extraCredits: 3,
+    });
+    expect(paid.text).toContain("追加クレジット3個");
+    expect(paid.text).toContain("利用期間");
+  });
+
   it("renders card invoice guidance without exposing payment data or identifiers", () => {
     const mail = renderNotification({
       kind: "NT-02",

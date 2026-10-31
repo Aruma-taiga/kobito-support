@@ -1,3 +1,4 @@
+import { extraCreditPurchaseRequestSchema } from "@kobito/shared";
 import { z } from "zod";
 import type { CustomerScope } from "../../platform/scope.js";
 import { ApiError, type Principal } from "../../platform/types.js";
@@ -29,6 +30,21 @@ export class InvoiceService implements InvoiceModule {
   }
   getCustomerContract(scope: CustomerScope) {
     return this.repository.getCustomerContract(scope);
+  }
+  purchaseExtraCredits(
+    scope: CustomerScope,
+    request: unknown,
+    idempotencyKey: string,
+  ) {
+    if (!extraCreditPurchaseRequestSchema.safeParse(request).success)
+      throw new ApiError(422, "validation_error");
+    if (!/^[\x21-\x7e]{1,128}$/.test(idempotencyKey))
+      throw new ApiError(422, "validation_error");
+    return this.repository.purchaseExtraCredits(
+      scope,
+      extraCreditPurchaseRequestSchema.parse(request),
+      idempotencyKey,
+    );
   }
   getReadiness(principal: Principal) {
     this.requireAdmin(principal);

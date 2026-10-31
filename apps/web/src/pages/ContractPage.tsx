@@ -1,6 +1,11 @@
-import { contractStatusLabels, inclYenFor, webMessages } from "@kobito/shared";
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import {
+  contractStatusLabels,
+  extraCreditExclYen,
+  inclYenFor,
+  webMessages,
+} from "@kobito/shared";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuthSession } from "../auth/session.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
 import { ApiClientError } from "../platform/api-client.js";
@@ -17,6 +22,7 @@ import {
   buttonClass,
   Card,
   DefinitionList,
+  Field,
   Hint,
   Notice,
   Page,
@@ -47,6 +53,7 @@ export function ContractPage({
   } = useAuthSession();
   const { lineEnabled, contactEmail } = useContact();
   const [state, setState] = useState<ContractPageState>({ status: "loading" });
+  const navigate = useNavigate();
   const [attempt, setAttempt] = useState(0);
   const [logoutError, setLogoutError] = useState(false);
   const [lineLinked, setLineLinked] = useState<
@@ -223,6 +230,16 @@ export function ContractPage({
             >
               <DefinitionList items={planRows} />
             </Card>
+            {period &&
+            (contract.status === "active" ||
+              contract.status === "cancel_scheduled") ? (
+              <ExtraCreditForm
+                key={`${sessionGeneration}:${contract.id}`}
+                apiClient={apiClient}
+                endsOn={period.endsOn}
+                onCreated={(invoiceId) => navigate(`/me/invoices/${invoiceId}`)}
+              />
+            ) : null}
             {contract.preview ? (
               <Notice tone="yellow">{webMessages.contractPreview}</Notice>
             ) : null}
@@ -306,5 +323,107 @@ export function ContractPage({
       </Page>
       <CustomerTabBar />
     </>
+  );
+}
+
+function ExtraCreditForm({
+  apiClient,
+  endsOn,
+  onCreated,
+}: {
+  apiClient: ReturnTypeApiClient;
+  endsOn: string;
+  onCreated(invoiceId: string): void;
+}) {
+  const { getSessionGeneration } = useAuthSession();
+  const [quantity, setQuantity] = useState("1");
+  const [confirmed, setConfirmed] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState(false);
+  const busy = useRef(false);
+  const attemptKey = useRef<{ quantity: number; key: string } | null>(null);
+  const count = Number(quantity);
+  const valid = Number.isInteger(count) && count >= 1 && count <= 10;
+  async function submit() {
+    if (busy.current || !valid || !confirmed) return;
+    busy.current = true;
+    setWorking(true);
+    setError(false);
+    const generation = getSessionGeneration();
+    if (!attemptKey.current || attemptKey.current.quantity !== count)
+      attemptKey.current = { quantity: count, key: crypto.randomUUID() };
+    try {
+      const result = await apiClient.createExtraCreditPurchase(
+        { quantity: count },
+        attemptKey.current.key,
+      );
+      if (generation === getSessionGeneration()) onCreated(result.invoiceId);
+    } catch {
+      if (generation === getSessionGeneration()) setError(true);
+    } finally {
+      busy.current = false;
+      setWorking(false);
+    }
+  }
+  return (
+    <Card title={webMessages.extraCreditTitle}>
+      <p className="ui-text">
+        {webMessages.extraCreditUnit
+          .replace("{excl}", formatYen(extraCreditExclYen))
+          .replace("{incl}", formatYen(inclYenFor(extraCreditExclYen)))}
+      </p>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <Field label={webMessages.extraCreditQuantity}>
+          <input
+            type="number"
+            min="1"
+            max="10"
+            step="1"
+            required
+            value={quantity}
+            disabled={working}
+            onChange={(event) => {
+              setQuantity(event.target.value);
+              setConfirmed(false);
+            }}
+          />
+        </Field>
+        {valid ? (
+          <p className="ui-text">
+            {webMessages.extraCreditTotal.replace(
+              "{total}",
+              formatYen(inclYenFor(extraCreditExclYen * count)),
+            )}
+          </p>
+        ) : null}
+        <Hint>
+          {webMessages.extraCreditTerms.replace("{date}", formatDate(endsOn))}
+        </Hint>
+        <label className="ui-check">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            disabled={working}
+            onChange={(event) => setConfirmed(event.target.checked)}
+          />
+          <span>{webMessages.extraCreditConfirm}</span>
+        </label>
+        <div className="ui-actions">
+          <Button type="submit" disabled={working || !valid || !confirmed}>
+            {working
+              ? webMessages.extraCreditWorking
+              : webMessages.extraCreditSubmit}
+          </Button>
+        </div>
+        {error ? (
+          <Notice tone="warn">{webMessages.extraCreditError}</Notice>
+        ) : null}
+      </form>
+    </Card>
   );
 }

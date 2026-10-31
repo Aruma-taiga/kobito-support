@@ -3,6 +3,7 @@ import {
   approveApplicationResponseSchema,
   confirmBankPaymentResponseSchema,
   customerAccessSchema,
+  extraCreditPurchaseResponseSchema,
   invoiceDetailSchema,
   paymentLinkResponseSchema,
   periodFor,
@@ -2007,6 +2008,137 @@ describe("initial invoice approval and customer access", () => {
       mode: "live",
       reason: "ready",
     });
+  });
+
+  it("issues extra-credit invoices once for the authenticated active contract", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp();
+    const approved = await approve(app, fixture.applicationId);
+    const invoiceId = ((await approved.json()) as { invoice: { id: string } })
+      .invoice.id;
+    const confirmation = await confirm(app, invoiceId, {
+      amount: 5500,
+      paidOn: "2026-01-31",
+    });
+    expect(confirmation.status).toBe(200);
+    confirmBankPaymentResponseSchema.parse(await confirmation.json());
+    // このフィクスチャの受諾済みプランのコードは長すぎて請求書のDTO検証に通らないので、標準のプランコードにそろえる。
+    // (code, valid_from) は一意なので、他のテストと重ならない日付にする。
+    await pool.query(
+      "update plans set code='light',valid_from='1899-01-01' where id=$1",
+      [planIds.at(-1)],
+    );
+    const headers = {
+      authorization: `Bearer ${fixture.token}`,
+      "content-type": "application/json",
+      "Idempotency-Key": "extra-credit-purchase-test-1",
+    };
+    const purchase = await app.request("/api/v1/me/extra-credits", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ quantity: 3 }),
+    });
+    expect(purchase.status).toBe(201);
+    const body = extraCreditPurchaseResponseSchema.parse(await purchase.json());
+    expect(body).toMatchObject({
+      totalExclTax: 12000,
+      taxAmount: 1200,
+      totalInclTax: 13200,
+      paymentMethod: "bank_transfer",
+    });
+    const replay = await app.request("/api/v1/me/extra-credits", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ quantity: 3 }),
+    });
+    expect(
+      extraCreditPurchaseResponseSchema.parse(await replay.json()),
+    ).toEqual(body);
+    const conflict = await app.request("/api/v1/me/extra-credits", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ quantity: 2 }),
+    });
+    expect(conflict.status).toBe(409);
+    const persisted = await pool.query<{
+      contract_id: string;
+      period_id: string | null;
+      quantity: number;
+      amount_excl_tax: number;
+    }>(
+      `select i.contract_id,i.period_id,l.quantity,l.amount_excl_tax from invoices i
+       join invoice_lines l on l.invoice_id=i.id where i.id=$1`,
+      [body.invoiceId],
+    );
+    expect(persisted.rows[0]).toEqual({
+      contract_id: fixture.contractId,
+      period_id: null,
+      quantity: 3,
+      amount_excl_tax: 12000,
+    });
+    const detail = await app.request(`/api/v1/me/invoices/${body.invoiceId}`, {
+      headers: { authorization: `Bearer ${fixture.token}` },
+    });
+    expect(invoiceDetailSchema.parse(await detail.json())).toMatchObject({
+      kind: "extra_credit",
+      totalExclTax: 12000,
+    });
+    // 契約日（2026-01-31）の最初の期間（〜2/27）の中の日付で入金する。次の期間は日次処理が走るまで存在しない。
+    const confirmationApp = makeApp(
+      config,
+      new Date("2026-02-05T03:00:00.000Z"),
+    );
+    const paid = await confirm(confirmationApp, body.invoiceId, {
+      amount: 13200,
+      paidOn: "2026-02-05",
+    });
+    expect(paid.status).toBe(200);
+    const ledger = await pool.query<{
+      entry_period: string;
+      expected_period: string;
+      amount: number;
+      invoice_period: string | null;
+    }>(
+      `select e.period_id::text entry_period,
+              (select p.id::text from billing_periods p where p.contract_id=$1 and p.starts_on <= date '2026-02-05' and p.ends_on >= date '2026-02-05' order by p.seq desc limit 1) expected_period,
+              e.amount,i.period_id::text invoice_period
+         from credit_entries e join invoices i on i.id=e.invoice_id
+        where e.invoice_id=$2 and e.kind='extra'`,
+      [fixture.contractId, body.invoiceId],
+    );
+    expect(ledger.rows).toEqual([
+      expect.objectContaining({ amount: 3, invoice_period: null }),
+    ]);
+    expect(ledger.rows[0]?.entry_period).toBe(ledger.rows[0]?.expected_period);
+    const scheduled = await pool.query<{ kind: string; count: string }>(
+      `select kind,count(*)::text count from notifications where payload->>'invoiceId'=$1 group by kind`,
+      [body.invoiceId],
+    );
+    expect(scheduled.rows).toEqual(
+      expect.arrayContaining([
+        { kind: "NT-03", count: "1" },
+        { kind: "NT-04", count: "1" },
+      ]),
+    );
+    const pending = await makeApplication();
+    const rejected = await app.request("/api/v1/me/extra-credits", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${pending.token}`,
+        "content-type": "application/json",
+        "Idempotency-Key": "pending-purchase",
+      },
+      body: JSON.stringify({ quantity: 1 }),
+    });
+    expect(rejected.status).toBe(404);
+    const outsider = await makeApplication();
+    const forbidden = await app.request(
+      `/api/v1/me/invoices/${body.invoiceId}`,
+      {
+        headers: { authorization: `Bearer ${outsider.token}` },
+      },
+    );
+    expect(forbidden.status).toBe(404);
   });
 
   it("formats invoice counters without truncation after 99,999", async () => {

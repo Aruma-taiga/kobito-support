@@ -28,6 +28,14 @@ describe("tax-exclusive fixed-price catalog", () => {
     ]);
   });
 
+  it("calculates a three-credit purchase as one invoice", () => {
+    expect(invoiceTotals([extraCreditExclYen * 3])).toEqual({
+      exclYen: 12_000,
+      taxYen: 1_200,
+      inclYen: 13_200,
+    });
+  });
+
   it("keeps the extra-credit policy at 4,000 yen excluding tax", () => {
     expect(extraCreditExclYen).toBe(4_000);
     expect(applicationPolicyConditions.extraCreditExclYen).toBe(4_000);

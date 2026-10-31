@@ -2,6 +2,41 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "./api-client.js";
 
 describe("authenticated web API client", () => {
+  it("creates an extra-credit invoice with authenticated JSON and an idempotency key", async () => {
+    const response = {
+      invoiceId: "11111111-1111-4111-8111-111111111111",
+      invoiceNo: "SP-2026-0043",
+      totalExclTax: 8000,
+      taxAmount: 800,
+      totalInclTax: 8800,
+      paymentMethod: "bank_transfer",
+    };
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json(response));
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        uid: "customer-a",
+        getIdToken: async () => "token",
+      }),
+      signOut: async () => undefined,
+      fetcher,
+    });
+    await expect(
+      client.createExtraCreditPurchase({ quantity: 2 }, "purchase-key"),
+    ).resolves.toEqual(response);
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/me/extra-credits",
+    );
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      headers: {
+        Authorization: "Bearer token",
+        "Idempotency-Key": "purchase-key",
+      },
+      body: '{"quantity":2}',
+    });
+  });
+
   it("posts for a payment link with customer authentication and validates its response", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({ redirectUrl: "https://komoju.com/sessions/session-1" }),

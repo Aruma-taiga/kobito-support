@@ -38,6 +38,9 @@ beforeAll(async () => {
   await pool.query(`delete from komoju_events where payload->'data'->>'external_order_num' in
     (select i.invoice_no from invoices i join contracts c on c.id=i.contract_id
      join plans p on p.id=c.plan_id where p.code like '${fixturePrefix}-%')`);
+  await pool.query(`delete from invoice_lines where invoice_id in
+    (select i.id from invoices i join contracts c on c.id=i.contract_id
+     join plans p on p.id=c.plan_id where p.code like '${fixturePrefix}-%')`);
   await pool.query(`delete from credit_entries where contract_id in
     (select c.id from contracts c join plans p on p.id=c.plan_id where p.code like '${fixturePrefix}-%')`);
   await pool.query(`delete from payments where invoice_id in
@@ -63,12 +66,20 @@ afterAll(async () => {
       [...eventIds],
     ]);
     await pool.query(
+      "delete from notifications where customer_id=any($1::uuid[])",
+      [customerIds],
+    );
+    await pool.query(
       "delete from credit_entries where contract_id=any($1::uuid[])",
       [contractIds],
     );
     await pool.query("delete from payments where invoice_id=any($1::uuid[])", [
       invoiceIds,
     ]);
+    await pool.query(
+      "delete from invoice_lines where invoice_id=any($1::uuid[])",
+      [invoiceIds],
+    );
     await pool.query("delete from invoices where id=any($1::uuid[])", [
       invoiceIds,
     ]);
@@ -299,6 +310,55 @@ describe("KOMOJU event processing database behavior", () => {
     } finally {
       await cleanup(fixture, [eventId, repeatedEventId]);
     }
+  });
+
+  it("credits extra purchases to the payment-date period once per invoice", async () => {
+    const fixture = await createInvoice("active");
+    const eventId = newEventId();
+    const duplicateEventId = newEventId();
+    const paymentId = `pay_extra_${randomUUID().replaceAll("-", "")}`;
+    await pool.query(
+      `update invoices set kind='extra_credit',period_id=null,total_excl_tax=12000,tax_amount=1200,total_incl_tax=13200 where id=$1`,
+      [fixture.invoiceId],
+    );
+    await pool.query(
+      "insert into invoice_lines(invoice_id,line_kind,description,quantity,unit_price_excl_tax,amount_excl_tax,tax_rate) values($1,'extra_credit','追加クレジット',3,4000,12000,0.1)",
+      [fixture.invoiceId],
+    );
+    const event = capturedEvent(eventId, fixture.invoiceNo, paymentId);
+    event.data.amount = 12000;
+    event.data.tax = 1200;
+    event.data.total = 13200;
+    event.data.captured_at = "2026-11-01T15:00:00.000Z";
+    const duplicate = { ...event, id: duplicateEventId };
+    await repository.receive(event);
+    await repository.receive(duplicate);
+    expect(await repository.processEvent(eventId)).toBe("processed");
+    expect(await repository.processEvent(duplicateEventId)).toBe("processed");
+    const result = await pool.query<{
+      count: string;
+      amount: number;
+      entry_period: string;
+      invoice_period: string | null;
+    }>(
+      `select count(*)::text count,min(e.amount)::int amount,min(e.period_id::text) entry_period,
+              i.period_id::text invoice_period from credit_entries e join invoices i on i.id=e.invoice_id
+        where e.invoice_id=$1 and e.kind='extra' group by i.period_id`,
+      [fixture.invoiceId],
+    );
+    expect(result.rows).toEqual([
+      {
+        count: "1",
+        amount: 3,
+        entry_period: fixture.periodId,
+        invoice_period: null,
+      },
+    ]);
+    const notices = await pool.query<{ count: string }>(
+      "select count(*)::text count from notifications where customer_id=$1 and kind='NT-04' and payload->>'invoiceId'=$2",
+      [fixture.customerId, fixture.invoiceId],
+    );
+    expect(notices.rows[0]?.count).toBe("1");
   });
 
   it("marks amount mismatches and unknown invoices for review without changing a customer invoice", async () => {

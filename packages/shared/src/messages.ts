@@ -844,6 +844,17 @@ export const webMessages = {
   bankTransferDateInvalid:
     "入金日を確認してください。発行日から支払期限までの日付を入力できます。",
   bankTransferAckRequired: "開発用データの記録には確認チェックが必要です。",
+  extraCreditTitle: "クレジットの追加",
+  extraCreditQuantity: "追加するクレジット数",
+  extraCreditUnit: "1クレジット：税抜{excl}（税込{incl}）",
+  extraCreditTotal: "合計（税込）：{total}",
+  extraCreditTerms:
+    "入金確認後に、購入した期間のクレジットに追加します。有効期限は現在の期間末（{date}）までで、翌期への繰り越しはできません。",
+  extraCreditConfirm: "追加クレジットの料金と有効期限を確認しました",
+  extraCreditSubmit: "追加クレジットを申し込む",
+  extraCreditWorking: "請求書を準備しています…",
+  extraCreditError:
+    "追加クレジットを申し込めませんでした。内容を確認して再度お試しください。",
   contractTitle: "ご契約内容",
   contractMonthlyExcl: "月額（税抜）",
   contractMonthlyIncl: "月額（税込）",

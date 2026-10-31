@@ -3,6 +3,8 @@ import type {
   ConfirmBankPaymentRequest,
   ConfirmBankPaymentResponse,
   CustomerContractResponse,
+  ExtraCreditPurchaseRequest,
+  ExtraCreditPurchaseResponse,
   InvoiceDetail,
   InvoiceList,
   InvoiceReadiness,
@@ -36,4 +38,9 @@ export interface InvoiceModule {
     request: ConfirmBankPaymentRequest,
   ): Promise<ConfirmBankPaymentResponse>;
   getCustomerContract(scope: CustomerScope): Promise<CustomerContractResponse>;
+  purchaseExtraCredits(
+    scope: CustomerScope,
+    request: ExtraCreditPurchaseRequest,
+    idempotencyKey: string,
+  ): Promise<ExtraCreditPurchaseResponse>;
 }

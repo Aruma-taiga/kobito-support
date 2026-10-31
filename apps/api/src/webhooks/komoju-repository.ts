@@ -325,6 +325,69 @@ export class KomojuInboxRepository
         await markEvent(client, eventId, null);
         await client.query("commit");
         return "processed";
+      } else if (invoice.kind === "extra_credit") {
+        if (
+          !invoice.anchor_date ||
+          !["active", "cancel_scheduled"].includes(invoice.contract_status)
+        ) {
+          await markEvent(
+            client,
+            eventId,
+            "review:extra_credit_contract_ended",
+          );
+          await client.query("commit");
+          return "review";
+        }
+        const periodResult = await client.query<{ id: string }>(
+          `select id from billing_periods where contract_id=$1
+            and starts_on <= $2::date and ends_on >= $2::date
+            order by seq desc limit 1 for update`,
+          [invoice.contract_id, paidOn],
+        );
+        const period = periodResult.rows[0];
+        const lineResult = await client.query<{ quantity: number }>(
+          "select quantity from invoice_lines where invoice_id=$1 and line_kind='extra_credit'",
+          [invoice.id],
+        );
+        const quantity = lineResult.rows[0]?.quantity;
+        if (!period || !quantity || quantity < 1 || quantity > 10) {
+          await markEvent(
+            client,
+            eventId,
+            "review:extra_credit_period_or_quantity_missing",
+          );
+          await client.query("commit");
+          return "review";
+        }
+        await client.query(
+          `insert into payments(invoice_id,method,amount,paid_on,confirmed_via,komoju_payment_id)
+           values($1,'card',$2,$3,'webhook',$4)`,
+          [invoice.id, event.data.total, paidOn, paymentId],
+        );
+        await client.query("update invoices set status='paid' where id=$1", [
+          invoice.id,
+        ]);
+        await client.query(
+          `insert into credit_entries(contract_id,period_id,kind,amount,invoice_id,note)
+           values($1,$2,'extra',$3,$4,'追加クレジット請求の入金確認')
+           on conflict (invoice_id) where kind='extra' and invoice_id is not null do nothing`,
+          [invoice.contract_id, period.id, quantity, invoice.id],
+        );
+        await schedule(client, {
+          customerId: invoice.customer_id,
+          kind: "NT-04",
+          dedupeKey: `NT-04:invoice:${invoice.id}:email`,
+          scheduledAt: this.clock(),
+          payload: {
+            contractId: invoice.contract_id,
+            periodId: period.id,
+            invoiceId: invoice.id,
+            extraCredits: quantity,
+          },
+        });
+        await markEvent(client, eventId, null);
+        await client.query("commit");
+        return "processed";
       } else {
         if (invoice.kind !== "monthly") {
           await markEvent(client, eventId, "review:unsupported_invoice_kind");

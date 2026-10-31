@@ -1,3 +1,4 @@
+import { extraCreditPurchaseRequestSchema } from "@kobito/shared";
 import { Hono } from "hono";
 import { customerScopeFor } from "../../platform/scope.js";
 import { ApiError, type ApiVariables } from "../../platform/types.js";
@@ -7,6 +8,18 @@ export function createInvoiceCustomerRoutes(dependencies: {
   invoices: InvoiceModule;
 }) {
   const routes = new Hono<{ Variables: ApiVariables }>();
+  routes.post("/me/extra-credits", async (context) => {
+    const body = extraCreditPurchaseRequestSchema.safeParse(
+      await context.req.json(),
+    );
+    if (!body.success) throw new ApiError(422, "validation_error");
+    const key = context.req.header("Idempotency-Key") ?? "";
+    const scope = customerScopeFor(context.get("principal"));
+    return context.json(
+      await dependencies.invoices.purchaseExtraCredits(scope, body.data, key),
+      201,
+    );
+  });
   routes.get("/me/invoices", async (context) => {
     const scope = customerScopeFor(context.get("principal"));
     return context.json(await dependencies.invoices.listCustomer(scope));
