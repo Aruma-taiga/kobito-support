@@ -207,12 +207,14 @@ export function DefinitionList({
 export function Steps({
   labels,
   current,
+  label,
 }: {
   labels: string[];
   current: number;
+  label?: string;
 }) {
   return (
-    <ol className="ui-steps">
+    <ol className="ui-steps" aria-label={label}>
       {labels.map((label, index) => (
         <li
           key={label}
@@ -315,5 +317,72 @@ export function PageShell({
       {header}
       <main className="ui-shell__main">{children}</main>
     </div>
+  );
+}
+
+/* ---------- RadioOption / CheckOption ---------- */
+export function RadioOption({
+  checked,
+  disabled,
+  title,
+  price,
+  description,
+  ...inputProps
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  title: ReactNode;
+  price?: ReactNode;
+  description?: ReactNode;
+} & Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "type" | "checked" | "disabled" | "title" | "className"
+>) {
+  return (
+    <label
+      className={cx(
+        "ui-radio",
+        checked && "ui-radio--on",
+        disabled && "ui-radio--disabled",
+      )}
+    >
+      <input
+        {...inputProps}
+        type="radio"
+        checked={checked}
+        disabled={disabled}
+      />
+      <span className="ui-radio__body">
+        <span className="ui-radio__title">
+          <span>{title}</span>
+          {price ? <em className="ui-radio__price">{price}</em> : null}
+        </span>
+        {description ? (
+          <span className="ui-radio__desc">{description}</span>
+        ) : null}
+      </span>
+    </label>
+  );
+}
+
+export function CheckOption({
+  required,
+  optional,
+  children,
+  ...inputProps
+}: {
+  required?: boolean;
+  optional?: boolean;
+  children: ReactNode;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, "type" | "className">) {
+  return (
+    <label className="ui-check">
+      <input {...inputProps} type="checkbox" required={required} />
+      <span>
+        {children}
+        {required ? <span className="ui-req">必須</span> : null}
+        {!required && optional ? <span className="ui-opt">任意</span> : null}
+      </span>
+    </label>
   );
 }

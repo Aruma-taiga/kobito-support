@@ -8,6 +8,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { BrowserRouter, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -201,7 +202,7 @@ describe("application flow", () => {
 
   it("offers bank transfer (card pending) and no LINE name field or konbini wording", async () => {
     setup();
-    await screen.findByRole("heading", { name: "店舗情報" });
+    await screen.findByRole("heading", { name: "お店とご担当者" });
     expect(screen.queryByLabelText(/LINEの表示名/)).toBeNull();
     await completeShopStep();
     fireEvent.click(screen.getByRole("radio", { name: /ライト/ }));
@@ -219,7 +220,7 @@ describe("application flow", () => {
   it("does not show a success receipt when someone opens the done URL directly", async () => {
     setup({ initialPath: "/apply/done" });
     expect(
-      await screen.findByRole("heading", { name: "店舗情報" }),
+      await screen.findByRole("heading", { name: "お店とご担当者" }),
     ).toBeTruthy();
     expect(screen.queryByText("お申し込みを受け付けました")).toBeNull();
   });
@@ -231,16 +232,16 @@ describe("application flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "お支払い方法" });
     fireEvent.click(screen.getByRole("radio", { name: /銀行振込/ }));
-    fireEvent.change(screen.getByLabelText(/請求先の名称/), {
+    fireEvent.change(screen.getByLabelText(/請求書の宛名/), {
       target: { value: "喫茶ひだまり" },
     });
-    fireEvent.change(screen.getByLabelText(/請求先の住所/), {
+    fireEvent.change(screen.getByLabelText(/請求書の住所/), {
       target: { value: "東京都杉並区1-2-3" },
     });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "ご要望" });
+    await screen.findByRole("heading", { name: "ご要望など" });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "申込み内容の確認" });
+    await screen.findByRole("heading", { name: "お申込み内容の確認" });
     fireEvent.click(screen.getByLabelText(/事業のために利用/));
     fireEvent.click(screen.getByLabelText(/利用規約/));
     fireEvent.click(screen.getByRole("button", { name: /申し込む/ }));
@@ -277,7 +278,7 @@ describe("application flow", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /再試行/ }));
     expect(
-      await screen.findByRole("heading", { name: "店舗情報" }),
+      await screen.findByRole("heading", { name: "お店とご担当者" }),
     ).toBeTruthy();
     expect(signUp).not.toHaveBeenCalled();
     expect(postApplication).not.toHaveBeenCalled();
@@ -296,16 +297,16 @@ describe("application flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "お支払い方法" });
     fireEvent.click(screen.getByRole("radio", { name: /銀行振込/ }));
-    fireEvent.change(screen.getByLabelText(/請求先の名称/), {
+    fireEvent.change(screen.getByLabelText(/請求書の宛名/), {
       target: { value: "喫茶ひだまり" },
     });
-    fireEvent.change(screen.getByLabelText(/請求先の住所/), {
+    fireEvent.change(screen.getByLabelText(/請求書の住所/), {
       target: { value: "東京都杉並区1-2-3" },
     });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "ご要望" });
+    await screen.findByRole("heading", { name: "ご要望など" });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "申込み内容の確認" });
+    await screen.findByRole("heading", { name: "お申込み内容の確認" });
     fireEvent.click(screen.getByLabelText(/事業のために利用/));
     fireEvent.click(screen.getByLabelText(/利用規約/));
     fireEvent.click(screen.getByRole("button", { name: /申し込む/ }));
@@ -327,16 +328,16 @@ describe("application flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "お支払い方法" });
     fireEvent.click(screen.getByRole("radio", { name: /銀行振込/ }));
-    fireEvent.change(screen.getByLabelText(/請求先の名称/), {
+    fireEvent.change(screen.getByLabelText(/請求書の宛名/), {
       target: { value: "喫茶ひだまり" },
     });
-    fireEvent.change(screen.getByLabelText(/請求先の住所/), {
+    fireEvent.change(screen.getByLabelText(/請求書の住所/), {
       target: { value: "東京都杉並区1-2-3" },
     });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "ご要望" });
+    await screen.findByRole("heading", { name: "ご要望など" });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "申込み内容の確認" });
+    await screen.findByRole("heading", { name: "お申込み内容の確認" });
     fireEvent.click(screen.getByLabelText(/事業のために利用/));
     fireEvent.click(screen.getByLabelText(/利用規約/));
     fireEvent.click(screen.getByRole("button", { name: /申し込む/ }));
@@ -358,16 +359,16 @@ describe("application flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "お支払い方法" });
     fireEvent.click(screen.getByRole("radio", { name: /銀行振込/ }));
-    fireEvent.change(screen.getByLabelText(/請求先の名称/), {
+    fireEvent.change(screen.getByLabelText(/請求書の宛名/), {
       target: { value: "喫茶ひだまり" },
     });
-    fireEvent.change(screen.getByLabelText(/請求先の住所/), {
+    fireEvent.change(screen.getByLabelText(/請求書の住所/), {
       target: { value: "東京都杉並区1-2-3" },
     });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "ご要望" });
+    await screen.findByRole("heading", { name: "ご要望など" });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "申込み内容の確認" });
+    await screen.findByRole("heading", { name: "お申込み内容の確認" });
     expect(
       screen.getByText(/月額5,000円（税抜）（5,500円（税込））/),
     ).toBeTruthy();
@@ -398,21 +399,21 @@ describe("application flow", () => {
 
     expect(
       screen.getByRole("radio", { name: /ライト/ }).parentElement?.textContent,
-    ).toContain("月額5,000円（税抜）5,500円（税込）");
+    ).toContain("5,000円（税抜）5,500円（税込）");
     fireEvent.click(screen.getByRole("radio", { name: /ライト/ }));
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "お支払い方法" });
     fireEvent.click(screen.getByRole("radio", { name: /銀行振込/ }));
-    fireEvent.change(screen.getByLabelText(/請求先の名称/), {
+    fireEvent.change(screen.getByLabelText(/請求書の宛名/), {
       target: { value: "喫茶ひだまり" },
     });
-    fireEvent.change(screen.getByLabelText(/請求先の住所/), {
+    fireEvent.change(screen.getByLabelText(/請求書の住所/), {
       target: { value: "東京都杉並区1-2-3" },
     });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "ご要望" });
+    await screen.findByRole("heading", { name: "ご要望など" });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "申込み内容の確認" });
+    await screen.findByRole("heading", { name: "お申込み内容の確認" });
 
     expect(screen.getByText(/5,000円（税抜）（5,500円（税込））/)).toBeTruthy();
     expect(
@@ -427,20 +428,20 @@ describe("application flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "お支払い方法" });
     fireEvent.click(screen.getByRole("radio", { name: /銀行振込/ }));
-    fireEvent.change(screen.getByLabelText(/請求先の名称/), {
+    fireEvent.change(screen.getByLabelText(/請求書の宛名/), {
       target: { value: "喫茶ひだまり" },
     });
-    fireEvent.change(screen.getByLabelText(/請求先の住所/), {
+    fireEvent.change(screen.getByLabelText(/請求書の住所/), {
       target: { value: "東京都杉並区1-2-3" },
     });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "ご要望" });
+    await screen.findByRole("heading", { name: "ご要望など" });
     fireEvent.change(screen.getByLabelText(/紹介コード/), {
       target: { value: "SP-0012" },
     });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "申込み内容の確認" });
-    expect(screen.getByText(/紹介者に、契約/)).toBeTruthy();
+    await screen.findByRole("heading", { name: "お申込み内容の確認" });
+    expect(screen.getByText(/紹介者に対し/)).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /申し込む/ }).hasAttribute("disabled"),
     ).toBe(true);
@@ -462,16 +463,16 @@ describe("application flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "お支払い方法" });
     fireEvent.click(screen.getByRole("radio", { name: /銀行振込/ }));
-    fireEvent.change(screen.getByLabelText(/請求先の名称/), {
+    fireEvent.change(screen.getByLabelText(/請求書の宛名/), {
       target: { value: "喫茶ひだまり" },
     });
-    fireEvent.change(screen.getByLabelText(/請求先の住所/), {
+    fireEvent.change(screen.getByLabelText(/請求書の住所/), {
       target: { value: "東京都杉並区1-2-3" },
     });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "ご要望" });
+    await screen.findByRole("heading", { name: "ご要望など" });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "申込み内容の確認" });
+    await screen.findByRole("heading", { name: "お申込み内容の確認" });
     fireEvent.click(screen.getByLabelText(/事業のために利用/));
     fireEvent.click(screen.getByLabelText(/利用規約/));
     const submit = screen.getByRole("button", { name: /申し込む/ });
@@ -510,16 +511,16 @@ describe("application flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
     await screen.findByRole("heading", { name: "お支払い方法" });
     fireEvent.click(screen.getByRole("radio", { name: /銀行振込/ }));
-    fireEvent.change(screen.getByLabelText(/請求先の名称/), {
+    fireEvent.change(screen.getByLabelText(/請求書の宛名/), {
       target: { value: "喫茶ひだまり" },
     });
-    fireEvent.change(screen.getByLabelText(/請求先の住所/), {
+    fireEvent.change(screen.getByLabelText(/請求書の住所/), {
       target: { value: "東京都杉並区1-2-3" },
     });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "ご要望" });
+    await screen.findByRole("heading", { name: "ご要望など" });
     fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
-    await screen.findByRole("heading", { name: "申込み内容の確認" });
+    await screen.findByRole("heading", { name: "お申込み内容の確認" });
     fireEvent.click(screen.getByLabelText(/事業のために利用/));
     fireEvent.click(screen.getByLabelText(/利用規約/));
     const changedConfig = {
@@ -551,5 +552,125 @@ describe("application flow", () => {
     const secondCall = postApplication.mock.calls[1];
     expect(secondCall?.[1]).not.toBe(firstCall?.[1]);
     expect(signUp).toHaveBeenCalledTimes(1);
+  });
+});
+
+async function goToConfirm() {
+  await completeShopStep();
+  fireEvent.click(screen.getByRole("radio", { name: /スタンダード/ }));
+  fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
+  await screen.findByRole("heading", { name: "お支払い方法" });
+  fireEvent.click(screen.getByRole("radio", { name: /銀行振込/ }));
+  fireEvent.change(screen.getByLabelText(/請求書の宛名/), {
+    target: { value: "喫茶ひだまり" },
+  });
+  fireEvent.change(screen.getByLabelText(/請求書の住所/), {
+    target: { value: "東京都杉並区1-2-3" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
+  await screen.findByRole("heading", { name: "ご要望など" });
+  fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
+  await screen.findByRole("heading", { name: "お申込み内容の確認" });
+}
+
+describe("application screens follow the mock wording", () => {
+  afterEach(cleanup);
+
+  it("shows the five steps with the current one marked, and the lead text", async () => {
+    setup();
+    await screen.findByRole("heading", { name: "お店とご担当者" });
+    const steps = screen.getByRole("list", { name: "申込みの手順" });
+    const items = within(steps).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual([
+      "お店",
+      "プラン",
+      "お支払い",
+      "ご要望",
+      "確認",
+    ]);
+    expect(items[0]?.getAttribute("aria-current")).toBe("step");
+    expect(
+      screen.getByText("お申込みは5つの手順です。5分ほどで入力できます。"),
+    ).toBeTruthy();
+    expect(screen.getByLabelText(/店舗名・会社名/)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "次へ　プランを選ぶ" }),
+    ).toBeTruthy();
+  });
+
+  it("shows tax-exclusive prices as the main figure with tax-inclusive in small print", async () => {
+    setup();
+    await completeShopStep();
+    for (const [name, excl, incl] of [
+      [/ライト/, "5,000円（税抜）", "5,500円（税込）"],
+      [/スタンダード/, "10,000円（税抜）", "11,000円（税込）"],
+      [/プレミアム/, "15,000円（税抜）", "16,500円（税込）"],
+    ] as const) {
+      const label = screen.getByRole("radio", { name }).closest("label");
+      const main = label?.querySelector(".ui-radio__price");
+      const small = label?.querySelector(".ui-radio__price small");
+      expect(main?.firstChild?.textContent).toBe(excl);
+      expect(small?.textContent).toBe(incl);
+    }
+    expect(screen.getByText(/金額はすべて月額・税抜/)).toBeTruthy();
+  });
+
+  it("offers only card and bank transfer, with no konbini or LINE wording", async () => {
+    setup();
+    await completeShopStep();
+    fireEvent.click(screen.getByRole("radio", { name: /ライト/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "次へ　お支払い方法を選ぶ" }),
+    );
+    await screen.findByRole("heading", { name: "お支払い方法" });
+    expect(
+      screen.getByRole("radio", { name: /クレジットカード/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /銀行振込/ })).toBeTruthy();
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(screen.getByText(/請求書でご案内/)).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/コンビニ|LINE/);
+  });
+
+  it("explains that an invoice follows the review and breaks the fee into excl, tax and incl", async () => {
+    setup();
+    await goToConfirm();
+    expect(screen.getByText(/審査のあと請求書をお送りします/)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "同意して申し込む" }),
+    ).toBeTruthy();
+    const dts = screen.getAllByRole("term").map((t) => t.textContent);
+    expect(dts).toEqual(
+      expect.arrayContaining([
+        "月額料金（税抜）",
+        "消費税",
+        "月額料金（税込）",
+      ]),
+    );
+    const value = (term: string) =>
+      screen.getAllByRole("term").find((t) => t.textContent === term)
+        ?.nextElementSibling?.textContent;
+    expect(value("月額料金（税抜）")).toBe("10,000円");
+    expect(value("消費税")).toBe("1,000円");
+    expect(value("月額料金（税込）")).toBe("11,000円");
+    expect(document.body.textContent).not.toMatch(/承認|LINE|コンビニ/);
+  });
+
+  it("shows the receipt with the not-yet-formed notice and the next steps", async () => {
+    setup();
+    await goToConfirm();
+    fireEvent.click(screen.getByLabelText(/事業のために利用/));
+    fireEvent.click(screen.getByLabelText(/利用規約/));
+    fireEvent.click(screen.getByRole("button", { name: "同意して申し込む" }));
+    await screen.findByRole("heading", { name: "お申込みを受け付けました" });
+    expect(screen.getByText("契約は、まだ成立していません")).toBeTruthy();
+    expect(screen.getByText("このあとの流れ")).toBeTruthy();
+    expect(screen.getByText(/当社でお申込み内容を審査します/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "マイページで状況を見る" })
+        .getAttribute("href"),
+    ).toBe("/me");
+    expect(document.body.textContent).not.toMatch(/承認|LINE/);
   });
 });
