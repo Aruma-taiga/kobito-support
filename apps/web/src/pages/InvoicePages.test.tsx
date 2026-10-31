@@ -79,6 +79,7 @@ const authClient: AuthClient = {
   },
   signIn: async () => user,
   signInWithCustomToken: async () => user,
+  sendPasswordReset: async () => undefined,
   signUp: async () => user,
   signOut: async () => undefined,
 };

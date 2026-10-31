@@ -42,6 +42,7 @@ describe("contract LINE account status", () => {
       },
       signIn: vi.fn(async () => firstUser),
       signInWithCustomToken: vi.fn(async () => firstUser),
+      sendPasswordReset: async () => undefined,
       signUp: vi.fn(async () => firstUser),
       signOut: vi.fn(async () => undefined),
     };

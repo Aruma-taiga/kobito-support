@@ -103,6 +103,7 @@ function setup(
       });
       return authenticatedUser;
     }),
+    sendPasswordReset: async () => undefined,
     signUp: vi.fn(async () => ({
       uid: "new-user",
       email: null,

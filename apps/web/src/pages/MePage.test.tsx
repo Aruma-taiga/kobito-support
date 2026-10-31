@@ -24,6 +24,7 @@ describe("expired customer session recovery", () => {
       },
       signIn: async () => currentUser,
       signInWithCustomToken: async () => currentUser,
+      sendPasswordReset: async () => undefined,
       signUp: async () => ({
         uid: "customer-test",
         email: null,
@@ -85,6 +86,7 @@ describe("customer contract summary", () => {
       },
       signIn: async () => currentUser,
       signInWithCustomToken: async () => currentUser,
+      sendPasswordReset: async () => undefined,
       signUp: async () => currentUser,
       signOut: async () => undefined,
     };
@@ -133,6 +135,7 @@ describe("customer contract summary", () => {
         email: null,
         getIdToken: async () => "token",
       }),
+      sendPasswordReset: async () => undefined,
       signUp: async () => ({
         uid: "customer-test",
         email: null,

@@ -192,6 +192,17 @@ export const webMessages = {
     "ご契約の内容、残りのクレジット、ご依頼の状況、請求書を見られます。",
   loginForgotPassword:
     "パスワードを忘れたときは、メール（{email}）でご連絡ください。",
+  loginForgotLink: "パスワードを忘れた方",
+  passwordResetDescription:
+    "登録したメールアドレスを入力してください。再設定のご案内をお送りします。",
+  passwordResetButton: "再設定のご案内を送る",
+  passwordResetSubmitting: "送信しています…",
+  passwordResetCancel: "ログインに戻る",
+  passwordResetInvalidEmail: "メールアドレスの形式を確認してください。",
+  passwordResetDone:
+    "登録されているメールアドレスの場合、再設定のご案内を送信しました。メールが届かないときは、迷惑メールフォルダもご確認ください。",
+  passwordResetError:
+    "送信できませんでした。通信状況を確認して、もう一度お試しください。",
   emailLabel: "メールアドレス",
   passwordLabel: "パスワード",
   loginButton: "ログイン",

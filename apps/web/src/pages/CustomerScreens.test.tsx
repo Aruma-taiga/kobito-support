@@ -180,6 +180,7 @@ function setup(
     },
     signIn: vi.fn(async () => user),
     signInWithCustomToken: vi.fn(async () => user),
+    sendPasswordReset: async () => undefined,
     signUp: vi.fn(async () => user),
     signOut: vi.fn(async () => {
       currentUser = null;
