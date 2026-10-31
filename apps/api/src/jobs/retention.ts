@@ -137,6 +137,12 @@ export async function runRetentionPurge(
           "delete from notifications where customer_id=$1 and sent_at is null",
           [customer.id],
         );
+        // 申込みの重複防止キーは user_accounts を参照する。ログインの紐づけを消す前に、このお客様のキーを消す
+        // （申込み自体は7年保存の記録なので消さない。キーは再送の判定用で、1年後には不要）。
+        await client.query(
+          "delete from application_submission_keys where auth_user_id=any($1::text[])",
+          [users.rows.map((user) => user.auth_user_id)],
+        );
         await client.query("delete from user_accounts where customer_id=$1", [
           customer.id,
         ]);
