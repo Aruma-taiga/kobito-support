@@ -4,29 +4,69 @@ import {
   webMessages,
 } from "@kobito/shared";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import type { AdminApiClient } from "../platform/admin-api-client.js";
-import { invoiceStatus, yen } from "./invoice-format.js";
+import { formatDate, formatSlashDate, formatYen } from "../platform/format.js";
+import {
+  AdminColumns,
+  AdminHeading,
+  AmountRows,
+  Badge,
+  type BadgeTone,
+  Button,
+  buttonClass,
+  Card,
+  DefinitionList,
+  FilterChips,
+  Hint,
+  Notice,
+  Table,
+} from "../ui/index.js";
+import { invoiceStatus } from "./invoice-format.js";
 import { useInvoicePdfDownload } from "./invoice-pdf.js";
 
-type InvoiceClient = Pick<
-  AdminApiClient,
-  "getInvoices" | "getInvoice" | "getInvoicePdf"
->;
+type InvoiceFilter = "all" | "unpaid" | "paid" | "failed" | "void";
 
-function InvoiceListPage({
-  client,
-  basePath,
-  returnLabel,
+const filterOptions: Array<{ value: InvoiceFilter; label: string }> = [
+  { value: "all", label: webMessages.adminFilterAll },
+  { value: "unpaid", label: webMessages.adminInvoiceFilterUnpaid },
+  { value: "paid", label: webMessages.adminInvoiceFilterPaid },
+  { value: "failed", label: webMessages.adminInvoiceFilterFailed },
+  { value: "void", label: webMessages.adminInvoiceFilterVoid },
+];
+
+function matchesFilter(
+  status: InvoiceListItem["status"],
+  filter: InvoiceFilter,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "unpaid") return status === "issued" || status === "overdue";
+  return status === filter;
+}
+
+function statusTone(status: InvoiceListItem["status"]): BadgeTone {
+  if (status === "paid") return "sage";
+  if (status === "failed") return "warn";
+  if (status === "issued" || status === "overdue") return "yellow";
+  return "gray";
+}
+
+function paymentMethodLabel(method: InvoiceListItem["paymentMethod"]): string {
+  if (method === "bank_transfer") return webMessages.applicationBankTransfer;
+  if (method === "card") return webMessages.applicationCardPayment;
+  return "—";
+}
+
+export function AdminInvoiceListPage({
+  apiClient,
 }: {
-  client: InvoiceClient;
-  basePath: string;
-  returnLabel: string;
+  apiClient: AdminApiClient;
 }) {
   const [items, setItems] = useState<InvoiceListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [filter, setFilter] = useState<InvoiceFilter>("all");
 
   // Retry count is an intentional refetch trigger even though the request URL is unchanged.
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry state must trigger another fetch
@@ -34,7 +74,7 @@ function InvoiceListPage({
     let active = true;
     setLoading(true);
     setError(false);
-    void client
+    void apiClient
       .getInvoices()
       .then(({ invoices }) => {
         if (active) setItems(invoices);
@@ -48,76 +88,108 @@ function InvoiceListPage({
     return () => {
       active = false;
     };
-  }, [attempt, client]);
+  }, [attempt, apiClient]);
 
+  const shown = items.filter((item) => matchesFilter(item.status, filter));
   return (
-    <main className="page-main">
-      <section
-        className="card invoice-card"
-        aria-labelledby="invoice-list-title"
-      >
-        <Link className="admin-back-link" to="/admin/customers">
-          {returnLabel}
-        </Link>
-        <h1 id="invoice-list-title">{webMessages.invoiceListTitle}</h1>
-        {loading ? (
-          <output className="status-message">
-            {webMessages.invoiceListLoading}
-          </output>
-        ) : null}
-        {error ? (
-          <div>
-            <p className="error-message" role="alert">
-              {webMessages.invoiceListError}
-            </p>
-            <button
-              className="secondary-button"
-              onClick={() => setAttempt((value) => value + 1)}
-              type="button"
-            >
-              {webMessages.invoiceRetry}
-            </button>
-          </div>
-        ) : null}
-        {!loading && !error && items.length === 0 ? (
-          <p className="muted-text">{webMessages.invoiceListEmpty}</p>
-        ) : null}
-        {!loading && !error && items.length > 0 ? (
-          <ul className="invoice-list">
-            {items.map((item) => (
-              <li key={item.id}>
-                <Link to={`${basePath}/${encodeURIComponent(item.id)}`}>
-                  <strong>{item.invoiceNo}</strong>
-                  <span>
-                    {item.issuedOn} · {yen(item.totalInclTax)} ·{" "}
-                    {invoiceStatus(item.status)}
-                  </span>
-                  {item.preview ? (
-                    <span className="invoice-preview-label">
-                      {webMessages.invoicePreviewShort}
-                    </span>
-                  ) : null}
+    <>
+      <AdminHeading
+        id="invoice-list-title"
+        title={webMessages.adminInvoicesTitle}
+      />
+      <FilterChips
+        label={webMessages.adminStatusFilterLabel}
+        options={filterOptions}
+        value={filter}
+        onChange={(value) => setFilter(value)}
+      />
+      {loading ? (
+        <output className="ui-admin__lead">
+          {webMessages.invoiceListLoading}
+        </output>
+      ) : null}
+      {error ? (
+        <>
+          <Notice tone="warn">{webMessages.invoiceListError}</Notice>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            {webMessages.invoiceRetry}
+          </Button>
+        </>
+      ) : null}
+      {!loading && !error && shown.length === 0 ? (
+        <Hint>{webMessages.invoiceListEmpty}</Hint>
+      ) : null}
+      {!loading && !error && shown.length > 0 ? (
+        <Table
+          caption={webMessages.adminInvoicesTableLabel}
+          columns={[
+            { key: "no", header: webMessages.adminInvoiceColNo },
+            { key: "issued", header: webMessages.adminInvoiceColIssued },
+            {
+              key: "total",
+              header: webMessages.adminInvoiceColTotal,
+              numeric: true,
+            },
+            { key: "method", header: webMessages.adminInvoiceColMethod },
+            { key: "status", header: webMessages.adminInvoiceColStatus },
+            { key: "action", header: "" },
+          ]}
+          rows={shown.map((item) => ({
+            no: (
+              <>
+                <Link to={`/admin/invoices/${encodeURIComponent(item.id)}`}>
+                  {item.invoiceNo}
                 </Link>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
-    </main>
+                {item.preview ? (
+                  <span className="ui-table__sub">
+                    {webMessages.invoicePreviewShort}
+                  </span>
+                ) : null}
+              </>
+            ),
+            issued: formatSlashDate(item.issuedOn),
+            total: (
+              <>
+                {formatYen(item.totalInclTax)}
+                <span className="ui-table__sub">
+                  {webMessages.adminInvoiceBreakdown
+                    .replace("{excl}", formatYen(item.totalExclTax))
+                    .replace("{tax}", formatYen(item.taxAmount))}
+                </span>
+              </>
+            ),
+            method: paymentMethodLabel(item.paymentMethod),
+            status: (
+              <Badge tone={statusTone(item.status)}>
+                {invoiceStatus(item.status)}
+              </Badge>
+            ),
+            action: (
+              <Link
+                className={buttonClass("ghost", { size: "sm" })}
+                to={`/admin/invoices/${encodeURIComponent(item.id)}`}
+              >
+                {webMessages.adminInvoiceOpen}
+              </Link>
+            ),
+          }))}
+        />
+      ) : null}
+      <Hint>{webMessages.adminInvoiceNote}</Hint>
+    </>
   );
 }
 
-function AdminInvoiceDetailView({
-  client,
-  listPath,
-  returnLabel,
+export function AdminInvoiceDetailPage({
+  apiClient,
 }: {
-  client: InvoiceClient;
-  listPath: string;
-  returnLabel: string;
+  apiClient: AdminApiClient;
 }) {
   const { id = "" } = useParams();
-  const navigate = useNavigate();
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -129,7 +201,7 @@ function AdminInvoiceDetailView({
     let active = true;
     setLoading(true);
     setError(false);
-    void client
+    void apiClient
       .getInvoice(id)
       .then((detail) => {
         if (active) setInvoice(detail);
@@ -143,199 +215,215 @@ function AdminInvoiceDetailView({
     return () => {
       active = false;
     };
-  }, [attempt, client, id]);
+  }, [attempt, apiClient, id]);
 
   const { downloading, downloadError, downloadPdf } = useInvoicePdfDownload(
-    client,
+    apiClient,
     invoice,
   );
 
+  const crumb = (
+    <>
+      <Link to="/admin/invoices">{webMessages.adminInvoicesTitle}</Link> ›
+    </>
+  );
+  if (loading) {
+    return (
+      <output className="ui-admin__lead">
+        {webMessages.invoiceListLoading}
+      </output>
+    );
+  }
+  if (error || !invoice) {
+    return (
+      <>
+        <AdminHeading crumb={crumb} title={webMessages.invoiceDetailTitle} />
+        <Notice tone="warn">{webMessages.invoiceDetailError}</Notice>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setAttempt((value) => value + 1)}
+        >
+          {webMessages.invoiceRetry}
+        </Button>
+      </>
+    );
+  }
+  const notSet = webMessages.invoiceNotSet;
   return (
-    <main className="page-main">
-      <section
-        className="card invoice-card"
-        aria-labelledby="invoice-detail-title"
-      >
-        <Link className="admin-back-link" to={listPath}>
-          {returnLabel}
-        </Link>
-        {loading ? (
-          <output className="status-message">
-            {webMessages.invoiceListLoading}
-          </output>
-        ) : null}
-        {error ? (
-          <div>
-            <p className="error-message" role="alert">
-              {webMessages.invoiceDetailError}
-            </p>
-            <button
-              className="secondary-button"
-              onClick={() => setAttempt((value) => value + 1)}
-              type="button"
-            >
-              {webMessages.invoiceRetry}
-            </button>
-          </div>
-        ) : null}
-        {!loading && !error && invoice ? (
-          <>
-            <h1 id="invoice-detail-title">{webMessages.invoiceDetailTitle}</h1>
-            {invoice.preview ? (
-              <p className="invoice-preview-warning" role="note">
-                {webMessages.invoicePreviewWarning}
-              </p>
-            ) : null}
-            <h2 className="invoice-number">{invoice.invoiceNo}</h2>
-            <dl className="invoice-data">
-              <dt>{webMessages.invoiceStatusLabel}</dt>
-              <dd>{invoiceStatus(invoice.status)}</dd>
-              <dt>{webMessages.invoiceIssuedOn}</dt>
-              <dd>{invoice.issuedOn}</dd>
-              <dt>{webMessages.invoiceDueOn}</dt>
-              <dd>{invoice.dueOn}</dd>
-              <dt>{webMessages.invoiceBillingName}</dt>
-              <dd>{invoice.billingName}</dd>
-              <dt>{webMessages.invoiceBillingAddress}</dt>
-              <dd>{invoice.billingAddress}</dd>
-            </dl>
-            <h2>{webMessages.invoiceAcceptedPlan}</h2>
-            <dl className="invoice-data">
-              <dt>{webMessages.invoiceAcceptedPlan}</dt>
-              <dd>{invoice.acceptedPlan.planName}</dd>
-              <dt>{webMessages.invoiceAcceptedMonthlyPrice}</dt>
-              <dd>{yen(invoice.acceptedPlan.monthlyPriceExclTax)}</dd>
-              <dt>{webMessages.invoiceAcceptedCredits}</dt>
-              <dd>{invoice.acceptedPlan.credits}</dd>
-            </dl>
-            <h2>{webMessages.invoiceIssuerHeading}</h2>
-            <dl className="invoice-data">
-              <dt>{webMessages.invoiceServiceName}</dt>
-              <dd>{invoice.issuer.serviceName}</dd>
-              <dt>{webMessages.invoiceCompanyName}</dt>
-              <dd>{invoice.issuer.companyName}</dd>
-              <dt>{webMessages.invoiceCompanyAddress}</dt>
-              <dd>{invoice.issuer.companyAddress}</dd>
-              <dt>{webMessages.applicationInvoiceRegistrationNo}</dt>
-              <dd>
-                {invoice.issuer.invoiceRegistrationNo ??
-                  webMessages.invoiceNotSet}
-              </dd>
-            </dl>
-            <h2>{webMessages.invoiceLinesHeading}</h2>
-            <div className="invoice-table-wrap">
-              <table className="invoice-lines">
-                <thead>
-                  <tr>
-                    <th>{webMessages.invoiceLineDescription}</th>
-                    <th>{webMessages.invoiceLineQuantity}</th>
-                    <th>{webMessages.invoiceLineUnitPrice}</th>
-                    <th>{webMessages.invoiceLineAmount}</th>
-                    <th>{webMessages.invoiceTaxRate}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoice.lines.map((line, index) => (
-                    <tr key={`${line.description}-${index}`}>
-                      <td>{line.description}</td>
-                      <td>{line.quantity}</td>
-                      <td>{yen(line.unitPriceExclTax)}</td>
-                      <td>{yen(line.amountExclTax)}</td>
-                      <td>{Math.round(line.taxRate * 100)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <dl className="invoice-totals">
-              <dt>{webMessages.invoiceTotalExclTax}</dt>
-              <dd>{yen(invoice.totalExclTax)}</dd>
-              <dt>{webMessages.invoiceTaxAmount}</dt>
-              <dd>{yen(invoice.taxAmount)}</dd>
-              <dt>{webMessages.invoiceTotalInclTax}</dt>
-              <dd>
-                <strong>{yen(invoice.totalInclTax)}</strong>
-              </dd>
-            </dl>
-            <h2>{webMessages.invoiceBankHeading}</h2>
+    <>
+      <AdminHeading
+        id="invoice-detail-title"
+        crumb={crumb}
+        title={invoice.invoiceNo}
+        badge={
+          <Badge tone={statusTone(invoice.status)}>
+            {invoiceStatus(invoice.status)}
+          </Badge>
+        }
+        actions={
+          <Button
+            size="sm"
+            disabled={downloading}
+            onClick={() => void downloadPdf()}
+          >
+            {downloading
+              ? webMessages.invoiceDownloadWorking
+              : webMessages.invoiceDownload}
+          </Button>
+        }
+      />
+      {invoice.preview ? (
+        <Notice tone="yellow">{webMessages.invoicePreviewWarning}</Notice>
+      ) : null}
+      {downloadError ? (
+        <Notice tone="warn">{webMessages.invoiceDownloadError}</Notice>
+      ) : null}
+      <AdminColumns>
+        <div>
+          <Card title={webMessages.invoiceLinesHeading}>
+            <Table
+              caption={webMessages.invoiceLinesHeading}
+              columns={[
+                {
+                  key: "description",
+                  header: webMessages.invoiceLineDescription,
+                },
+                {
+                  key: "quantity",
+                  header: webMessages.invoiceLineQuantity,
+                  numeric: true,
+                },
+                {
+                  key: "unit",
+                  header: webMessages.invoiceLineUnitPrice,
+                  numeric: true,
+                },
+                {
+                  key: "amount",
+                  header: webMessages.invoiceLineAmount,
+                  numeric: true,
+                },
+                {
+                  key: "rate",
+                  header: webMessages.invoiceTaxRate,
+                  numeric: true,
+                },
+              ]}
+              rows={invoice.lines.map((line) => ({
+                description: line.description,
+                quantity: line.quantity,
+                unit: formatYen(line.unitPriceExclTax),
+                amount: formatYen(line.amountExclTax),
+                rate: `${Math.round(line.taxRate * 100)}%`,
+              }))}
+            />
+            <AmountRows
+              rows={[
+                {
+                  label: webMessages.adminSubtotalExcl,
+                  amount: formatYen(invoice.totalExclTax),
+                },
+                {
+                  label: webMessages.invoiceTaxLabel,
+                  amount: formatYen(invoice.taxAmount),
+                },
+              ]}
+              total={{
+                label: webMessages.adminTotalIncl,
+                amount: formatYen(invoice.totalInclTax),
+              }}
+            />
+          </Card>
+          <Card title={webMessages.invoiceBankHeading}>
             {invoice.paymentMethod === "bank_transfer" ? (
-              <dl className="invoice-data">
-                <dt>{webMessages.invoiceBankName}</dt>
-                <dd>
-                  {invoice.issuer.bankAccountName ?? webMessages.invoiceNotSet}
-                </dd>
-                <dt>{webMessages.invoiceBankBranch}</dt>
-                <dd>
-                  {invoice.issuer.bankAccountBranch ??
-                    webMessages.invoiceNotSet}
-                </dd>
-                <dt>{webMessages.invoiceBankAccountType}</dt>
-                <dd>
-                  {invoice.issuer.bankAccountType ?? webMessages.invoiceNotSet}
-                </dd>
-                <dt>{webMessages.invoiceBankAccountNumber}</dt>
-                <dd>
-                  {invoice.issuer.bankAccountNumber ??
-                    webMessages.invoiceNotSet}
-                </dd>
-              </dl>
+              <DefinitionList
+                items={[
+                  {
+                    term: webMessages.invoiceBankName,
+                    description: invoice.issuer.bankAccountName ?? notSet,
+                  },
+                  {
+                    term: webMessages.invoiceBankBranch,
+                    description: invoice.issuer.bankAccountBranch ?? notSet,
+                  },
+                  {
+                    term: webMessages.invoiceBankAccountType,
+                    description: invoice.issuer.bankAccountType ?? notSet,
+                  },
+                  {
+                    term: webMessages.invoiceBankAccountNumber,
+                    description: invoice.issuer.bankAccountNumber ?? notSet,
+                  },
+                ]}
+              />
             ) : (
-              <p>{webMessages.invoiceBankInPdf}</p>
+              <Hint>{webMessages.invoiceBankInPdf}</Hint>
             )}
-            {downloadError ? (
-              <p className="error-message" role="alert">
-                {webMessages.invoiceDownloadError}
-              </p>
-            ) : null}
-            <button
-              className="primary-button"
-              disabled={downloading}
-              onClick={() => void downloadPdf()}
-              type="button"
-            >
-              {downloading
-                ? webMessages.invoiceDownloadWorking
-                : webMessages.invoiceDownload}
-            </button>
-            <button
-              className="secondary-button invoice-back-button"
-              onClick={() => navigate(listPath)}
-              type="button"
-            >
-              {returnLabel}
-            </button>
-          </>
-        ) : null}
-      </section>
-    </main>
-  );
-}
-
-export function AdminInvoiceListPage({
-  apiClient,
-}: {
-  apiClient: AdminApiClient;
-}) {
-  return (
-    <InvoiceListPage
-      client={apiClient}
-      basePath="/admin/invoices"
-      returnLabel={webMessages.adminQueueTitle}
-    />
-  );
-}
-
-export function AdminInvoiceDetailPage({
-  apiClient,
-}: {
-  apiClient: AdminApiClient;
-}) {
-  return (
-    <AdminInvoiceDetailView
-      client={apiClient}
-      listPath="/admin/invoices"
-      returnLabel={webMessages.invoiceListTitle}
-    />
+          </Card>
+        </div>
+        <div>
+          <Card title={webMessages.invoiceDetailTitle}>
+            <DefinitionList
+              items={[
+                {
+                  term: webMessages.invoiceIssuedOn,
+                  description: formatDate(invoice.issuedOn),
+                },
+                {
+                  term: webMessages.invoiceDueOn,
+                  description: formatDate(invoice.dueOn),
+                },
+                {
+                  term: webMessages.invoiceBillingName,
+                  description: invoice.billingName,
+                },
+                {
+                  term: webMessages.invoiceBillingAddress,
+                  description: invoice.billingAddress,
+                },
+                {
+                  term: webMessages.invoiceAcceptedPlan,
+                  description: invoice.acceptedPlan.planName,
+                },
+                {
+                  term: webMessages.invoiceAcceptedMonthlyPrice,
+                  description: formatYen(
+                    invoice.acceptedPlan.monthlyPriceExclTax,
+                  ),
+                },
+                {
+                  term: webMessages.invoiceAcceptedCredits,
+                  description: invoice.acceptedPlan.credits,
+                },
+              ]}
+            />
+          </Card>
+          <Card title={webMessages.invoiceIssuerHeading}>
+            <DefinitionList
+              items={[
+                {
+                  term: webMessages.invoiceServiceName,
+                  description: invoice.issuer.serviceName,
+                },
+                {
+                  term: webMessages.invoiceCompanyName,
+                  description: invoice.issuer.companyName,
+                },
+                {
+                  term: webMessages.invoiceCompanyAddress,
+                  description: invoice.issuer.companyAddress,
+                },
+                {
+                  term: webMessages.applicationInvoiceRegistrationNo,
+                  description: invoice.issuer.invoiceRegistrationNo ?? notSet,
+                },
+              ]}
+            />
+          </Card>
+        </div>
+      </AdminColumns>
+    </>
   );
 }
 

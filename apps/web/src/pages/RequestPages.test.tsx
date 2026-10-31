@@ -281,7 +281,9 @@ describe("request and estimate routes", () => {
       target: { value: "予約フォームの表示を整える" },
     });
     fireEvent.change(
-      screen.getByLabelText(webMessages.adminEstimateDoneCriteria),
+      screen.getByLabelText(
+        new RegExp(`^${webMessages.adminEstimateDoneCriteria}`),
+      ),
       { target: { value: "スマートフォンで送信できる" } },
     );
     fireEvent.click(estimateSendButton);
@@ -412,7 +414,9 @@ describe("request and estimate routes", () => {
       target: { value: "予約フォームの表示を整える" },
     });
     fireEvent.change(
-      screen.getByLabelText(webMessages.adminEstimateDoneCriteria),
+      screen.getByLabelText(
+        new RegExp(`^${webMessages.adminEstimateDoneCriteria}`),
+      ),
       { target: { value: "スマートフォンで送信できる" } },
     );
     fireEvent.click(
