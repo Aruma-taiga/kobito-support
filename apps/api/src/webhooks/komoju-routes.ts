@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { verifyKomojuSignature } from "../integrations/komoju/webhook-signature.js";
 import type { ApiVariables } from "../platform/types.js";
 import type { KomojuInbox } from "./komoju-contracts.js";
-import { parseKomojuInboxEvent } from "./komoju-validation.js";
+import {
+  hasKomojuEnvelope,
+  parseKomojuInboxEvent,
+} from "./komoju-validation.js";
 
 const maxBodyBytes = 64 * 1024;
 
@@ -43,8 +46,13 @@ export function createKomojuWebhookRoutes(dependencies: {
       return context.json({ error: { code: "invalid_webhook" } }, 400);
     }
     const event = parseKomojuInboxEvent(parsed);
-    if (!event)
+    if (!event) {
+      // 署名は正しく骨組みも正しいが、項目の値が許可リストに合わない通知（当方が作っていない支払いなど）。
+      // 400 を返すと KOMOJU が最大25回・25日間再送し続けるので、200 で受けて保存せず無視する。
+      if (hasKomojuEnvelope(parsed))
+        return context.json({ received: false, ignored: true }, 200);
       return context.json({ error: { code: "invalid_webhook" } }, 400);
+    }
     try {
       const result = await dependencies.inbox.receive(event);
       if (result === "collision")
