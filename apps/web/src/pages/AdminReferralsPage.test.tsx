@@ -15,12 +15,20 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AdminAuthClient } from "../auth/admin-session.js";
 import { type AdminApiClient, AdminApp } from "./AdminApp.js";
 
-const amounts = (count: number, base: number, reward: number, tax: number) => ({
+const amounts = (
+  count: number,
+  base: number,
+  reward: number,
+  tax: number,
+  unpaid = reward + tax,
+) => ({
   count,
   baseAmount: base,
   rewardAmount: reward,
   taxAmount: tax,
   payableAmount: reward + tax,
+  unpaidPayableAmount: unpaid,
+  paidPayableAmount: reward + tax - unpaid,
 });
 const line = (over: Record<string, unknown>) => ({
   rewardId: "r",
@@ -76,7 +84,7 @@ const report: AdminReferralsResponse = {
           paidOn: "2026-12-05",
         }),
       ],
-      subtotal: amounts(1, 5000, 500, 50),
+      subtotal: amounts(1, 5000, 500, 50, 0),
     },
   ],
   total: amounts(3, 25000, 4500, 450),
@@ -102,6 +110,14 @@ function setup(
     getSession: vi.fn(async () => ({ role: "admin" as const })),
     getAdminReferrals: vi.fn(getAdminReferrals),
   } as unknown as AdminApiClient;
+  (
+    apiClient as unknown as {
+      payAdminReferralRewards: ReturnType<typeof vi.fn>;
+    }
+  ).payAdminReferralRewards = vi.fn(async () => ({
+    paidCount: 2,
+    totalPayable: 4400,
+  }));
   render(
     <MemoryRouter initialEntries={["/admin/referrals"]}>
       <Routes>
@@ -120,10 +136,14 @@ function setup(
   );
   return apiClient as unknown as {
     getAdminReferrals: ReturnType<typeof vi.fn>;
+    payAdminReferralRewards: ReturnType<typeof vi.fn>;
   };
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("a08 referrals and rewards", () => {
   it("lists rewards per partner on a tax-exclusive base with reward + tax = payable", async () => {
@@ -172,7 +192,7 @@ describe("a08 referrals and rewards", () => {
     expect(within(other).getByText(/支払い済み/)).toBeTruthy();
     // 月の合計
     const total = screen.getByRole("region", { name: "月の合計" });
-    expect(within(total).getByText("4,950円")).toBeTruthy();
+    expect(within(total).getAllByText("4,950円")).toHaveLength(2);
     expect(within(total).getByText("4,500円")).toBeTruthy();
     expect(screen.queryByText(/税込/)).toBeNull();
     expect(screen.queryByText(/LINE|コンビニ/)).toBeNull();
@@ -211,5 +231,85 @@ describe("a08 referrals and rewards", () => {
       await screen.findByText("紹介・報酬を読み込めませんでした。"),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "再読み込み" })).toBeTruthy();
+  });
+
+  it("confirms exact payment amount, prevents a double submit, and reloads the report", async () => {
+    let resolvePayment: (() => void) | undefined;
+    let isPaid = false;
+    const api = setup(async () =>
+      isPaid
+        ? {
+            ...report,
+            partners: report.partners.map((partner) =>
+              partner.partnerId === "p1"
+                ? {
+                    ...partner,
+                    rows: partner.rows.map((reward) => ({
+                      ...reward,
+                      status: "paid" as const,
+                      paidOn: "2026-11-14",
+                    })),
+                    subtotal: {
+                      ...partner.subtotal,
+                      unpaidPayableAmount: 0,
+                      paidPayableAmount: partner.subtotal.payableAmount,
+                    },
+                  }
+                : partner,
+            ),
+            total: {
+              ...report.total,
+              unpaidPayableAmount: 550,
+              paidPayableAmount: 4400,
+            },
+          }
+        : report,
+    );
+    api.payAdminReferralRewards.mockImplementation(() =>
+      new Promise<void>((resolve) => {
+        resolvePayment = resolve;
+      }).then(() => ({ paidCount: 2, totalPayable: 4400 })),
+    );
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    await screen.findByRole("table", { name: /佐藤さん/ });
+    const button = screen.getByRole("button", { name: "支払い済みにする" });
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(api.payAdminReferralRewards).toHaveBeenCalledTimes(1),
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      "報酬（税抜）＋消費税＝4,400円を、佐藤さんへ支払い済みとして記録します",
+    );
+    expect(button.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(button);
+    expect(api.payAdminReferralRewards).toHaveBeenCalledTimes(1);
+    isPaid = true;
+    resolvePayment?.();
+    await waitFor(() => expect(api.getAdminReferrals).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "支払い済みにする" }),
+      ).toBeNull(),
+    );
+    expect(
+      screen.getByRole("region", { name: "月の合計" }).textContent,
+    ).toContain("550円");
+    const paidTable = within(screen.getByRole("table", { name: /佐藤さん/ }));
+    expect(paidTable.getAllByText("支払い済み")).toHaveLength(2);
+    expect(paidTable.getAllByText("11/14")).toHaveLength(2);
+  });
+
+  it("shows the shared payment error message when recording fails", async () => {
+    const api = setup(async () => report);
+    api.payAdminReferralRewards.mockRejectedValue(new Error("conflict"));
+    vi.stubGlobal("confirm", () => true);
+    await screen.findByRole("button", { name: "支払い済みにする" });
+    fireEvent.click(screen.getByRole("button", { name: "支払い済みにする" }));
+    expect(
+      await screen.findByText(
+        "支払いを記録できませんでした。内容を確認して再度お試しください。",
+      ),
+    ).toBeTruthy();
   });
 });

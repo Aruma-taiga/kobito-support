@@ -1,4 +1,9 @@
-import type { AdminReferralsResponse, ReferralRewardRow } from "@kobito/shared";
+import type {
+  AdminReferralsResponse,
+  PayReferralRewardsRequest,
+  PayReferralRewardsResponse,
+  ReferralRewardRow,
+} from "@kobito/shared";
 import type { Principal } from "../../platform/types.js";
 
 export interface ReferralModule {
@@ -6,6 +11,17 @@ export interface ReferralModule {
     principal: Principal,
     query: unknown,
   ): Promise<AdminReferralsResponse>;
+  payAdmin(
+    principal: Principal,
+    request: PayReferralRewardsRequest,
+  ): Promise<PayReferralRewardsResponse>;
+}
+
+export interface ReferralPaymentWriter {
+  payRewards(
+    principal: Principal,
+    request: PayReferralRewardsRequest,
+  ): Promise<PayReferralRewardsResponse>;
 }
 
 export interface ReferralReader {

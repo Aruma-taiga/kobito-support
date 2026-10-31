@@ -1,6 +1,13 @@
-import type { ReferralRewardRow } from "@kobito/shared";
+import type {
+  PayReferralRewardsRequest,
+  PayReferralRewardsResponse,
+  ReferralRewardRow,
+} from "@kobito/shared";
 import type { Pool } from "pg";
-import type { ReferralReader } from "./contracts.js";
+import { withAdminAudit } from "../../platform/audit.js";
+import type { Principal } from "../../platform/types.js";
+import { ApiError } from "../../platform/types.js";
+import type { ReferralPaymentWriter, ReferralReader } from "./contracts.js";
 
 interface RewardDbRow {
   reward_id: string;
@@ -18,8 +25,10 @@ interface RewardDbRow {
   paid_on: string | null;
 }
 
-/** 閲覧のみ。顧客は店名だけを取り出し、メール・担当者名などは読まない。 */
-export class ReferralRepository implements ReferralReader {
+/** 顧客情報は店名だけを読み、メール・担当者名などは取り出さない。 */
+export class ReferralRepository
+  implements ReferralReader, ReferralPaymentWriter
+{
   constructor(private readonly pool: Pool) {}
 
   async listRewards(month: string): Promise<ReferralRewardRow[]> {
@@ -53,5 +62,48 @@ export class ReferralRepository implements ReferralReader {
       taxAmount: row.tax_amount,
       paidOn: row.paid_on,
     }));
+  }
+
+  async payRewards(
+    principal: Principal,
+    request: PayReferralRewardsRequest,
+  ): Promise<PayReferralRewardsResponse> {
+    return withAdminAudit(
+      this.pool,
+      principal,
+      {
+        action: "partner_reward.paid",
+        targetType: "partner",
+        targetId: request.partnerId,
+        detail: (result) => {
+          const paid = result as PayReferralRewardsResponse;
+          return { month: request.month, paidCount: String(paid.paidCount) };
+        },
+      },
+      async (client) => {
+        const locked = await client.query<{
+          id: string;
+          reward_amount: number;
+          tax_amount: number;
+        }>(
+          `select pr.id, pr.reward_amount, pr.tax_amount from partner_rewards pr
+          join referrals r on r.id = pr.referral_id
+         where pr.target_month = ($1 || '-01')::date and r.partner_id = $2 and pr.paid_on is null
+         order by pr.id for update of pr`,
+          [request.month, request.partnerId],
+        );
+        if (!locked.rowCount) throw new ApiError(409, "conflict");
+        const ids = locked.rows.map((row) => row.id);
+        const totalPayable = locked.rows.reduce(
+          (sum, row) => sum + row.reward_amount + row.tax_amount,
+          0,
+        );
+        await client.query(
+          "update partner_rewards set paid_on=$1 where id=any($2::uuid[]) and paid_on is null",
+          [request.paidOn, ids],
+        );
+        return { paidCount: ids.length, totalPayable };
+      },
+    );
   }
 }

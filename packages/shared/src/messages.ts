@@ -559,6 +559,16 @@ export const webMessages = {
   adminReferralsTileReward: "報酬（税抜）",
   adminReferralsTileTax: "消費税",
   adminReferralsTilePayable: "支払い額（報酬＋消費税）",
+  adminReferralsTilePaid: "支払い済み",
+  adminReferralsTileUnpaid: "未払い",
+  adminReferralsUnpaidSubtotal: "未払い額",
+  adminReferralsPayAction: "支払い済みにする",
+  adminReferralsPaying: "記録中…",
+  adminReferralsPaidOnLabel: "支払日",
+  adminReferralsPayConfirm:
+    "報酬（税抜）＋消費税＝{amount}を、{partner}へ支払い済みとして記録します",
+  adminReferralsPayError:
+    "支払いを記録できませんでした。内容を確認して再度お試しください。",
   adminReferralsTableCaption: "{partner}（{code}）の報酬",
   adminReferralsColShop: "店名",
   adminReferralsColType: "種類",

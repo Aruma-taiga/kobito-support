@@ -1,5 +1,6 @@
 import {
   type AdminReferralsResponse,
+  type PayReferralRewardsRequest,
   type ReferralRewardLine,
   webMessages,
 } from "@kobito/shared";
@@ -11,6 +12,7 @@ import {
   Badge,
   Block,
   Button,
+  Field,
   Hint,
   Notice,
   StatTiles,
@@ -43,7 +45,7 @@ type State =
   | { status: "error" }
   | { status: "ready"; report: AdminReferralsResponse };
 
-/** a08 紹介・報酬（閲覧のみ）。基準額は税抜、支払い額は報酬（税抜）＋消費税。 */
+/** a08 紹介・報酬。基準額は税抜、支払い額は報酬（税抜）＋消費税。 */
 export function AdminReferralsPage({
   apiClient,
 }: {
@@ -52,6 +54,9 @@ export function AdminReferralsPage({
   const [requested, setRequested] = useState<string | undefined>(undefined);
   const [state, setState] = useState<State>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const [paymentDate, setPaymentDate] = useState(todayTokyo());
+  const [paying, setPaying] = useState<string | null>(null);
+  const [paymentError, setPaymentError] = useState(false);
 
   // attempt は同じ月を取り直すための再読み込みの合図
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt intentionally retries the fetch
@@ -122,12 +127,72 @@ export function AdminReferralsPage({
           </Button>
         </>
       ) : null}
-      {state.status === "ready" ? <Report report={state.report} /> : null}
+      {state.status === "ready" ? (
+        <>
+          {paymentError ? (
+            <Notice tone="warn">{webMessages.adminReferralsPayError}</Notice>
+          ) : null}
+          <Report
+            report={state.report}
+            paymentDate={paymentDate}
+            setPaymentDate={setPaymentDate}
+            paying={paying}
+            onPay={async (request) => {
+              if (paying) return;
+              const partner = state.report.partners.find(
+                (item) => item.partnerId === request.partnerId,
+              );
+              if (!partner) return;
+              const confirmText = webMessages.adminReferralsPayConfirm
+                .replace(
+                  "{amount}",
+                  formatYen(partner.subtotal.unpaidPayableAmount),
+                )
+                .replace("{partner}", partner.partnerName);
+              if (!window.confirm(confirmText)) return;
+              setPaying(request.partnerId);
+              setPaymentError(false);
+              try {
+                await apiClient.payAdminReferralRewards(request);
+                setAttempt((value) => value + 1);
+              } catch {
+                setPaymentError(true);
+              } finally {
+                setPaying(null);
+              }
+            }}
+          />
+        </>
+      ) : null}
     </>
   );
 }
 
-function Report({ report }: { report: AdminReferralsResponse }) {
+function todayTokyo() {
+  const parts = new Intl.DateTimeFormat("en", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function Report({
+  report,
+  paymentDate,
+  setPaymentDate,
+  paying,
+  onPay,
+}: {
+  report: AdminReferralsResponse;
+  paymentDate: string;
+  setPaymentDate: (date: string) => void;
+  paying: string | null;
+  onPay: (request: PayReferralRewardsRequest) => Promise<void>;
+}) {
   if (report.partners.length === 0)
     return <Hint>{webMessages.adminReferralsEmpty}</Hint>;
   return (
@@ -155,6 +220,16 @@ function Report({ report }: { report: AdminReferralsResponse }) {
               key: "payable",
               label: webMessages.adminReferralsTilePayable,
               value: formatYen(report.total.payableAmount),
+            },
+            {
+              key: "paid",
+              label: webMessages.adminReferralsTilePaid,
+              value: formatYen(report.total.paidPayableAmount),
+            },
+            {
+              key: "unpaid",
+              label: webMessages.adminReferralsTileUnpaid,
+              value: formatYen(report.total.unpaidPayableAmount),
             },
           ]}
         />
@@ -234,10 +309,42 @@ function Report({ report }: { report: AdminReferralsResponse }) {
                 tax: <b>{formatYen(partner.subtotal.taxAmount)}</b>,
                 payable: <b>{formatYen(partner.subtotal.payableAmount)}</b>,
                 progress: "",
-                payment: "",
+                payment: (
+                  <>
+                    {webMessages.adminReferralsUnpaidSubtotal}:{" "}
+                    {formatYen(partner.subtotal.unpaidPayableAmount)}
+                  </>
+                ),
               },
             ]}
           />
+          {partner.subtotal.unpaidPayableAmount > 0 ? (
+            <div>
+              <Field label={webMessages.adminReferralsPaidOnLabel}>
+                <input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(event) =>
+                    setPaymentDate(event.currentTarget.value)
+                  }
+                />
+              </Field>
+              <Button
+                disabled={paying !== null || !paymentDate}
+                onClick={() =>
+                  void onPay({
+                    month: report.month,
+                    partnerId: partner.partnerId,
+                    paidOn: paymentDate,
+                  })
+                }
+              >
+                {paying === partner.partnerId
+                  ? webMessages.adminReferralsPaying
+                  : webMessages.adminReferralsPayAction}
+              </Button>
+            </div>
+          ) : null}
         </Block>
       ))}
       <Hint>{webMessages.adminReferralsNote}</Hint>
