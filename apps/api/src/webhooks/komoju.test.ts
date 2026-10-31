@@ -277,6 +277,78 @@ describe("KOMOJU webhook HTTP boundary", () => {
   });
 });
 
+describe("KOMOJU events that Kobito did not create", () => {
+  function post(app: ReturnType<typeof makeApp>, payload: unknown) {
+    const raw = JSON.stringify(payload);
+    return app.request("/webhooks/komoju", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-komoju-signature": signed(raw),
+      },
+      body: raw,
+    });
+  }
+
+  it("stores a captured payment whose order number is null (e.g. a subscription payment) as an event without a reference", async () => {
+    const receive = vi.fn(async (_event: unknown) => "stored" as const);
+    const app = makeApp({ komojuInbox: { receive } });
+    const response = await post(app, {
+      id: "evt_null_order",
+      type: "payment.captured",
+      data: {
+        id: "pay_sub_1",
+        status: "captured",
+        amount: 5500,
+        total: 5500,
+        currency: "JPY",
+        external_order_num: null,
+        captured_at: "2026-11-01T01:00:00Z",
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(receive).toHaveBeenCalledOnce();
+    const stored = receive.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>;
+    };
+    expect("external_order_num" in stored.data).toBe(false);
+    expect(stored.data.total).toBe(5500);
+  });
+
+  it("acknowledges a signed event with another service's order number without storing it, so KOMOJU does not retry for 25 days", async () => {
+    const receive = vi.fn();
+    const app = makeApp({ komojuInbox: { receive } });
+    const response = await post(app, {
+      id: "evt_foreign",
+      type: "payment.captured",
+      data: {
+        id: "pay_foreign_1",
+        status: "captured",
+        total: 3000,
+        currency: "JPY",
+        external_order_num: "OTHER-SERVICE-ORDER-99",
+        captured_at: "2026-11-01T01:00:00Z",
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ received: false, ignored: true });
+    expect(receive).not.toHaveBeenCalled();
+  });
+
+  it("still rejects a signed body that has no valid event envelope", async () => {
+    const receive = vi.fn();
+    const app = makeApp({ komojuInbox: { receive } });
+    for (const payload of [
+      { type: "payment.captured", data: {} },
+      { id: "evt_x", data: {} },
+      { id: "evt_x", type: "payment.captured" },
+    ]) {
+      expect((await post(app, payload)).status).toBe(400);
+    }
+    expect(receive).not.toHaveBeenCalled();
+  });
+});
+
 describe("KOMOJU signature and payload allowlist", () => {
   it("uses lowercase hexadecimal SHA-256 HMAC over the exact raw bytes", () => {
     const raw = new TextEncoder().encode(' {"id":"evt"} ');
