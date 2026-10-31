@@ -7,6 +7,7 @@ cloudflare_zone_id                    = "YOUR_CLOUDFLARE_ZONE_ID"
 cloudflare_account_id                 = "YOUR_CLOUDFLARE_ACCOUNT_ID"
 domain_name                           = "example.invalid"
 api_image                             = "asia-northeast1-docker.pkg.dev/PROJECT/REPOSITORY/API_IMAGE:TAG"
+migrate_image                         = "asia-northeast1-docker.pkg.dev/PROJECT/REPOSITORY/MIGRATE_IMAGE:TAG"
 database_password_secret_version      = "1"
 scheduler_paused                      = true # daily・notifications のみ
 retention_scheduler_paused            = true # 匿名化（retention）。承認まで true
