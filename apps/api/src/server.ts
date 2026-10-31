@@ -31,6 +31,7 @@ import {
 import { loadConfig } from "./platform/config.js";
 import { consoleLogger } from "./platform/logger.js";
 import { PublicSettingsRepository } from "./platform/settings.js";
+import { KomojuEventProcessor } from "./webhooks/komoju-processor.js";
 import { KomojuInboxRepository } from "./webhooks/komoju-repository.js";
 
 if (process.env.NODE_ENV !== "production") {
@@ -42,6 +43,8 @@ if (process.env.NODE_ENV !== "production") {
 const config = loadConfig(process.env);
 const verifier = createFirebaseVerifier(config);
 const pool = new Pool({ connectionString: config.databaseUrl });
+const komojuInbox = new KomojuInboxRepository(pool);
+const komojuProcessor = new KomojuEventProcessor(komojuInbox);
 const accounts = new AccountsRepository(pool);
 const applications = new ApplicationsService(
   new ApplicationsRepository(pool),
@@ -71,7 +74,8 @@ const app = createApp({
   ),
   publicSettings: new PublicSettingsRepository(pool),
   logger: consoleLogger,
-  komojuInbox: new KomojuInboxRepository(pool),
+  komojuInbox,
+  komojuTriggerProcessing: () => komojuProcessor.processPending(),
   ...(config.lineEnabled
     ? {
         line: new LineService(

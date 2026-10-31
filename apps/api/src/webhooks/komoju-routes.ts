@@ -9,6 +9,7 @@ const maxBodyBytes = 64 * 1024;
 export function createKomojuWebhookRoutes(dependencies: {
   secret: string | undefined;
   inbox: KomojuInbox;
+  triggerProcessing?: () => Promise<unknown>;
 }) {
   const routes = new Hono<{ Variables: ApiVariables }>();
   routes.post("/webhooks/komoju", async (context) => {
@@ -48,6 +49,7 @@ export function createKomojuWebhookRoutes(dependencies: {
       const result = await dependencies.inbox.receive(event);
       if (result === "collision")
         return context.json({ error: { code: "event_collision" } }, 409);
+      void dependencies.triggerProcessing?.().catch(() => undefined);
       return context.json({ received: true }, 200);
     } catch {
       return context.json({ error: { code: "webhook_unavailable" } }, 503);
