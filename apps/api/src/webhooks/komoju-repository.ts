@@ -8,7 +8,10 @@ import type {
   KomojuInboxEvent,
   KomojuInboxResult,
 } from "./komoju-contracts.js";
-import { parseKomojuInboxEvent } from "./komoju-validation.js";
+import {
+  invoiceNumberFromExternalOrderNum,
+  parseKomojuInboxEvent,
+} from "./komoju-validation.js";
 
 export class KomojuInboxRepository
   implements KomojuInbox, KomojuEventProcessorRepository
@@ -118,7 +121,10 @@ export class KomojuInboxRepository
         await client.query("commit");
         return "review";
       }
-      const invoiceNo = event.data.external_order_num;
+      const externalOrderNum = event.data.external_order_num;
+      const invoiceNo = externalOrderNum
+        ? invoiceNumberFromExternalOrderNum(externalOrderNum)
+        : undefined;
       if (!invoiceNo) {
         await markEvent(client, eventId, "review:missing_invoice_reference");
         await client.query("commit");

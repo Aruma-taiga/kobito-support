@@ -342,4 +342,33 @@ describe("KOMOJU signature and payload allowlist", () => {
       }),
     ).toBeUndefined();
   });
+
+  it.each([
+    "KS-2026-00001",
+    "KS-2026-00001-abcdef",
+  ])("accepts invoice reference %s", (externalOrderNum) => {
+    expect(
+      parseKomojuInboxEvent({
+        id: "evt_reference",
+        type: "payment.captured",
+        data: { external_order_num: externalOrderNum },
+      })?.data.external_order_num,
+    ).toBe(externalOrderNum);
+  });
+
+  it.each([
+    "KS-2026-00001-ABCDEF",
+    "KS-2026-00001-abcde",
+    "KS-2026-00001-abcdef0",
+    "KS-2026-00001--abcdef",
+    "KS-2026-00001-abcdef\n",
+  ])("rejects malformed suffixed invoice reference %s", (externalOrderNum) => {
+    expect(
+      parseKomojuInboxEvent({
+        id: "evt_reference",
+        type: "payment.captured",
+        data: { external_order_num: externalOrderNum },
+      }),
+    ).toBeUndefined();
+  });
 });

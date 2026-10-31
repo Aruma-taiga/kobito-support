@@ -44,23 +44,39 @@ function setup(
 }
 
 describe("PaymentLinkService", () => {
-  it("uses the invoice number and inclusive total and returns only the hosted URL", async () => {
+  it("uses a fresh suffixed invoice reference and inclusive total", async () => {
     const komoju = new FakeKomojuClient();
     const { service, repository } = setup({ invoice: paidInvoice, komoju });
     await expect(service.create(principal, invoiceId)).resolves.toEqual({
       redirectUrl: "https://komoju.com/sessions/fake-session-id",
     });
-    expect(komoju.requests).toEqual([
-      {
-        invoiceNo: "KS-2026-00001",
-        amountYen: 16_500,
-        returnUrl: `https://app.example.test/me/invoices/${invoiceId}`,
-      },
-    ]);
+    expect(komoju.requests).toHaveLength(1);
+    expect(komoju.requests[0]).toMatchObject({
+      externalOrderNum: expect.stringMatching(/^KS-2026-00001-[a-z0-9]{6}$/),
+      amountYen: 16_500,
+      returnUrl: `https://app.example.test/me/invoices/${invoiceId}`,
+    });
     expect(repository.recordCustomerLinkCreated).toHaveBeenCalledWith(
       expect.objectContaining({ customerId: principal.customerId }),
       principal.authUserId,
       invoiceId,
+    );
+  });
+
+  it("creates distinct provider references for repeated links to one invoice", async () => {
+    const komoju = new FakeKomojuClient();
+    const { service } = setup({ invoice: paidInvoice, komoju });
+    await service.create(principal, invoiceId);
+    await service.create(principal, invoiceId);
+    expect(komoju.requests).toHaveLength(2);
+    expect(komoju.requests[0]?.externalOrderNum).toMatch(
+      /^KS-2026-00001-[a-z0-9]{6}$/,
+    );
+    expect(komoju.requests[1]?.externalOrderNum).toMatch(
+      /^KS-2026-00001-[a-z0-9]{6}$/,
+    );
+    expect(komoju.requests[0]?.externalOrderNum).not.toBe(
+      komoju.requests[1]?.externalOrderNum,
     );
   });
 

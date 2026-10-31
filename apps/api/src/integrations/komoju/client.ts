@@ -1,5 +1,5 @@
 export interface HostedSessionRequest {
-  invoiceNo: string;
+  externalOrderNum: string;
   amountYen: number;
   returnUrl: string;
 }
@@ -55,7 +55,7 @@ export class HttpKomojuClient implements KomojuClient {
             currency: "JPY",
             return_url: request.returnUrl,
             payment_types: ["credit_card"],
-            payment_data: { external_order_num: request.invoiceNo },
+            payment_data: { external_order_num: request.externalOrderNum },
             default_locale: "ja",
           }),
           signal: controller.signal,
