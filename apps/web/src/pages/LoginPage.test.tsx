@@ -5,9 +5,14 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AuthClient, AuthUser } from "../auth/session.js";
 import { AuthProvider } from "../auth/session.js";
+import { ContactProvider } from "../platform/contact.js";
 import { LoginPage } from "./LoginPage.js";
 
-function setup(initialPath: string, lineLiffId?: string) {
+function setup(
+  initialPath: string,
+  lineLiffId?: string,
+  contactEmail: string | null = null,
+) {
   let user: AuthUser | null = null;
   const listeners = new Set<(current: AuthUser | null) => void>();
   const authClient: AuthClient = {
@@ -43,20 +48,22 @@ function setup(initialPath: string, lineLiffId?: string) {
     }),
   };
   render(
-    <AuthProvider client={authClient}>
-      <MemoryRouter initialEntries={[initialPath]}>
-        <Routes>
-          <Route
-            path="/login"
-            element={
-              <LoginPage authClient={authClient} lineLiffId={lineLiffId} />
-            }
-          />
-          <Route path="/apply/shop" element={<p>申込みフォーム</p>} />
-          <Route path="/me" element={<p>マイページ</p>} />
-        </Routes>
-      </MemoryRouter>
-    </AuthProvider>,
+    <ContactProvider value={{ lineEnabled: false, contactEmail }}>
+      <AuthProvider client={authClient}>
+        <MemoryRouter initialEntries={[initialPath]}>
+          <Routes>
+            <Route
+              path="/login"
+              element={
+                <LoginPage authClient={authClient} lineLiffId={lineLiffId} />
+              }
+            />
+            <Route path="/apply/shop" element={<p>申込みフォーム</p>} />
+            <Route path="/me" element={<p>マイページ</p>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    </ContactProvider>,
   );
   return authClient;
 }
@@ -95,5 +102,25 @@ describe("controlled login return", () => {
       name: "LINEでログイン",
     });
     expect(lineLink.getAttribute("href")).toBe("/liff?to=home");
+  });
+});
+
+describe("login screen copy", () => {
+  afterEach(cleanup);
+
+  it("explains what the mypage shows and where to ask when the password is forgotten", async () => {
+    setup("/login", undefined, "info@cingulata.jp");
+    expect(
+      await screen.findByText(
+        "ご契約の内容、残りのクレジット、ご依頼の状況、請求書を見られます。",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(/パスワードを忘れたとき/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "info@cingulata.jp" })
+        .getAttribute("href"),
+    ).toBe("mailto:info@cingulata.jp");
+    expect(document.body.textContent).not.toContain("LINE");
   });
 });

@@ -29,7 +29,40 @@ import {
   ApiClientError,
   type ReturnTypeApiClient,
 } from "../platform/api-client.js";
-import { ContactEmailLink, useContact } from "../platform/contact.js";
+import {
+  ContactEmailLink,
+  contactMailHref,
+  MailText,
+  useContact,
+} from "../platform/contact.js";
+import {
+  formatDate,
+  formatSlashDate,
+  tokyoDateOf,
+} from "../platform/format.js";
+import {
+  BackLink,
+  Badge,
+  Block,
+  Button,
+  Card,
+  DefinitionList,
+  FilterChips,
+  Hint,
+  Lead,
+  ListItem,
+  Notice,
+  Page,
+  StatTiles,
+  Title,
+} from "../ui/index.js";
+import { CustomerTabBar } from "./CustomerTabBar.js";
+import {
+  requestStatusLabel as customerStatusLabel,
+  requestMeta,
+  requestPath,
+  requestStatusTone,
+} from "./request-display.js";
 
 function requestStatusLabel(status: RequestStatus): string {
   switch (status) {
@@ -545,13 +578,7 @@ function EstimateDisplay({
   );
 }
 
-function CompletionDisplay({
-  completion,
-  customer = false,
-}: {
-  completion: RequestCompletion;
-  customer?: boolean;
-}) {
+function CompletionDisplay({ completion }: { completion: RequestCompletion }) {
   return (
     <section
       className="estimate-card"
@@ -559,42 +586,22 @@ function CompletionDisplay({
     >
       <h2>{webMessages.requestStatusDone}</h2>
       <dl className="request-summary-list">
-        <dt>
-          {customer
-            ? webMessages.myRequestCompletionDate
-            : webMessages.adminRequestCompletedOn}
-        </dt>
+        <dt>{webMessages.adminRequestCompletedOn}</dt>
         <dd>{completion.completedOn}</dd>
-        <dt>
-          {customer
-            ? webMessages.myRequestCompletionActualMinutes
-            : webMessages.adminRequestActualMinutes}
-        </dt>
+        <dt>{webMessages.adminRequestActualMinutes}</dt>
         <dd>
           {completion.actualMinutes} {webMessages.requestMinuteUnit}
         </dd>
-        <dt>
-          {customer
-            ? webMessages.myRequestCompletionActualCredits
-            : webMessages.adminRequestActualCredits}
-        </dt>
+        <dt>{webMessages.adminRequestActualCredits}</dt>
         <dd>
           {completion.actualCredits} {webMessages.requestCreditUnit}
         </dd>
-        <dt>
-          {customer
-            ? webMessages.myRequestCompletionPeriod
-            : webMessages.adminRequestReservedPeriod}
-        </dt>
+        <dt>{webMessages.adminRequestReservedPeriod}</dt>
         <dd>
           {completion.reservedPeriod.startsOn}〜
           {completion.reservedPeriod.endsOn}
         </dd>
-        <dt>
-          {customer
-            ? webMessages.myRequestCompletionReservedCredits
-            : webMessages.adminRequestReservedCredits}
-        </dt>
+        <dt>{webMessages.adminRequestReservedCredits}</dt>
         <dd>
           {completion.reservedCredits} {webMessages.requestCreditUnit}
         </dd>
@@ -1018,14 +1025,23 @@ export function AdminRequestDetailPage({
   );
 }
 
+type RequestFilter = "all" | "progress" | "done";
+const filterOptions: Array<{ value: RequestFilter; label: string }> = [
+  { value: "all", label: webMessages.myRequestsFilterAll },
+  { value: "progress", label: webMessages.myRequestsGroupProgress },
+  { value: "done", label: webMessages.myRequestsGroupDone },
+];
+
 export function MyRequestsPage({
   apiClient,
 }: {
   apiClient: ReturnTypeApiClient;
 }) {
+  const { contactEmail } = useContact();
   const [items, setItems] = useState<CustomerRequestSummary[] | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [filter, setFilter] = useState<RequestFilter>("all");
   // The counter is intentionally a dependency: changing it retries the list request.
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt intentionally retries the list fetch.
   useEffect(() => {
@@ -1044,78 +1060,96 @@ export function MyRequestsPage({
       current = false;
     };
   }, [apiClient, attempt]);
+  const finished = (items ?? []).filter(
+    (item) => item.status === "done" || item.status === "withdrawn",
+  );
+  const progress = (items ?? []).filter(
+    (item) => item.status !== "done" && item.status !== "withdrawn",
+  );
+  const shownProgress = filter === "done" ? [] : progress;
+  const shownDone = filter === "progress" ? [] : finished;
   return (
-    <main className="page-main">
-      <section
-        className="card request-card"
-        aria-labelledby="my-requests-title"
-      >
-        <Link className="admin-back-link" to="/me">
-          {webMessages.homeTitle}
-        </Link>
-        <h1 id="my-requests-title">{webMessages.myRequestsTitle}</h1>
+    <>
+      <Page tabbed>
+        <Title id="my-requests-title">{webMessages.myRequestsTitle}</Title>
         {items === null && !error ? (
-          <output className="status-message">
-            {webMessages.profileLoading}
-          </output>
+          <output className="ui-lead">{webMessages.profileLoading}</output>
         ) : null}
         {error ? (
           <>
-            <p className="error-message" role="alert">
-              {webMessages.requestsLoadError}
-            </p>
-            <button
-              className="secondary-button"
+            <Notice tone="warn">{webMessages.requestsLoadError}</Notice>
+            <Button
+              variant="ghost"
               onClick={() => setAttempt((value) => value + 1)}
-              type="button"
             >
               {webMessages.retry}
-            </button>
+            </Button>
           </>
         ) : null}
         {items?.length === 0 ? (
-          <p className="muted-text">{webMessages.myRequestsEmpty}</p>
+          <p className="ui-lead">{webMessages.myRequestsEmpty}</p>
         ) : null}
         {items?.length ? (
-          <div className="request-list">
-            {items.map((item) => (
-              <article className="request-list-item" key={item.id}>
-                <Link to={`/me/requests/${encodeURIComponent(item.id)}`}>
-                  <strong>{item.summary}</strong>
-                </Link>
-                <dl className="request-summary-list">
-                  <dt>{webMessages.adminRequestStatus}</dt>
-                  <dd>{requestStatusLabel(item.status)}</dd>
-                  <dt>{webMessages.adminRequestReceivedOn}</dt>
-                  <dd>{item.receivedOn}</dd>
-                  {item.completion ? (
-                    <>
-                      <dt>{webMessages.myRequestCompletionDate}</dt>
-                      <dd>{item.completion.completedOn}</dd>
-                      <dt>{webMessages.myRequestCompletionActualCredits}</dt>
-                      <dd>
-                        {item.completion.actualCredits}{" "}
-                        {webMessages.requestCreditUnit}
-                      </dd>
-                    </>
-                  ) : item.latestEstimate ? (
-                    <>
-                      <dt>{webMessages.estimateCredits}</dt>
-                      <dd>
-                        {item.latestEstimate.credits}{" "}
-                        {webMessages.requestCreditUnit}
-                      </dd>
-                      <dt>{webMessages.estimateDueOn}</dt>
-                      <dd>{item.latestEstimate.dueOn}</dd>
-                    </>
-                  ) : null}
-                </dl>
-              </article>
-            ))}
-          </div>
+          <>
+            <FilterChips<RequestFilter>
+              label={webMessages.myRequestsFilterLabel}
+              onChange={setFilter}
+              options={filterOptions}
+              value={filter}
+            />
+            {shownProgress.length > 0 ? (
+              <Card title={webMessages.myRequestsGroupProgress}>
+                {shownProgress.map((item) => (
+                  <RequestRow item={item} key={item.id} />
+                ))}
+              </Card>
+            ) : null}
+            {shownDone.length > 0 ? (
+              <Card title={webMessages.myRequestsGroupDone}>
+                {shownDone.map((item) => (
+                  <RequestRow item={item} key={item.id} />
+                ))}
+              </Card>
+            ) : null}
+            {shownProgress.length === 0 && shownDone.length === 0 ? (
+              <p className="ui-lead">{webMessages.myRequestsFilterEmpty}</p>
+            ) : null}
+          </>
         ) : null}
-      </section>
-    </main>
+        {contactEmail ? (
+          <Hint>
+            <MailText template={webMessages.myRequestsFooter} />
+          </Hint>
+        ) : null}
+      </Page>
+      <CustomerTabBar />
+    </>
+  );
+}
+
+function RequestRow({ item }: { item: CustomerRequestSummary }) {
+  const done = item.status === "done" && item.completion;
+  return (
+    <ListItem
+      badge={
+        done ? (
+          <Badge tone="dark">
+            {webMessages.myRequestCreditsUsed.replace(
+              "{credits}",
+              String(item.completion?.actualCredits ?? 0),
+            )}
+          </Badge>
+        ) : (
+          <Badge tone={requestStatusTone(item.status)}>
+            {customerStatusLabel(item.status)}
+          </Badge>
+        )
+      }
+      component={Link}
+      meta={requestMeta(item, true)}
+      title={item.summary}
+      to={requestPath(item)}
+    />
   );
 }
 
@@ -1148,11 +1182,8 @@ export function MyRequestDetailPage({
       .then((result) => {
         if (current) setDetail(result);
       })
-      .catch((caught: unknown) => {
-        if (!current) return;
-        if (caught instanceof ApiClientError && caught.code === "unauthorized")
-          setError(true);
-        else setError(true);
+      .catch(() => {
+        if (current) setError(true);
       })
       .finally(() => {
         if (current) setLoading(false);
@@ -1201,170 +1232,294 @@ export function MyRequestDetailPage({
   }
   if (loading)
     return (
-      <main className="page-main">
-        <output className="status-message">{webMessages.profileLoading}</output>
-      </main>
+      <>
+        <Page tabbed>
+          <output className="ui-lead">{webMessages.profileLoading}</output>
+        </Page>
+        <CustomerTabBar />
+      </>
     );
   if (error || !detail)
     return (
-      <main className="page-main">
-        <section className="card request-card">
-          <p className="error-message" role="alert">
-            {webMessages.requestsLoadError}
-          </p>
-          <button
-            className="secondary-button"
+      <>
+        <Page tabbed>
+          <BackLink component={Link} to="/me/requests">
+            {webMessages.myRequestsTitle}
+          </BackLink>
+          <Notice tone="warn">{webMessages.requestsLoadError}</Notice>
+          <Button
+            variant="ghost"
             onClick={() => setAttempt((value) => value + 1)}
-            type="button"
           >
             {webMessages.retry}
-          </button>
-        </section>
-      </main>
+          </Button>
+        </Page>
+        <CustomerTabBar />
+      </>
     );
   const estimate = detail.latestEstimate;
   const awaitingApproval =
     detail.request.status === "awaiting_approval" && estimate !== null;
   const insufficient =
     estimate !== null && detail.availableCredits < estimate.credits;
+  const shortfall = estimate ? estimate.credits - detail.availableCredits : 0;
+  const mailHref = contactMailHref(
+    contactEmail,
+    `${detail.request.summary}について`,
+  );
+  const showShortfall =
+    actionError === "insufficient" || (awaitingApproval && insufficient);
+  const completion = detail.request.completion;
   return (
-    <main className="page-main">
-      <section className="card request-card" aria-labelledby="my-request-title">
-        <Link className="admin-back-link" to="/me/requests">
+    <>
+      <Page tabbed>
+        <BackLink component={Link} to="/me/requests">
           {webMessages.myRequestsTitle}
-        </Link>
-        <h1 id="my-request-title">{detail.request.summary}</h1>
-        <dl className="request-summary-list">
-          <dt>{webMessages.adminRequestStatus}</dt>
-          <dd>{requestStatusLabel(detail.request.status)}</dd>
-          <dt>{webMessages.adminRequestReceivedOn}</dt>
-          <dd>{detail.request.receivedOn}</dd>
-          <dt>{webMessages.myRequestAvailableCredits}</dt>
-          <dd>
-            {detail.availableCredits} {webMessages.requestCreditUnit}
-          </dd>
-        </dl>
+        </BackLink>
+        <Title id="my-request-title">
+          {awaitingApproval
+            ? webMessages.estimateTitle
+            : detail.request.summary}
+        </Title>
+        {awaitingApproval ? <Lead>{webMessages.estimateLead}</Lead> : null}
         {approved ? (
-          <output className="notice info">
-            {webMessages.myRequestApprovalSuccess}
-          </output>
+          <Notice tone="info">
+            <output>{webMessages.myRequestApprovalSuccess}</output>
+          </Notice>
         ) : null}
         {refreshError ? (
-          <p className="error-message" role="alert">
+          <Notice tone="warn">
             {webMessages.myRequestBalanceRefreshError}
-          </p>
+          </Notice>
         ) : null}
-        {actionError === "insufficient" ||
-        (awaitingApproval && insufficient) ? (
-          <p className="notice info" role="note">
+        {showShortfall ? (
+          <Notice
+            tone="warn"
+            title={webMessages.myRequestShortfallTitle.replace(
+              "{count}",
+              String(Math.max(1, shortfall)),
+            )}
+          >
             {lineEnabled
               ? webMessages.myRequestInsufficientCredits
               : webMessages.myRequestInsufficientCreditsEmail}
-          </p>
+          </Notice>
         ) : null}
         {actionError === "conflict" ? (
-          <p className="error-message" role="alert">
-            {webMessages.myRequestConflict}
-          </p>
+          <Notice tone="warn">{webMessages.myRequestConflict}</Notice>
         ) : null}
         {actionError === "generic" ? (
-          <p className="error-message" role="alert">
-            {webMessages.requestActionError}
-          </p>
+          <Notice tone="warn">{webMessages.requestActionError}</Notice>
         ) : null}
-        {estimate ? <EstimateDisplay estimate={estimate} /> : null}
-        {detail.request.completion ? (
-          <>
-            <CompletionDisplay
-              completion={detail.request.completion}
-              customer
+        <Card
+          title={awaitingApproval ? detail.request.summary : undefined}
+          action={
+            awaitingApproval ? (
+              <Badge tone={requestStatusTone(detail.request.status)}>
+                {customerStatusLabel(detail.request.status)}
+              </Badge>
+            ) : undefined
+          }
+        >
+          {!awaitingApproval ? (
+            <DefinitionList
+              items={[
+                {
+                  term: webMessages.adminRequestStatus,
+                  description: (
+                    <Badge tone={requestStatusTone(detail.request.status)}>
+                      {customerStatusLabel(detail.request.status)}
+                    </Badge>
+                  ),
+                },
+                {
+                  term: webMessages.adminRequestReceivedOn,
+                  description: formatDate(detail.request.receivedOn),
+                },
+              ]}
             />
-            {estimate &&
-            detail.request.completion.actualCredits > estimate.credits ? (
-              <p className="notice info" role="note">
-                {webMessages.adminRequestActualExceedsEstimate}
-              </p>
-            ) : null}
-          </>
-        ) : null}
+          ) : null}
+          {!estimate && detail.request.status === "received" ? (
+            <p className="ui-text">{webMessages.requestDetailQuoting}</p>
+          ) : null}
+          {estimate ? <EstimateSections estimate={estimate} /> : null}
+          {awaitingApproval && estimate ? (
+            <>
+              {insufficient ? null : (
+                <Hint>
+                  {webMessages.estimateReserveHint
+                    .replace("{credits}", String(estimate.credits))
+                    .replace("{before}", String(detail.availableCredits))
+                    .replace(
+                      "{after}",
+                      String(detail.availableCredits - estimate.credits),
+                    )}
+                </Hint>
+              )}
+              <Hint>{webMessages.estimateScopeHint}</Hint>
+            </>
+          ) : null}
+          {completion ? <CompletionSummary completion={completion} /> : null}
+          {completion &&
+          estimate &&
+          completion.actualCredits > estimate.credits ? (
+            <Notice tone="info">
+              {webMessages.adminRequestActualExceedsEstimate}
+            </Notice>
+          ) : null}
+          <DefinitionList
+            items={[
+              {
+                term: webMessages.myRequestAvailableCredits,
+                description: `${detail.availableCredits} ${webMessages.requestCreditUnit}`,
+              },
+            ]}
+          />
+        </Card>
         {awaitingApproval && !detail.canApprove && !insufficient ? (
-          <p className="notice info" role="note">
-            {webMessages.myRequestConflict}
-          </p>
+          <Notice tone="info">{webMessages.myRequestConflict}</Notice>
+        ) : null}
+        {awaitingApproval && !confirming && !approved ? (
+          <div className="ui-actions">
+            <Button
+              disabled={
+                submitting || !detail.canApprove || Boolean(actionError)
+              }
+              onClick={() => setConfirming(true)}
+            >
+              {webMessages.myRequestApprove}
+            </Button>
+            {mailHref ? (
+              <Button href={mailHref} variant="ghost">
+                {webMessages.myRequestConsult}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
         {awaitingApproval &&
         (lineEnabled || contactEmail) &&
         (insufficient ||
           actionError === "insufficient" ||
           actionError === "conflict") ? (
-          <p className="request-contact-line">
+          <Hint align="center">
             {lineEnabled ? (
               webMessages.myRequestContactLine
             ) : (
               <ContactEmailLink />
             )}
-          </p>
-        ) : null}
-        {awaitingApproval &&
-        detail.canApprove &&
-        !actionError &&
-        !approved &&
-        !confirming ? (
-          <button
-            className="primary-button"
-            disabled={submitting}
-            onClick={() => setConfirming(true)}
-            type="button"
-          >
-            {webMessages.myRequestApprove}
-          </button>
+          </Hint>
         ) : null}
         {confirming ? (
           <section
-            className="request-confirm"
+            className="ui-card ui-card--accent"
             role="dialog"
             aria-modal="true"
             aria-labelledby="request-confirm-title"
           >
-            <h2 id="request-confirm-title">
-              {webMessages.myRequestApproveConfirm}
+            <h2 className="ui-card__title" id="request-confirm-title">
+              <span>{webMessages.myRequestApproveConfirm}</span>
             </h2>
-            <div className="admin-actions">
-              <button
-                className="primary-button"
-                disabled={submitting}
-                onClick={() => void approve()}
-                type="button"
-              >
+            <div className="ui-actions">
+              <Button disabled={submitting} onClick={() => void approve()}>
                 {submitting
                   ? webMessages.requestSendBusy
                   : webMessages.myRequestApprove}
-              </button>
-              <button
-                className="secondary-button"
+              </Button>
+              <Button
                 disabled={submitting}
                 onClick={() => setConfirming(false)}
-                type="button"
+                variant="ghost"
               >
                 {webMessages.myRequestCancel}
-              </button>
+              </Button>
             </div>
           </section>
         ) : null}
         {actionError || refreshError ? (
-          <button
-            className="secondary-button"
+          <Button
+            variant="ghost"
             onClick={() => {
               setActionError(null);
               setRefreshError(false);
               setAttempt((value) => value + 1);
             }}
-            type="button"
           >
             {webMessages.retry}
-          </button>
+          </Button>
         ) : null}
-      </section>
-    </main>
+        {awaitingApproval && estimate ? (
+          <Hint align="center">
+            {webMessages.estimateSentOn.replace(
+              "{date}",
+              formatDate(tokyoDateOf(estimate.sentAt)),
+            )}
+          </Hint>
+        ) : null}
+      </Page>
+      <CustomerTabBar />
+    </>
+  );
+}
+
+function EstimateSections({
+  estimate,
+}: {
+  estimate: NonNullable<AdminRequestDetail["latestEstimate"]>;
+}) {
+  return (
+    <>
+      <Block title={webMessages.estimateWorkItems}>
+        <ol>
+          {estimate.workItems.map((item, index) => (
+            <li key={`${index}-${item}`}>{item}</li>
+          ))}
+        </ol>
+      </Block>
+      <Block title={webMessages.estimateDoneCriteria}>
+        <p>{estimate.doneCriteria}</p>
+      </Block>
+      {estimate.exclusions ? (
+        <Block title={webMessages.estimateExclusions}>
+          <p>{estimate.exclusions}</p>
+        </Block>
+      ) : null}
+      {estimate.customerPrep ? (
+        <Block title={webMessages.estimateCustomerPrep}>
+          <p>{estimate.customerPrep}</p>
+        </Block>
+      ) : null}
+      <StatTiles
+        items={[
+          {
+            key: "credits",
+            label: webMessages.estimateCreditsUsed,
+            value: estimate.credits,
+          },
+          {
+            key: "due",
+            label: webMessages.estimateDueTarget,
+            value: formatSlashDate(estimate.dueOn),
+            tone: "gray",
+          },
+        ]}
+      />
+    </>
+  );
+}
+
+function CompletionSummary({ completion }: { completion: RequestCompletion }) {
+  return (
+    <DefinitionList
+      items={[
+        {
+          term: webMessages.myRequestCompletionDate,
+          description: formatDate(completion.completedOn),
+        },
+        {
+          term: webMessages.myRequestCompletionActualCredits,
+          description: `${completion.actualCredits} ${webMessages.requestCreditUnit}`,
+        },
+      ]}
+    />
   );
 }

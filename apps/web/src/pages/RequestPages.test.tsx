@@ -778,21 +778,14 @@ describe("request and estimate routes", () => {
         canApprove: false,
       })),
     });
-    expect(await screen.findByText("2026-10-27", { exact: true })).toBeTruthy();
-    expect(
-      screen.getByText(webMessages.myRequestCompletionActualMinutes),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(webMessages.myRequestCompletionActualCredits),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(webMessages.myRequestCompletionActualMinutes)
-        .nextElementSibling?.textContent,
-    ).toContain("45");
+    expect(await screen.findByText("2026年10月27日")).toBeTruthy();
     expect(
       screen.getByText(webMessages.myRequestCompletionActualCredits)
         .nextElementSibling?.textContent,
     ).toContain("1");
+    // 実作業時間は社内の工数なので、お客様の画面には出さない。
+    expect(document.body.textContent).not.toContain("45");
+    expect(screen.queryByText("実作業時間（分）")).toBeNull();
     expect(
       screen.queryByRole("button", { name: webMessages.adminRequestComplete }),
     ).toBeNull();
@@ -815,11 +808,8 @@ describe("request and estimate routes", () => {
       getCustomerRequests: vi.fn(async () => ({ items: [completedRequest] })),
     });
     expect(await screen.findByText(completedRequest.summary)).toBeTruthy();
-    expect(screen.getByText("2026-10-27")).toBeTruthy();
-    expect(
-      screen.getByText(webMessages.myRequestCompletionActualCredits)
-        .nextElementSibling?.textContent,
-    ).toContain("0");
+    expect(screen.getByText("10/27 完了")).toBeTruthy();
+    expect(screen.getByText("0クレジット使用")).toBeTruthy();
     expect(screen.queryByText(webMessages.estimateCredits)).toBeNull();
   });
 
@@ -896,8 +886,10 @@ describe("request and estimate routes", () => {
     ).toBeTruthy();
     expect(screen.getByText(webMessages.myRequestContactLine)).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: webMessages.myRequestApprove }),
-    ).toBeNull();
+      screen
+        .getByRole("button", { name: webMessages.myRequestApprove })
+        .hasAttribute("disabled"),
+    ).toBe(true);
     expect(apiClient.approveEstimate).not.toHaveBeenCalled();
   });
 

@@ -3,6 +3,17 @@ import { type FormEvent, useState } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import type { AuthClient } from "../auth/session.js";
 import { useAuthSession } from "../auth/session.js";
+import { MailText } from "../platform/contact.js";
+import {
+  Button,
+  buttonClass,
+  Field,
+  Hint,
+  Lead,
+  Notice,
+  Page,
+  Title,
+} from "../ui/index.js";
 
 export function LoginPage({
   authClient,
@@ -42,54 +53,47 @@ export function LoginPage({
   }
 
   return (
-    <main className="page-main">
-      <section className="card login-card" aria-labelledby="login-title">
-        <h1 id="login-title">{webMessages.loginTitle}</h1>
-        <p className="muted-text">{webMessages.loginDescription}</p>
+    <Page>
+      <section aria-labelledby="login-title">
+        <Title id="login-title">{webMessages.loginTitle}</Title>
+        <Lead>{webMessages.loginDescription}</Lead>
         <form onSubmit={submit} noValidate={false}>
-          <label className="field-label" htmlFor="login-email">
-            {webMessages.emailLabel}
-          </label>
-          <input
-            autoComplete="username"
-            id="login-email"
-            name="email"
-            onChange={(event) => setEmail(event.currentTarget.value)}
-            required
-            type="email"
-            value={email}
-          />
-          <label className="field-label" htmlFor="login-password">
-            {webMessages.passwordLabel}
-          </label>
-          <input
-            autoComplete="current-password"
-            id="login-password"
-            name="password"
-            onChange={(event) => setPassword(event.currentTarget.value)}
-            required
-            type="password"
-            value={password}
-          />
-          {error ? (
-            <p className="error-message" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <button
-            className="primary-button"
-            disabled={submitting}
-            type="submit"
-          >
+          <Field label={webMessages.emailLabel}>
+            <input
+              autoComplete="username"
+              name="email"
+              onChange={(event) => setEmail(event.currentTarget.value)}
+              required
+              type="email"
+              value={email}
+            />
+          </Field>
+          <Field label={webMessages.passwordLabel}>
+            <input
+              autoComplete="current-password"
+              name="password"
+              onChange={(event) => setPassword(event.currentTarget.value)}
+              required
+              type="password"
+              value={password}
+            />
+          </Field>
+          {error ? <Notice tone="warn">{error}</Notice> : null}
+          <Button disabled={submitting} type="submit">
             {submitting ? webMessages.loginSubmitting : webMessages.loginButton}
-          </button>
+          </Button>
         </form>
+        <Hint align="center">
+          <MailText template={webMessages.loginForgotPassword} />
+        </Hint>
         {lineLiffId ? (
-          <Link className="secondary-button" to="/liff?to=home">
-            {webMessages.lineLogin}
-          </Link>
+          <div className="ui-actions">
+            <Link className={buttonClass("ghost")} to="/liff?to=home">
+              {webMessages.lineLogin}
+            </Link>
+          </div>
         ) : null}
       </section>
-    </main>
+    </Page>
   );
 }

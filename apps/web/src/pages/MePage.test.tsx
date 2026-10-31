@@ -97,6 +97,7 @@ describe("customer contract summary", () => {
         },
       })),
       getContract: vi.fn(async () => ({ contract: null })),
+      getCustomerRequests: vi.fn(async () => ({ items: [] })),
     } as unknown as ReturnTypeApiClient;
     render(
       <AuthProvider client={authClient}>
@@ -141,6 +142,9 @@ describe("customer contract summary", () => {
     };
     const fetcher = vi.fn<typeof fetch>(async (input) => {
       const url = String(input);
+      if (url.endsWith("/api/v1/me/requests")) {
+        return Response.json({ items: [] });
+      }
       if (url.endsWith("/api/v1/me")) {
         return Response.json({
           customer: {
@@ -182,12 +186,11 @@ describe("customer contract summary", () => {
         </MemoryRouter>
       </AuthProvider>,
     );
-    expect(
-      await screen.findByText(
-        /ライト・月額5,000円（税抜）（税込5,500円）・1クレジット/,
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText("2026-10-26〜2026-11-25")).toBeTruthy();
+    const next = (await screen.findByText("次のお支払い")).closest("section");
+    expect(next?.textContent).toContain("11月26日");
+    expect(next?.textContent).toContain("5,500円");
+    expect(next?.textContent).toContain("税抜5,000円＋消費税500円");
+    expect(screen.getByText("11月25日")).toBeTruthy();
     expect(fetcher).toHaveBeenCalledWith(
       new URL("http://127.0.0.1:3000/api/v1/me/contract"),
       expect.objectContaining({

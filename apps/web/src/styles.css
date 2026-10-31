@@ -180,70 +180,6 @@ button:disabled {
   line-height: 1.7;
 }
 
-.config-error-card .secondary-button {
-  margin-top: 18px;
-}
-
-.profile-list {
-  margin: 22px 0 0;
-  border-top: 1px solid #d6dce2;
-}
-
-.profile-list > div {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  gap: 12px;
-  padding: 16px 0;
-  border-bottom: 1px solid #d6dce2;
-}
-
-.profile-list dt {
-  color: #5f6b73;
-  font-size: 14px;
-}
-
-.profile-list dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.contract-period-range {
-  display: flex;
-  flex-wrap: wrap;
-  column-gap: 0.3em;
-}
-
-.contract-period-start,
-.contract-period-range time {
-  white-space: nowrap;
-}
-
-.logout-button {
-  margin-top: 0;
-}
-
-.profile-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 24px;
-}
-
-.profile-actions > * {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.profile-actions .secondary-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  text-align: center;
-  text-decoration: none;
-}
-
 .configuration-error {
   padding: 48px 24px;
   color: #9b2c2c;
@@ -370,74 +306,6 @@ button:disabled {
   margin: 16px 0 0;
 }
 
-.access-card {
-  display: grid;
-  gap: 18px;
-  max-width: 680px;
-  margin-inline: auto;
-}
-
-.access-card h1,
-.access-card h2,
-.access-card p {
-  margin: 0;
-}
-
-.access-status-copy {
-  padding: 16px;
-  border-radius: 8px;
-  background: #f5f7fb;
-  font-weight: 600;
-}
-
-.access-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.sign-out-action {
-  display: grid;
-  justify-items: start;
-  gap: 8px;
-}
-
-.access-link {
-  justify-self: start;
-  text-decoration: none;
-}
-
-.access-logout {
-  justify-self: start;
-}
-
-.welcome-check {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  color: white;
-  background: #23734c;
-  font-size: 1.5rem;
-  font-weight: 700;
-}
-
-.welcome-guidance {
-  padding: 16px;
-  border: 1px solid #dce2ea;
-  border-radius: 8px;
-}
-
-.welcome-guidance ol {
-  margin: 12px 0 0;
-  padding-left: 24px;
-}
-
-:where(.welcome-guidance) li + li {
-  margin-top: 8px;
-}
-
 .request-summary-list dt {
   color: #5f6b73;
   font-size: 14px;
@@ -498,22 +366,6 @@ button:disabled {
   width: 20px;
   min-height: 20px;
   margin: 0;
-}
-
-.request-contact-line {
-  margin: 10px 0 0;
-  color: #2f5b85;
-  font-weight: 700;
-}
-
-.request-card {
-  width: min(100%, 760px);
-  min-width: 0;
-}
-
-.request-card .primary-button,
-.request-card .request-confirm .primary-button {
-  width: 100%;
 }
 
 .admin-toolbar .error-message {
@@ -826,8 +678,7 @@ button:disabled {
 .bank-transfer-item,
 .bank-transfer-confirmation,
 .bank-transfer-result,
-.bank-transfer-final-check,
-.contract-summary {
+.bank-transfer-final-check {
   border: 1px solid #d6dce2;
   border-radius: 12px;
   padding: 16px;
@@ -836,8 +687,7 @@ button:disabled {
 
 .bank-transfer-item h2,
 .bank-transfer-confirmation h2,
-.bank-transfer-result h2,
-.contract-summary h2 {
+.bank-transfer-result h2 {
   margin-top: 0;
 }
 
@@ -862,10 +712,6 @@ button:disabled {
 .preview-acknowledgement input {
   min-width: 20px;
   min-height: 20px;
-}
-
-.contract-summary {
-  margin-bottom: 18px;
 }
 
 @media (max-width: 520px) {
@@ -944,15 +790,6 @@ button:disabled {
   .request-summary-list {
     grid-template-columns: minmax(88px, 0.65fr) minmax(0, 1.35fr);
     gap: 8px;
-  }
-
-  .profile-actions {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .profile-actions > * {
-    width: 100%;
   }
 
   .card {

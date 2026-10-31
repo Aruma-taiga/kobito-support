@@ -18,8 +18,28 @@ import { SignOutAction } from "../auth/SignOutAction.js";
 import { useAuthSession } from "../auth/session.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
 import { ApiClientError } from "../platform/api-client.js";
-import { ContactEmailLink, useContact } from "../platform/contact.js";
-import { MyInvoiceListPage } from "./InvoicePages.js";
+import { ContactEmailLink, MailText, useContact } from "../platform/contact.js";
+import { dayAfter, formatMonthDay } from "../platform/format.js";
+import {
+  Button,
+  buttonClass,
+  Card,
+  DoneMark,
+  Hint,
+  Lead,
+  Notice,
+  Page,
+  Steps,
+  Timeline,
+  Title,
+} from "../ui/index.js";
+import {
+  MyInvoiceDetailPage as CustomerInvoiceDetailView,
+  InvoicePayCard,
+  isUnpaid,
+  MyInvoiceListPage,
+  useCustomerInvoices,
+} from "./CustomerInvoices.js";
 import { MePage } from "./MePage.js";
 
 type GateState =
@@ -94,48 +114,45 @@ function AccessErrorPage({ onRetry }: { onRetry(): void }) {
     }
   }
   return (
-    <main className="page-main">
-      <section className="card access-card">
-        <p className="error-message" role="alert">
-          {webMessages.accessLoadError}
-        </p>
-        {logoutError ? (
-          <p className="error-message" role="alert">
-            {webMessages.logoutError}
-          </p>
-        ) : null}
-        <div className="access-actions">
-          <button className="secondary-button" onClick={onRetry} type="button">
-            {webMessages.retry}
-          </button>
-          <button
-            className="secondary-button"
-            onClick={() => void logout()}
-            type="button"
-          >
-            {webMessages.logout}
-          </button>
-        </div>
-      </section>
-    </main>
+    <Page>
+      <Notice tone="warn">{webMessages.accessLoadError}</Notice>
+      {logoutError ? (
+        <Notice tone="warn">{webMessages.logoutError}</Notice>
+      ) : null}
+      <div className="ui-actions">
+        <Button variant="ghost" onClick={onRetry}>
+          {webMessages.retry}
+        </Button>
+        <Button variant="ghost" onClick={() => void logout()}>
+          {webMessages.logout}
+        </Button>
+      </div>
+    </Page>
   );
 }
 
 function NotFoundPage() {
   const { signOut } = useAuthSession();
   return (
-    <main className="page-main">
-      <section className="card access-card">
-        <h1>{webMessages.accessNotFound}</h1>
-        <button
-          className="secondary-button access-logout"
+    <Page>
+      <Title>{webMessages.accessNotFound}</Title>
+      <div className="ui-actions">
+        <Button
+          variant="ghost"
           onClick={() => void signOut().catch(() => undefined)}
-          type="button"
         >
           {webMessages.logout}
-        </button>
-      </section>
-    </main>
+        </Button>
+      </div>
+    </Page>
+  );
+}
+
+function LoadingPage() {
+  return (
+    <Page>
+      <output className="ui-lead">{webMessages.profileLoading}</output>
+    </Page>
   );
 }
 
@@ -211,22 +228,14 @@ export function CustomerAccessGuard({
   }, [state]);
 
   if (state.status === "loading") {
-    return (
-      <main className="page-main">
-        <output className="status-message">{webMessages.profileLoading}</output>
-      </main>
-    );
+    return <LoadingPage />;
   }
   if (state.status === "error") {
     return <AccessErrorPage onRetry={() => setAttempt((value) => value + 1)} />;
   }
   if (state.status === "not_found") return <NotFoundPage />;
   if (!uid || state.uid !== uid || state.locationKey !== location.key) {
-    return (
-      <main className="page-main">
-        <output className="status-message">{webMessages.profileLoading}</output>
-      </main>
-    );
+    return <LoadingPage />;
   }
   if (!allowedCustomerPath(state.access, location.pathname)) {
     return <Navigate to={state.access.landingPath} replace />;
@@ -238,28 +247,88 @@ export function CustomerAccessGuard({
   );
 }
 
-export function CustomerWaitingPage() {
+const progressLabels = [
+  webMessages.meStepApply,
+  webMessages.meStepInvoice,
+  webMessages.meStepPayment,
+  webMessages.meStepStart,
+];
+
+/** 審査中・見積り作成中は「お申込み」、請求書の送付後は「お支払い」の段階。 */
+export function CustomerWaitingPage({
+  apiClient,
+}: {
+  apiClient: ReturnTypeApiClient;
+}) {
   const { access } = useCustomerAccess();
-  const statusCopy =
+  const awaitingPayment = access.contractStatus === "awaiting_payment";
+  const [title, lead] =
     access.contractStatus === "under_review"
-      ? webMessages.meWaitingUnderReview
+      ? [webMessages.meWaitingReviewTitle, webMessages.meWaitingReviewLead]
       : access.contractStatus === "quoting"
-        ? webMessages.meWaitingQuoting
-        : webMessages.meWaitingPayment;
+        ? [webMessages.meWaitingQuotingTitle, webMessages.meWaitingQuotingLead]
+        : [webMessages.meWaitingPaymentTitle, webMessages.meWaitingPaymentLead];
   return (
-    <main className="page-main">
-      <section className="card access-card" aria-labelledby="waiting-title">
-        <h1 id="waiting-title">{webMessages.meWaitingTitle}</h1>
-        <p className="muted-text">{webMessages.meWaitingDescription}</p>
-        <p className="access-status-copy">{statusCopy}</p>
-        {access.invoiceAccess ? (
-          <Link className="primary-button access-link" to="/me/invoices">
+    <Page>
+      <Steps
+        current={awaitingPayment ? 2 : 0}
+        label={webMessages.meWaitingTitle}
+        labels={progressLabels}
+      />
+      <Title id="waiting-title">{title}</Title>
+      <Lead>{lead}</Lead>
+      {awaitingPayment && access.invoiceAccess ? (
+        <WaitingInvoices apiClient={apiClient} />
+      ) : null}
+      {awaitingPayment ? (
+        <Hint align="center">
+          <MailText template={webMessages.invoiceChangeMethod} />
+        </Hint>
+      ) : null}
+      {access.invoiceAccess ? (
+        <div className="ui-actions">
+          <Link className={buttonClass("ghost")} to="/me/invoices">
             {webMessages.invoiceListTitle}
           </Link>
-        ) : null}
-        <SignOutAction />
-      </section>
-    </main>
+        </div>
+      ) : null}
+      <SignOutAction />
+    </Page>
+  );
+}
+
+function WaitingInvoices({ apiClient }: { apiClient: ReturnTypeApiClient }) {
+  const { state, retry } = useCustomerInvoices(apiClient);
+  if (state.status === "loading") {
+    return (
+      <output className="ui-lead">{webMessages.invoiceListLoading}</output>
+    );
+  }
+  if (state.status === "error") {
+    return (
+      <>
+        <Notice tone="warn">{webMessages.meWaitingInvoiceError}</Notice>
+        <Button variant="ghost" onClick={retry}>
+          {webMessages.invoiceRetry}
+        </Button>
+      </>
+    );
+  }
+  const unpaid = state.invoices.filter(isUnpaid);
+  if (unpaid.length === 0) {
+    return <Notice tone="info">{webMessages.meWaitingNoInvoice}</Notice>;
+  }
+  return (
+    <>
+      {unpaid.map((invoice) => (
+        <InvoicePayCard
+          detail={state.details[invoice.id]}
+          initialStage
+          invoice={invoice}
+          key={invoice.id}
+        />
+      ))}
+    </>
   );
 }
 
@@ -273,6 +342,29 @@ export function CustomerWelcomePage({
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
+  const [period, setPeriod] = useState<{
+    credits: number;
+    nextGrantOn: string;
+  } | null>(null);
+
+  // 付与数と次の付与日は契約情報から読む。読めなくても案内は出す。
+  useEffect(() => {
+    let current = true;
+    void apiClient
+      .getContract()
+      .then(({ contract }) => {
+        if (current && contract?.currentPeriod) {
+          setPeriod({
+            credits: contract.currentPeriod.credits,
+            nextGrantOn: dayAfter(contract.currentPeriod.endsOn),
+          });
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [apiClient]);
 
   async function continueToHome() {
     if (submitting) return;
@@ -289,58 +381,78 @@ export function CustomerWelcomePage({
     }
   }
 
+  const description = lineEnabled
+    ? webMessages.meWelcomeDescription
+    : period
+      ? webMessages.meWelcomeDescriptionCredits.replace(
+          "{credits}",
+          String(period.credits),
+        )
+      : webMessages.meWelcomeDescriptionEmail;
+
   return (
-    <main className="page-main">
-      <section className="card access-card" aria-labelledby="welcome-title">
-        <div className="welcome-check" aria-hidden="true">
-          ✓
-        </div>
-        <h1 id="welcome-title">{webMessages.meWelcomeTitle}</h1>
-        <p className="muted-text">
-          {lineEnabled
-            ? webMessages.meWelcomeDescription
-            : webMessages.meWelcomeDescriptionEmail}
-        </p>
-        <section className="welcome-guidance">
-          <h2>{webMessages.meWelcomeFlowTitle}</h2>
-          <ol>
-            <li>
-              {lineEnabled ? (
+    <Page>
+      <DoneMark />
+      <Title center id="welcome-title">
+        {webMessages.meWelcomeTitle}
+      </Title>
+      <Lead center>{description}</Lead>
+      <Card title={webMessages.meWelcomeFlowTitle}>
+        <Timeline
+          items={[
+            {
+              key: "request",
+              done: true,
+              content: lineEnabled ? (
                 webMessages.meWelcomeFlowRequest
               ) : (
                 <>
                   {webMessages.meWelcomeFlowRequestEmail}
-                  <ContactEmailLink />
+                  <span className="ui-timeline__note">
+                    <ContactEmailLink />
+                  </span>
                 </>
-              )}
-            </li>
-            <li>{webMessages.meWelcomeFlowEstimate}</li>
-            <li>{webMessages.meWelcomeFlowApprove}</li>
-            <li>{webMessages.meWelcomeFlowWork}</li>
-          </ol>
-        </section>
-        {error ? (
-          <p className="error-message" role="alert">
-            {webMessages.meWelcomeError}
-          </p>
-        ) : null}
-        <button
-          className="primary-button"
-          disabled={submitting}
-          onClick={() => void continueToHome()}
-          type="button"
-        >
-          {submitting
-            ? webMessages.applicationSubmitting
-            : webMessages.meWelcomeContinue}
-        </button>
-        <SignOutAction />
-      </section>
-    </main>
+              ),
+            },
+            {
+              key: "estimate",
+              done: true,
+              content: webMessages.meWelcomeFlowEstimate,
+            },
+            {
+              key: "approve",
+              done: true,
+              content: webMessages.meWelcomeFlowApprove,
+            },
+            {
+              key: "work",
+              done: true,
+              content: webMessages.meWelcomeFlowWork,
+            },
+          ]}
+        />
+        <Hint>
+          {period
+            ? webMessages.meWelcomeCreditsNote.replace(
+                "{date}",
+                formatMonthDay(period.nextGrantOn),
+              )
+            : webMessages.meWelcomeCreditsNoteGeneric}
+        </Hint>
+      </Card>
+      {error ? <Notice tone="warn">{webMessages.meWelcomeError}</Notice> : null}
+      <Button disabled={submitting} onClick={() => void continueToHome()}>
+        {submitting
+          ? webMessages.applicationSubmitting
+          : webMessages.meWelcomeContinue}
+      </Button>
+      <SignOutAction />
+    </Page>
   );
 }
 
 export function CustomerFinishedPage() {
+  const { access } = useCustomerAccess();
   const { signOut } = useAuthSession();
   const [logoutError, setLogoutError] = useState(false);
   async function logout() {
@@ -351,25 +463,29 @@ export function CustomerFinishedPage() {
       setLogoutError(true);
     }
   }
+  const template =
+    access.contractStatus === "declined"
+      ? webMessages.meFinishedDeclined
+      : access.contractStatus === "lapsed"
+        ? webMessages.meFinishedLapsed
+        : null;
   return (
-    <main className="page-main">
-      <section className="card access-card" aria-labelledby="finished-title">
-        <h1 id="finished-title">{webMessages.meFinishedTitle}</h1>
-        <p className="muted-text">{webMessages.meFinishedDescription}</p>
-        {logoutError ? (
-          <p className="error-message" role="alert">
-            {webMessages.logoutError}
-          </p>
-        ) : null}
-        <button
-          className="secondary-button"
-          onClick={() => void logout()}
-          type="button"
-        >
-          {webMessages.logout}
-        </button>
-      </section>
-    </main>
+    <Page>
+      <Title id="finished-title">{webMessages.meFinishedTitle}</Title>
+      <Lead>
+        {template ? (
+          <MailText template={template} />
+        ) : (
+          webMessages.meFinishedDescription
+        )}
+      </Lead>
+      {logoutError ? (
+        <Notice tone="warn">{webMessages.logoutError}</Notice>
+      ) : null}
+      <Button variant="ghost" onClick={() => void logout()}>
+        {webMessages.logout}
+      </Button>
+    </Page>
   );
 }
 
@@ -398,12 +514,7 @@ export function CustomerInvoicesPage({
   apiClient: ReturnTypeApiClient;
 }) {
   const { access } = useCustomerAccess();
-  const returnPath =
-    access.access === "ended"
-      ? null
-      : access.access === "pending"
-        ? "/me/waiting"
-        : "/me";
+  const returnPath = access.access === "pending" ? "/me/waiting" : null;
   const accessNotice =
     access.access === "ended" && access.invoiceAccessUntil
       ? webMessages.accessEndedInvoicesUntil.replace(
@@ -422,6 +533,21 @@ export function CustomerInvoicesPage({
       }
       accessNotice={accessNotice}
       showLogout={access.access === "ended" || access.access === "pending"}
+      tabbed={access.access === "active"}
+    />
+  );
+}
+
+export function CustomerInvoiceDetailPage({
+  apiClient,
+}: {
+  apiClient: ReturnTypeApiClient;
+}) {
+  const { access } = useCustomerAccess();
+  return (
+    <CustomerInvoiceDetailView
+      apiClient={apiClient}
+      tabbed={access.access === "active"}
     />
   );
 }

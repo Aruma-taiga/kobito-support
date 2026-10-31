@@ -1,6 +1,7 @@
 import {
   Children,
   cloneElement,
+  type ElementType,
   isValidElement,
   type ReactElement,
   type ReactNode,
@@ -31,6 +32,24 @@ export type ButtonProps = ButtonBase &
       >)
   );
 
+/** ルーターのリンクなどにボタンの見た目を付けるときのクラス名。 */
+export function buttonClass(
+  variant: "primary" | "ghost" | "dark" = "primary",
+  options: {
+    size?: "md" | "sm" | undefined;
+    fullWidth?: boolean | undefined;
+    className?: string | undefined;
+  } = {},
+): string {
+  return cx(
+    "ui-btn",
+    `ui-btn--${variant}`,
+    options.size === "sm" && "ui-btn--sm",
+    options.fullWidth && "ui-btn--full",
+    options.className,
+  );
+}
+
 /** href を渡すとリンクとして描画する。ルーターのリンクは Button の見た目を className 経由で使う。 */
 export function Button(props: ButtonProps) {
   const {
@@ -41,13 +60,7 @@ export function Button(props: ButtonProps) {
     children,
     ...rest
   } = props;
-  const classes = cx(
-    "ui-btn",
-    `ui-btn--${variant}`,
-    size === "sm" && "ui-btn--sm",
-    fullWidth && "ui-btn--full",
-    className,
-  );
+  const classes = buttonClass(variant, { size, fullWidth, className });
   if ("href" in rest && rest.href !== undefined) {
     const anchorProps = rest as React.AnchorHTMLAttributes<HTMLAnchorElement>;
     return (
@@ -384,5 +397,302 @@ export function CheckOption({
         {!required && optional ? <span className="ui-opt">任意</span> : null}
       </span>
     </label>
+  );
+}
+
+/* ---------- Page / Title / Lead ---------- */
+/** 1列の画面本体。tabbed は下部タブ分の余白を足す。 */
+export function Page({
+  tabbed,
+  children,
+}: {
+  tabbed?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <main className={cx("ui-page", tabbed && "ui-page--tabbed")}>
+      {children}
+    </main>
+  );
+}
+
+export function Title({
+  id,
+  center,
+  children,
+}: {
+  id?: string;
+  center?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <h1 className={cx("ui-title", center && "ui-center")} id={id}>
+      {children}
+    </h1>
+  );
+}
+
+export function Lead({
+  center,
+  children,
+}: {
+  center?: boolean;
+  children: ReactNode;
+}) {
+  return <p className={cx("ui-lead", center && "ui-center")}>{children}</p>;
+}
+
+/** 小さな補足文。center で中央寄せ、right で右寄せ。 */
+export function Hint({
+  align,
+  children,
+}: {
+  align?: "center" | "right";
+  children: ReactNode;
+}) {
+  return (
+    <p
+      className={cx(
+        "ui-hint",
+        align === "center" && "ui-center",
+        align === "right" && "ui-right",
+      )}
+    >
+      {children}
+    </p>
+  );
+}
+
+/* ---------- BackLink ---------- */
+/** 「‹ 戻り先」。component にルーターの Link などを渡せる。 */
+export function BackLink({
+  component: Component = "a",
+  children,
+  ...rest
+}: {
+  component?: ElementType;
+  children: ReactNode;
+} & Record<string, unknown>) {
+  return (
+    <p className="ui-back">
+      <Component {...rest}>‹ {children}</Component>
+    </p>
+  );
+}
+
+/* ---------- ListItem ---------- */
+/** 左にタイトルと補足、右にバッジ。component にルーターの Link などを渡せる。 */
+export function ListItem({
+  component: Component = "div",
+  title,
+  meta,
+  badge,
+  ...rest
+}: {
+  component?: ElementType;
+  title: ReactNode;
+  meta?: ReactNode;
+  badge?: ReactNode;
+} & Record<string, unknown>) {
+  return (
+    <Component {...rest} className="ui-list-item">
+      <span className="ui-list-item__main">
+        <span className="ui-list-item__title">{title}</span>
+        {meta ? <span className="ui-list-item__meta">{meta}</span> : null}
+      </span>
+      {badge}
+    </Component>
+  );
+}
+
+/* ---------- AmountRows ---------- */
+/** 金額の明細。total は太線の下に出す合計行。note は右寄せの補足。 */
+export function AmountRows({
+  rows,
+  total,
+  note,
+}: {
+  rows: Array<{ label: ReactNode; amount: ReactNode }>;
+  total?: { label: ReactNode; amount: ReactNode };
+  note?: ReactNode;
+}) {
+  return (
+    <div className="ui-amounts">
+      {rows.map((row, index) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: 表示専用の行
+        <div className="ui-amounts__row" key={index}>
+          <span>{row.label}</span>
+          <span className="ui-price">{row.amount}</span>
+        </div>
+      ))}
+      {total ? (
+        <div className="ui-amounts__row ui-amounts__row--total">
+          <span>{total.label}</span>
+          <span className="ui-price">{total.amount}</span>
+        </div>
+      ) : null}
+      {note ? <p className="ui-hint ui-right">{note}</p> : null}
+    </div>
+  );
+}
+
+/* ---------- CreditRing ---------- */
+/** 残り / 付与 の輪。残り分を濃い色で描く。 */
+export function CreditRing({
+  remaining,
+  total,
+}: {
+  remaining: number;
+  total: number;
+}) {
+  const share =
+    total > 0 ? Math.min(100, Math.max(0, (remaining / total) * 100)) : 0;
+  return (
+    <div
+      className="ui-ring"
+      style={{ "--ring-share": `${share}%` } as React.CSSProperties}
+    >
+      <div>
+        <strong>{remaining}</strong>
+        <small>残り / {total}</small>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Timeline ---------- */
+export function Timeline({
+  items,
+}: {
+  items: Array<{ key: string; done?: boolean; content: ReactNode }>;
+}) {
+  return (
+    <ul className="ui-timeline">
+      {items.map((item) => (
+        <li key={item.key} className={cx(item.done && "ui-timeline__done")}>
+          {item.content}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function DoneMark() {
+  return (
+    <div className="ui-done-mark" aria-hidden="true">
+      ✓
+    </div>
+  );
+}
+
+/* ---------- StatTiles / Block ---------- */
+export function StatTiles({
+  items,
+}: {
+  items: Array<{
+    key: string;
+    label: ReactNode;
+    value: ReactNode;
+    tone?: "accent" | "gray";
+  }>;
+}) {
+  return (
+    <div className="ui-tiles">
+      {items.map((item) => (
+        <div
+          className={cx("ui-tile", `ui-tile--${item.tone ?? "accent"}`)}
+          key={item.key}
+        >
+          <small>{item.label}</small>
+          <div className="ui-tile__value">{item.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 小見出し付きの区切り（見積の作業内容など）。 */
+export function Block({
+  title,
+  children,
+}: {
+  title: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="ui-block">
+      <h4 className="ui-block__title">{title}</h4>
+      {children}
+    </div>
+  );
+}
+
+/* ---------- FilterChips ---------- */
+export function FilterChips<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: Array<{ value: T; label: string }>;
+  value: T;
+  onChange(value: T): void;
+}) {
+  return (
+    <fieldset className="ui-chips">
+      <legend className="visually-hidden">{label}</legend>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={cx("ui-chip", option.value === value && "ui-chip--on")}
+          aria-pressed={option.value === value}
+          onClick={() => onChange(option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
+/* ---------- TabBar ---------- */
+export function TabBar({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <nav className="ui-tabbar" aria-label={label}>
+      <div className="ui-tabbar__inner">{children}</div>
+    </nav>
+  );
+}
+
+/** component にルーターの NavLink / Link を渡せる。 */
+export function TabBarItem({
+  component: Component = "a",
+  icon,
+  current,
+  children,
+  ...rest
+}: {
+  component?: ElementType;
+  icon: string;
+  current?: boolean;
+  children: ReactNode;
+} & Record<string, unknown>) {
+  return (
+    <Component
+      {...rest}
+      className={cx("ui-tab", current && "ui-tab--on")}
+      aria-current={current ? "page" : undefined}
+    >
+      <i aria-hidden="true">{icon}</i>
+      {children}
+    </Component>
   );
 }

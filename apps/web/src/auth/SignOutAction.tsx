@@ -1,5 +1,6 @@
 import { webMessages } from "@kobito/shared";
 import { useState } from "react";
+import { Button, Notice } from "../ui/index.js";
 import { useAuthSession } from "./session.js";
 
 export function SignOutAction() {
@@ -16,19 +17,11 @@ export function SignOutAction() {
   }
 
   return (
-    <div className="sign-out-action">
-      {error ? (
-        <p className="error-message" role="alert">
-          {webMessages.logoutError}
-        </p>
-      ) : null}
-      <button
-        className="secondary-button"
-        onClick={() => void handleSignOut()}
-        type="button"
-      >
+    <div className="ui-actions">
+      {error ? <Notice tone="warn">{webMessages.logoutError}</Notice> : null}
+      <Button variant="ghost" onClick={() => void handleSignOut()}>
         {webMessages.logout}
-      </button>
+      </Button>
     </div>
   );
 }

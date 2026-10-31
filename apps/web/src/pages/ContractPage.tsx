@@ -4,7 +4,25 @@ import { Link } from "react-router-dom";
 import { useAuthSession } from "../auth/session.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
 import { ApiClientError } from "../platform/api-client.js";
-import { ContactEmailLink, useContact } from "../platform/contact.js";
+import { contactMailHref, MailText, useContact } from "../platform/contact.js";
+import {
+  dayAfter,
+  formatDate,
+  formatMonthDay,
+  formatYen,
+} from "../platform/format.js";
+import {
+  Badge,
+  Button,
+  buttonClass,
+  Card,
+  DefinitionList,
+  Hint,
+  Notice,
+  Page,
+  Title,
+} from "../ui/index.js";
+import { CustomerTabBar } from "./CustomerTabBar.js";
 
 type ContractPageState =
   | { status: "loading" }
@@ -27,7 +45,7 @@ export function ContractPage({
     getSessionGeneration,
     signOut,
   } = useAuthSession();
-  const { lineEnabled } = useContact();
+  const { lineEnabled, contactEmail } = useContact();
   const [state, setState] = useState<ContractPageState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [logoutError, setLogoutError] = useState(false);
@@ -104,175 +122,189 @@ export function ContractPage({
   }
 
   const contract = state.status === "ready" ? state.data.contract : null;
+  const period = contract?.currentPeriod ?? null;
+  const plan = contract?.plan ?? null;
+  const mailHref = contactMailHref(contactEmail);
+  const planRows = [
+    ...(plan
+      ? [
+          {
+            term: webMessages.contractMonthlyExcl,
+            description: formatYen(plan.priceExclTax),
+          },
+          {
+            term: webMessages.contractMonthlyIncl,
+            description: formatYen(inclYenFor(plan.priceExclTax)),
+          },
+          {
+            term: webMessages.contractMonthlyCredits,
+            description: plan.credits,
+          },
+        ]
+      : [
+          {
+            term: webMessages.contractPlan,
+            description: webMessages.contractWaitingPayment,
+          },
+        ]),
+    {
+      term: webMessages.contractDate,
+      description: contract?.anchorDate
+        ? formatDate(contract.anchorDate)
+        : webMessages.contractWaitingPayment,
+    },
+    {
+      term: webMessages.contractPeriod,
+      description: period ? (
+        <span>
+          <time className="ui-nowrap" dateTime={period.startsOn}>
+            {formatDate(period.startsOn)}
+          </time>
+          〜
+          <time className="ui-nowrap" dateTime={period.endsOn}>
+            {formatDate(period.endsOn)}
+          </time>
+        </span>
+      ) : (
+        webMessages.contractCurrentPeriodUnavailable
+      ),
+    },
+    {
+      term: webMessages.contractNextBilling,
+      description:
+        period && contract?.status === "active"
+          ? formatDate(dayAfter(period.endsOn))
+          : "―",
+    },
+    {
+      term: webMessages.contractCredits,
+      description: period
+        ? `${period.balance} ${webMessages.contractBalanceUnit}`
+        : webMessages.contractCurrentBalanceUnavailable,
+    },
+  ];
 
   return (
-    <main className="page-main">
-      <section className="card profile-card" aria-labelledby="contract-title">
-        <h1 id="contract-title">{webMessages.contractTitle}</h1>
+    <>
+      <Page tabbed>
+        <Title id="contract-title">{webMessages.contractTitle}</Title>
         {state.status === "loading" ? (
-          <output className="status-message">
-            {webMessages.contractLoading}
-          </output>
+          <output className="ui-lead">{webMessages.contractLoading}</output>
         ) : null}
         {state.status === "error" ? (
-          <div>
-            <p className="error-message" role="alert">
+          <>
+            <Notice tone="warn">
               {state.reason === "session"
                 ? webMessages.sessionExpiredError
                 : webMessages.contractLoadError}
-            </p>
+            </Notice>
             {state.reason === "contract" ? (
-              <button
-                className="secondary-button"
+              <Button
+                variant="ghost"
                 onClick={() => setAttempt((value) => value + 1)}
-                type="button"
               >
                 {webMessages.retry}
-              </button>
+              </Button>
             ) : null}
-          </div>
+          </>
         ) : null}
         {state.status === "ready" && !contract ? (
-          <p>{webMessages.contractNone}</p>
+          <p className="ui-lead">{webMessages.contractNone}</p>
         ) : null}
         {contract ? (
           <>
-            <dl className="profile-list">
-              <div>
-                <dt>{webMessages.contractStatus}</dt>
-                <dd>{contractStatusLabels[contract.status]}</dd>
-              </div>
-              <div>
-                <dt>{webMessages.contractPlan}</dt>
-                <dd>
-                  {contract.plan
-                    ? webMessages.contractPlanSummary
-                        .replace("{name}", contract.plan.name)
-                        .replace(
-                          "{price}",
-                          contract.plan.priceExclTax.toLocaleString("ja-JP"),
-                        )
-                        .replace(
-                          "{inclPrice}",
-                          inclYenFor(contract.plan.priceExclTax).toLocaleString(
-                            "ja-JP",
-                          ),
-                        )
-                        .replace("{credits}", String(contract.plan.credits))
-                    : webMessages.contractWaitingPayment}
-                </dd>
-              </div>
-              <div>
-                <dt>{webMessages.contractDate}</dt>
-                <dd>
-                  {contract.anchorDate ?? webMessages.contractWaitingPayment}
-                </dd>
-              </div>
-              <div>
-                <dt>{webMessages.contractPeriod}</dt>
-                <dd className="contract-period-range">
-                  {contract.currentPeriod ? (
-                    <>
-                      <span className="contract-period-start">
-                        <time dateTime={contract.currentPeriod.startsOn}>
-                          {contract.currentPeriod.startsOn}
-                        </time>
-                        〜
-                      </span>
-                      <time dateTime={contract.currentPeriod.endsOn}>
-                        {contract.currentPeriod.endsOn}
-                      </time>
-                    </>
-                  ) : (
-                    webMessages.contractCurrentPeriodUnavailable
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>{webMessages.contractCredits}</dt>
-                <dd>
-                  {contract.currentPeriod
-                    ? `${contract.currentPeriod.balance} ${webMessages.contractBalanceUnit}`
-                    : webMessages.contractCurrentBalanceUnavailable}
-                </dd>
-              </div>
-            </dl>
+            <Card
+              title={plan?.name ?? webMessages.contractPlan}
+              action={
+                <Badge tone={contract.status === "active" ? "sage" : "yellow"}>
+                  {contractStatusLabels[contract.status]}
+                </Badge>
+              }
+            >
+              <DefinitionList items={planRows} />
+            </Card>
             {contract.preview ? (
-              <p className="invoice-preview-warning" role="note">
-                {webMessages.contractPreview}
-              </p>
+              <Notice tone="yellow">{webMessages.contractPreview}</Notice>
             ) : null}
             {lineEnabled && lineLiffId ? (
-              <section
-                className="contract-summary"
-                aria-label={webMessages.lineLogin}
-              >
-                <h2>{webMessages.lineLogin}</h2>
+              <Card title={webMessages.lineLogin}>
                 {lineLinked === "linked" ? (
-                  <p>{webMessages.lineLinked}</p>
+                  <p className="ui-text">{webMessages.lineLinked}</p>
                 ) : null}
                 {lineLinked === "unlinked" ? (
-                  <Link className="secondary-button" to="/liff?to=home">
+                  <Link className={buttonClass("ghost")} to="/liff?to=home">
                     {webMessages.lineLink}
                   </Link>
                 ) : null}
                 {lineLinked === "loading" ? (
-                  <output className="status-message">
-                    {webMessages.lineLoading}
-                  </output>
+                  <output className="ui-text">{webMessages.lineLoading}</output>
                 ) : null}
                 {lineLinked === "error" ? (
                   <>
-                    <p className="error-message" role="alert">
-                      {webMessages.lineUnavailable}
-                    </p>
-                    <button
-                      className="secondary-button"
+                    <Notice tone="warn">{webMessages.lineUnavailable}</Notice>
+                    <Button
+                      variant="ghost"
                       onClick={() => setLineAttempt((value) => value + 1)}
-                      type="button"
                     >
                       {webMessages.lineRetry}
-                    </button>
+                    </Button>
                   </>
                 ) : null}
-              </section>
+              </Card>
             ) : null}
-            <p>{webMessages.contractNextInvoiceNotice}</p>
-            <section className="contract-summary">
-              <h2>{webMessages.contractPlanChangeHeading}</h2>
-              <p>
+            <Card title={webMessages.contractLoginHeading}>
+              <DefinitionList
+                items={[
+                  {
+                    term: webMessages.contractEmailLabel,
+                    description: session.user?.email ?? "―",
+                  },
+                ]}
+              />
+              {logoutError ? (
+                <Notice tone="warn">{webMessages.logoutError}</Notice>
+              ) : null}
+              <div className="ui-actions">
+                <Button variant="ghost" onClick={() => void handleSignOut()}>
+                  {webMessages.logout}
+                </Button>
+              </div>
+            </Card>
+            <Card title={webMessages.contractPlanChangeHeading}>
+              <p className="ui-text">
                 {lineEnabled ? (
                   webMessages.contractPlanChangeGuidance
                 ) : (
-                  <>
-                    {webMessages.contractPlanChangeGuidanceEmail}
-                    <ContactEmailLink />
-                  </>
+                  <MailText template={webMessages.contractPlanChangeBody} />
                 )}
               </p>
-            </section>
+              {mailHref ? (
+                <div className="ui-actions">
+                  <Button href={mailHref} variant="dark">
+                    {webMessages.contractMailButton}
+                  </Button>
+                </div>
+              ) : null}
+              {period ? (
+                <Hint>
+                  {webMessages.contractCancelNote.replace(
+                    "{date}",
+                    formatMonthDay(period.endsOn),
+                  )}
+                </Hint>
+              ) : null}
+            </Card>
           </>
         ) : null}
-        <div className="profile-actions">
-          <Link className="secondary-button" to="/me">
-            {webMessages.contractBackHome}
-          </Link>
-          <div>
-            {logoutError ? (
-              <p className="error-message" role="alert">
-                {webMessages.logoutError}
-              </p>
-            ) : null}
-            <button
-              className="secondary-button logout-button"
-              onClick={() => void handleSignOut()}
-              type="button"
-            >
+        {state.status === "error" ? (
+          <div className="ui-actions">
+            <Button variant="ghost" onClick={() => void handleSignOut()}>
               {webMessages.logout}
-            </button>
+            </Button>
           </div>
-        </div>
-      </section>
-    </main>
+        ) : null}
+      </Page>
+      <CustomerTabBar />
+    </>
   );
 }
