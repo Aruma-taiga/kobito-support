@@ -14,7 +14,7 @@ export class PostgresPaymentLinkRepository implements PaymentLinkRepository {
     }>(
       `select i.invoice_no, i.total_incl_tax, i.payment_method, i.status
          from invoices i join contracts c on c.id=i.contract_id
-        where c.customer_id=$1 and i.id=$2 and i.kind='initial'`,
+        where c.customer_id=$1 and i.id=$2 and i.kind in ('initial','monthly')`,
       [scope.customerId, invoiceId],
     );
     const row = result.rows[0];
@@ -36,7 +36,7 @@ export class PostgresPaymentLinkRepository implements PaymentLinkRepository {
       `insert into audit_logs (actor, action, target_type, target_id, detail)
        select $1, 'invoice.payment_link.created', 'invoice', i.id, '{}'::jsonb
          from invoices i join contracts c on c.id=i.contract_id
-        where c.customer_id=$2 and i.id=$3 and i.kind='initial'`,
+        where c.customer_id=$2 and i.id=$3 and i.kind in ('initial','monthly')`,
       [authUserId, scope.customerId, invoiceId],
     );
   }

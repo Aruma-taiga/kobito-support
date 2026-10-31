@@ -36,6 +36,7 @@ const maxPdfBytes = 5 * 1024 * 1024;
 interface InvoiceRow {
   id: string;
   invoice_no: string;
+  kind: "initial" | "monthly" | "extra_credit";
   status: InvoiceListItem["status"];
   payment_method: InvoiceListItem["paymentMethod"];
   issued_on: string;
@@ -59,6 +60,7 @@ interface BankInvoiceRow {
   invoice_status: string;
   payment_method: string;
   kind: string;
+  period_id: string | null;
   issued_on: string;
   due_on: string | null;
   total_incl_tax: number;
@@ -78,6 +80,10 @@ export interface InitialInvoiceInput {
   billingName: string;
   billingAddress: string;
   paymentMethod?: "card" | "bank_transfer";
+  kind?: "initial" | "monthly";
+  periodId?: string;
+  issuedOn?: string;
+  dueOn?: string;
   plan: {
     planId: string;
     planCode: string;
@@ -167,7 +173,7 @@ export class InvoiceRepository implements InvoiceModule {
         customer_billing_name: string;
       }
     >(
-      `select i.id, i.invoice_no, i.status, i.payment_method, i.issued_on::text as issued_on,
+      `select i.id, i.invoice_no, i.kind, i.status, i.payment_method, i.issued_on::text as issued_on,
               i.due_on::text as due_on, i.total_incl_tax, i.total_excl_tax, i.tax_amount,
               i.billing_name, coalesce(i.billing_address_snapshot,cst.billing_address) as billing_address,
               i.issuer_snapshot, coalesce(l.lines,'[]'::jsonb) as lines, c.id as contract_id, cst.id as customer_id,
@@ -178,8 +184,9 @@ export class InvoiceRepository implements InvoiceModule {
             'unit_price_excl_tax',line.unit_price_excl_tax,'amount_excl_tax',line.amount_excl_tax,'tax_rate',line.tax_rate)
             order by line.id) as lines from invoice_lines line where line.invoice_id=i.id
         ) l on true
-        where i.kind='initial' and i.payment_method='bank_transfer' and i.status in ('issued','overdue')
-          and c.status='awaiting_payment'
+        where i.payment_method='bank_transfer' and i.status in ('issued','overdue')
+          and ((i.kind='initial' and c.status='awaiting_payment') or
+               (i.kind='monthly' and c.status in ('active','cancel_scheduled','ended')))
         order by i.due_on asc nulls last, i.issued_on asc, i.invoice_no asc limit 100`,
     );
     return {
@@ -229,7 +236,7 @@ export class InvoiceRepository implements InvoiceModule {
     await client.query("set local lock_timeout = '5s'");
     await client.query("set local statement_timeout = '30s'");
     const reference = await client.query<{ contract_id: string }>(
-      "select contract_id from invoices where id=$1 and kind='initial'",
+      "select contract_id from invoices where id=$1 and kind in ('initial','monthly')",
       [invoiceId],
     );
     const contractId = reference.rows[0]?.contract_id;
@@ -249,7 +256,7 @@ export class InvoiceRepository implements InvoiceModule {
       `select i.id, i.invoice_no, i.contract_id, c.customer_id, c.status as contract_status,
               c.anchor_date::text as anchor_date, i.status as invoice_status, i.payment_method, i.kind,
               i.issued_on::text as issued_on, i.due_on::text as due_on, i.total_incl_tax, i.total_excl_tax,
-              i.issuer_snapshot, customer.shop_name, customer.billing_name, customer.email, customer.line_user_id
+              i.issuer_snapshot, i.period_id, customer.shop_name, customer.billing_name, customer.email, customer.line_user_id
          from invoices i join contracts c on c.id=i.contract_id join customers customer on customer.id=c.customer_id
         where i.id=$1 for update of i`,
       [invoiceId],
@@ -266,8 +273,8 @@ export class InvoiceRepository implements InvoiceModule {
       throw new ApiError(409, "application_conflict");
 
     if (
-      invoice.kind !== "initial" ||
-      invoice.payment_method !== "bank_transfer"
+      invoice.payment_method !== "bank_transfer" ||
+      !["initial", "monthly"].includes(invoice.kind)
     )
       throw new ApiError(409, "application_conflict");
     const existingPayment = await client.query<{
@@ -290,8 +297,8 @@ export class InvoiceRepository implements InvoiceModule {
         price_excl_tax: number;
         credits: number;
       }>(
-        "select id,seq,starts_on::text as starts_on,ends_on::text as ends_on,price_excl_tax,credits from billing_periods where contract_id=$1 and seq=1",
-        [contractId],
+        "select id,seq,starts_on::text as starts_on,ends_on::text as ends_on,price_excl_tax,credits from billing_periods where id=coalesce((select period_id from invoices where id=$1), (select id from billing_periods where contract_id=$2 and seq=1))",
+        [invoiceId, contractId],
       );
       const period = periodResult.rows[0];
       if (
@@ -302,7 +309,8 @@ export class InvoiceRepository implements InvoiceModule {
         payment.amount !== request.amount ||
         payment.paid_on !== request.paidOn ||
         !period ||
-        !contract.anchor_date
+        (invoice.kind === "initial" && !contract.anchor_date) ||
+        (invoice.kind === "monthly" && !contract.anchor_date)
       )
         throw new ApiError(409, "application_conflict");
       return confirmBankPaymentResponseSchema.parse({
@@ -314,7 +322,7 @@ export class InvoiceRepository implements InvoiceModule {
         anchorDate: contract.anchor_date,
         period: {
           id: period.id,
-          seq: 1,
+          seq: period.seq,
           startsOn: period.starts_on,
           endsOn: period.ends_on,
           priceExclTax: period.price_excl_tax,
@@ -326,7 +334,12 @@ export class InvoiceRepository implements InvoiceModule {
     }
     if (
       !new Set(["issued", "overdue"]).has(invoice.invoice_status) ||
-      invoice.contract_status !== "awaiting_payment"
+      (invoice.kind === "initial" &&
+        invoice.contract_status !== "awaiting_payment") ||
+      (invoice.kind === "monthly" &&
+        !["active", "cancel_scheduled", "ended"].includes(
+          invoice.contract_status,
+        ))
     )
       throw new ApiError(409, "application_conflict");
     if (request.amount !== invoice.total_incl_tax)
@@ -335,13 +348,70 @@ export class InvoiceRepository implements InvoiceModule {
     if (
       !invoice.due_on ||
       request.paidOn < invoice.issued_on ||
-      request.paidOn > invoice.due_on ||
+      (invoice.kind === "initial" && request.paidOn > invoice.due_on) ||
       request.paidOn > today
     )
       throw new ApiError(422, "validation_error");
     if (existingPayment.rows.length)
       throw new ApiError(409, "application_conflict");
-    if (contract.anchor_date) throw new ApiError(409, "application_conflict");
+    if (invoice.kind === "initial" && contract.anchor_date)
+      throw new ApiError(409, "application_conflict");
+
+    if (invoice.kind === "monthly") {
+      if (!contract.anchor_date || !invoice.period_id)
+        throw new ApiError(409, "application_conflict");
+      const periodResult = await client.query<{
+        id: string;
+        seq: number;
+        starts_on: string;
+        ends_on: string;
+        price_excl_tax: number;
+        credits: number;
+      }>(
+        "select id,seq,starts_on::text as starts_on,ends_on::text as ends_on,price_excl_tax,credits from billing_periods where id=$1 and contract_id=$2 for update",
+        [invoice.period_id, contractId],
+      );
+      const period = periodResult.rows[0];
+      if (!period) throw new ApiError(409, "application_conflict");
+      const paymentId = randomUUID();
+      await client.query(
+        `insert into payments (id,invoice_id,method,amount,paid_on,confirmed_via,confirmed_by)
+         values ($1,$2,'bank_transfer',$3,$4,'manual',$5)`,
+        [
+          paymentId,
+          invoiceId,
+          request.amount,
+          request.paidOn,
+          principal.authUserId,
+        ],
+      );
+      await client.query("update invoices set status='paid' where id=$1", [
+        invoiceId,
+      ]);
+      await client.query(
+        `insert into credit_entries (contract_id,period_id,kind,amount,invoice_id,note)
+         values ($1,$2,'grant',$3,$4,'月額請求の入金確認') on conflict (period_id) where kind='grant' do nothing`,
+        [contractId, period.id, period.credits, invoiceId],
+      );
+      return confirmBankPaymentResponseSchema.parse({
+        invoiceId,
+        paymentId,
+        amount: request.amount,
+        paidOn: request.paidOn,
+        contractId,
+        anchorDate: contract.anchor_date,
+        period: {
+          id: period.id,
+          seq: period.seq,
+          startsOn: period.starts_on,
+          endsOn: period.ends_on,
+          priceExclTax: period.price_excl_tax,
+          credits: period.credits,
+        },
+        preview,
+        replayed: false,
+      });
+    }
 
     let settlement: Awaited<ReturnType<typeof settleInitialInvoicePayment>>;
     try {
@@ -650,6 +720,11 @@ export class InvoiceRepository implements InvoiceModule {
     return this.issueInitialInvoice(client, input);
   }
 
+  issueMonthlyInvoice(client: PoolClient, input: InitialInvoiceInput) {
+    if (!input.periodId) throw new Error("Monthly invoice period is required");
+    return this.issueInitialInvoice(client, { ...input, kind: "monthly" });
+  }
+
   private async issueInitialInvoice(
     client: PoolClient,
     input: InitialInvoiceInput,
@@ -664,8 +739,9 @@ export class InvoiceRepository implements InvoiceModule {
     if (!preview && !this.isLiveIssuerReady(currentSettings))
       throw new ApiError(503, "invoice_unavailable");
 
-    const issuedOn = todayInTokyo(this.clock());
-    const dueOn = addCalendarDays(issuedOn, 7);
+    const kind = input.kind ?? "initial";
+    const issuedOn = input.issuedOn ?? todayInTokyo(this.clock());
+    const dueOn = input.dueOn ?? addCalendarDays(issuedOn, 7);
     const total = invoiceTotals([monthlyExcl]);
     const invoiceId = randomUUID();
     const year = Number(issuedOn.slice(0, 4));
@@ -691,7 +767,7 @@ export class InvoiceRepository implements InvoiceModule {
     const details = invoiceDetailSchema.parse({
       id: invoiceId,
       invoiceNo,
-      kind: "initial",
+      kind,
       status: "issued",
       issuedOn,
       dueOn,
@@ -712,7 +788,7 @@ export class InvoiceRepository implements InvoiceModule {
       issuer,
       lines: [
         {
-          description: `${planName.trim()} 初月利用料`,
+          description: `${planName.trim()} ${kind === "initial" ? "初月" : "月額"}利用料`,
           quantity: 1,
           unitPriceExclTax: monthlyExcl,
           amountExclTax: monthlyExcl,
@@ -735,10 +811,10 @@ export class InvoiceRepository implements InvoiceModule {
       preview,
     };
     await client.query(
-      `insert into invoices (id, invoice_no, contract_id, kind, status, payment_method,
+      `insert into invoices (id, invoice_no, contract_id, period_id, kind, status, payment_method,
          issued_on, due_on, total_incl_tax, total_excl_tax, tax_amount, billing_name,
          billing_address_snapshot, issuer_snapshot, pdf_path)
-       values ($1,$2,$3,'initial','issued',$13,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+       values ($1,$2,$3,$14,$15,'issued',$13,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
         invoiceId,
         invoiceNo,
@@ -753,6 +829,8 @@ export class InvoiceRepository implements InvoiceModule {
         JSON.stringify(issuerSnapshot),
         `invoice_documents:${invoiceId}`,
         input.paymentMethod ?? "bank_transfer",
+        input.periodId ?? null,
+        kind,
       ],
     );
     await client.query(
@@ -768,11 +846,12 @@ export class InvoiceRepository implements InvoiceModule {
         Buffer.from(pdf),
       ],
     );
-    await client.query(
-      "update contracts set status = 'awaiting_payment', first_invoice_due_on = $2 where id = $1",
-      [input.contractId, dueOn],
-    );
-    if (!preview) {
+    if (kind === "initial")
+      await client.query(
+        "update contracts set status = 'awaiting_payment', first_invoice_due_on = $2 where id = $1",
+        [input.contractId, dueOn],
+      );
+    if (!preview && kind === "initial") {
       await client.query(
         `insert into notifications (customer_id, kind, channel, dedupe_key, scheduled_at, payload)
          values ($1,'NT-02','email',$2,now(),$3::jsonb)`,
@@ -878,7 +957,7 @@ export class InvoiceRepository implements InvoiceModule {
 
   async listCustomer(scope: CustomerScope): Promise<InvoiceList> {
     const result = await this.pool.query<InvoiceRow>(
-      `${detailQuery} where c.customer_id = $1 and i.kind = 'initial' order by i.issued_on desc, i.invoice_no desc`,
+      `${detailQuery} where c.customer_id = $1 and i.kind in ('initial','monthly') order by i.issued_on desc, i.invoice_no desc`,
       [scope.customerId],
     );
     return {
@@ -890,7 +969,7 @@ export class InvoiceRepository implements InvoiceModule {
     invoiceId: string,
   ): Promise<InvoiceDetail> {
     const result = await this.pool.query<InvoiceRow>(
-      `${detailQuery} where c.customer_id = $1 and i.id = $2 and i.kind = 'initial'`,
+      `${detailQuery} where c.customer_id = $1 and i.id = $2 and i.kind in ('initial','monthly')`,
       [scope.customerId, invoiceId],
     );
     const row = result.rows[0];
@@ -903,7 +982,7 @@ export class InvoiceRepository implements InvoiceModule {
   async listAdmin(principal: Principal): Promise<InvoiceList> {
     this.assertAdmin(principal);
     const result = await this.pool.query<InvoiceRow>(
-      `${detailQuery} where i.kind = 'initial' order by i.issued_on desc, i.invoice_no desc limit 100`,
+      `${detailQuery} where i.kind in ('initial','monthly') order by i.issued_on desc, i.invoice_no desc limit 100`,
       [],
     );
     return {
@@ -916,7 +995,7 @@ export class InvoiceRepository implements InvoiceModule {
   ): Promise<InvoiceDetail> {
     this.assertAdmin(principal);
     const result = await this.pool.query<InvoiceRow>(
-      `${detailQuery} where i.id = $1 and i.kind = 'initial'`,
+      `${detailQuery} where i.id = $1 and i.kind in ('initial','monthly')`,
       [invoiceId],
     );
     const row = result.rows[0];
@@ -945,7 +1024,7 @@ export class InvoiceRepository implements InvoiceModule {
       content: Buffer;
     }>(
       `select i.invoice_no, d.content from invoices i join invoice_documents d on d.invoice_id = i.id
-       join contracts c on c.id = i.contract_id where i.id = $1 and i.kind = 'initial'
+       join contracts c on c.id = i.contract_id where i.id = $1 and i.kind in ('initial','monthly')
        and ($2::text is null or c.customer_id::text = $2)`,
       [invoiceId, kind === "customer" ? (scope?.customerId ?? null) : null],
     );
@@ -1005,7 +1084,7 @@ export class InvoiceRepository implements InvoiceModule {
     return invoiceDetailSchema.parse({
       id: row.id,
       invoiceNo: row.invoice_no,
-      kind: "initial",
+      kind: row.kind,
       status: row.status,
       issuedOn: row.issued_on,
       dueOn: row.due_on,
@@ -1029,7 +1108,7 @@ export class InvoiceRepository implements InvoiceModule {
   }
 }
 
-const detailQuery = `select i.id, i.invoice_no, i.status, i.payment_method,
+const detailQuery = `select i.id, i.invoice_no, i.kind, i.status, i.payment_method,
        i.issued_on::text as issued_on, i.due_on::text as due_on,
        i.total_incl_tax, i.total_excl_tax, i.tax_amount, i.billing_name,
        coalesce(i.billing_address_snapshot, cst.billing_address) as billing_address,

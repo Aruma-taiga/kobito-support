@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "job:daily": "tsx src/jobs/daily-billing-script.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "seed:dev-auth": "tsx scripts/seed-dev-auth.ts",

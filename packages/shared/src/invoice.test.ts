@@ -18,6 +18,54 @@ describe("addCalendarDays", () => {
 });
 
 describe("invoiceDetailSchema", () => {
+  it("accepts a monthly invoice kind", () => {
+    const totals = invoiceTotals([5000]);
+    expect(
+      invoiceDetailSchema.safeParse({
+        id: "00000000-0000-4000-8000-000000000001",
+        invoiceNo: "KS-2026-2",
+        kind: "monthly",
+        status: "issued",
+        issuedOn: "2026-02-28",
+        dueOn: "2026-03-07",
+        ...{
+          totalInclTax: totals.inclYen,
+          totalExclTax: totals.exclYen,
+          taxAmount: totals.taxYen,
+        },
+        paymentMethod: "bank_transfer",
+        preview: false,
+        billingName: "顧客",
+        billingAddress: "住所",
+        acceptedPlan: {
+          planId: "00000000-0000-4000-8000-000000000002",
+          planCode: "light",
+          planName: "ライト",
+          monthlyPriceExclTax: 5000,
+          credits: 1,
+        },
+        issuer: {
+          serviceName: "サービス",
+          companyName: "会社",
+          companyAddress: "住所",
+          invoiceRegistrationNo: null,
+          bankAccountName: null,
+          bankAccountBranch: null,
+          bankAccountType: null,
+          bankAccountNumber: null,
+        },
+        lines: [
+          {
+            description: "ライト 月額利用料",
+            quantity: 1,
+            unitPriceExclTax: 5000,
+            amountExclTax: 5000,
+            taxRate: 0.1,
+          },
+        ],
+      }).success,
+    ).toBe(true);
+  });
   it("allows missing registration and bank details only as explicit nulls", () => {
     const totals = invoiceTotals([5000]);
     const detail = {

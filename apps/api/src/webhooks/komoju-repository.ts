@@ -307,7 +307,12 @@ export class KomojuInboxRepository
           await client.query("commit");
           return "review";
         }
-        if (!periodId || invoice.contract_status !== "active") {
+        if (
+          !periodId ||
+          !["active", "cancel_scheduled", "ended"].includes(
+            invoice.contract_status,
+          )
+        ) {
           await markEvent(client, eventId, "review:billing_period_not_found");
           await client.query("commit");
           return "review";

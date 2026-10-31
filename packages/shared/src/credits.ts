@@ -20,6 +20,15 @@ export interface CreditDelta {
   amount: number;
 }
 
+/** Positive unspent balance to expire at period end; reservations reduce the balance. */
+export function creditsToExpire(entries: readonly CreditEntry[]): number {
+  const balances = balanceOf(entries);
+  if (balances.size > 1)
+    throw new RangeError("Credit entries must belong to one period");
+  const total = BigInt([...balances.values()][0] ?? 0);
+  return total > 0n ? Number(total) : 0;
+}
+
 const positiveKinds = new Set<CreditEntryKind>(["grant", "extra", "release"]);
 const negativeKinds = new Set<CreditEntryKind>([
   "reserve",

@@ -10,6 +10,7 @@ import {
   completionEntries,
   completionEntriesForPeriod,
   confirmStepSchema,
+  creditsToExpire,
   extraCreditExclYen,
   formatInvoiceNo,
   invoiceKinds,
@@ -125,6 +126,30 @@ describe("anchor-month billing periods", () => {
 });
 
 describe("period-scoped credit ledger", () => {
+  it("expires only the positive unreserved balance and skips zero balances", () => {
+    expect(
+      creditsToExpire([
+        { periodId: "p", kind: "grant", amount: 5 },
+        { periodId: "p", kind: "extra", amount: 1 },
+        { periodId: "p", kind: "reserve", amount: -2 },
+        { periodId: "p", kind: "consume", amount: -2 },
+      ]),
+    ).toBe(2);
+    expect(
+      creditsToExpire([
+        { periodId: "p", kind: "grant", amount: 3 },
+        { periodId: "p", kind: "reserve", amount: -3 },
+      ]),
+    ).toBe(0);
+    expect(
+      creditsToExpire([
+        { periodId: "p", kind: "grant", amount: 2 },
+        { periodId: "p", kind: "expire", amount: -2 },
+      ]),
+    ).toBe(0);
+    expect(creditsToExpire([])).toBe(0);
+  });
+
   it("balances each period independently and keeps the estimate's source period", () => {
     const entries = [
       { periodId: "period-a", kind: "grant", amount: 5 },
