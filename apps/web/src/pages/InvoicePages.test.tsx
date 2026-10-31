@@ -142,27 +142,29 @@ describe("invoice pages", () => {
     vi.restoreAllMocks();
   });
 
-  it.each([
-    "admin-list",
-    "me-list",
-  ] as const)("shows preview warning and links from the %s list", async (page) => {
-    const { adminApiClient, customerApiClient } = setup(page);
+  it("shows the preview label and a link from the admin list", async () => {
+    const { adminApiClient } = setup("admin-list");
     expect(
       await screen.findByRole("link", { name: /INV\/2026 001/ }),
     ).toBeTruthy();
     expect(screen.getByText(webMessages.invoicePreviewShort)).toBeTruthy();
-    expect(
-      page === "admin-list"
-        ? adminApiClient.getInvoices
-        : customerApiClient.getInvoices,
-    ).toHaveBeenCalledOnce();
+    expect(adminApiClient.getInvoices).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    "admin-detail",
-    "me-detail",
-  ] as const)("shows the immutable snapshot, tax totals, bank details, and preview warning on %s", async (page) => {
-    const { adminApiClient, customerApiClient } = setup(page);
+  it("shows the unpaid customer invoice with its number, preview label and a link to the detail", async () => {
+    const { customerApiClient } = setup("me-list");
+    expect(await screen.findByText(/INV\/2026 001/)).toBeTruthy();
+    expect(screen.getByText(webMessages.invoicePreviewShort)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: webMessages.invoiceOpen })
+        .getAttribute("href"),
+    ).toBe(`/me/invoices/${invoiceId}`);
+    expect(customerApiClient.getInvoices).toHaveBeenCalledOnce();
+  });
+
+  it("shows the immutable snapshot, tax totals, bank details, and preview warning on the admin detail", async () => {
+    const { adminApiClient } = setup("admin-detail");
     expect(
       await screen.findByText(webMessages.invoicePreviewWarning),
     ).toBeTruthy();
@@ -175,11 +177,23 @@ describe("invoice pages", () => {
     expect(totals?.textContent).toBe(
       `${webMessages.invoiceTotalExclTax}￥5,000${webMessages.invoiceTaxAmount}￥500${webMessages.invoiceTotalInclTax}￥5,500`,
     );
+    expect(adminApiClient.getInvoice).toHaveBeenCalledWith(invoiceId);
+  });
+
+  it("shows the snapshot, subtotal, tax, total, bank details and preview warning on the customer detail", async () => {
+    const { customerApiClient } = setup("me-detail");
     expect(
-      page === "admin-detail"
-        ? adminApiClient.getInvoice
-        : customerApiClient.getInvoice,
-    ).toHaveBeenCalledWith(invoiceId);
+      await screen.findByText(webMessages.invoicePreviewWarning),
+    ).toBeTruthy();
+    expect(screen.getByText("設定済み運営会社")).toBeTruthy();
+    expect(screen.getByText("東京都杉並区1-2-3")).toBeTruthy();
+    expect(screen.getByText("本店")).toBeTruthy();
+    expect(screen.getByText("ライトプラン 初月分")).toBeTruthy();
+    expect(screen.getByText("ライト（申込時）")).toBeTruthy();
+    expect(document.body.textContent).toContain("小計（税抜）5,000円");
+    expect(document.body.textContent).toContain("消費税（10%）500円");
+    expect(document.body.textContent).toContain("合計（税込）5,500円");
+    expect(customerApiClient.getInvoice).toHaveBeenCalledWith(invoiceId);
   });
 
   it("downloads a PDF using a sanitized filename and shows a retryable failure", async () => {

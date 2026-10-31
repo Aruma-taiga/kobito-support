@@ -5,48 +5,23 @@ import {
 } from "@kobito/shared";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { SignOutAction } from "../auth/SignOutAction.js";
 import type { AdminApiClient } from "../platform/admin-api-client.js";
-import type { ReturnTypeApiClient } from "../platform/api-client.js";
+import { invoiceStatus, yen } from "./invoice-format.js";
+import { useInvoicePdfDownload } from "./invoice-pdf.js";
 
 type InvoiceClient = Pick<
   AdminApiClient,
   "getInvoices" | "getInvoice" | "getInvoicePdf"
 >;
 
-function yen(value: number): string {
-  return `￥${value.toLocaleString("ja-JP")}`;
-}
-
-function invoiceStatus(status: InvoiceListItem["status"]): string {
-  const labels: Record<InvoiceListItem["status"], string> = {
-    issued: webMessages.invoiceStatusIssued,
-    paid: webMessages.invoiceStatusPaid,
-    failed: webMessages.invoiceStatusFailed,
-    overdue: webMessages.invoiceStatusOverdue,
-    void: webMessages.invoiceStatusVoid,
-  };
-  return labels[status];
-}
-
-function safeFilename(invoiceNo: string): string {
-  return invoiceNo.replace(/[^\p{L}\p{N}._-]/gu, "_");
-}
-
 function InvoiceListPage({
   client,
   basePath,
   returnLabel,
-  returnPath,
-  accessNotice,
-  showLogout,
 }: {
   client: InvoiceClient;
   basePath: string;
   returnLabel: string;
-  returnPath?: string | null | undefined;
-  accessNotice?: string | undefined;
-  showLogout?: boolean | undefined;
 }) {
   const [items, setItems] = useState<InvoiceListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,22 +56,10 @@ function InvoiceListPage({
         className="card invoice-card"
         aria-labelledby="invoice-list-title"
       >
-        {returnPath !== null ? (
-          <Link
-            className="admin-back-link"
-            to={
-              returnPath ??
-              (returnLabel === webMessages.adminQueueTitle
-                ? "/admin/customers"
-                : "/me")
-            }
-          >
-            {returnLabel}
-          </Link>
-        ) : null}
+        <Link className="admin-back-link" to="/admin/customers">
+          {returnLabel}
+        </Link>
         <h1 id="invoice-list-title">{webMessages.invoiceListTitle}</h1>
-        {showLogout ? <SignOutAction /> : null}
-        {accessNotice ? <p className="muted-text">{accessNotice}</p> : null}
         {loading ? (
           <output className="status-message">
             {webMessages.invoiceListLoading}
@@ -144,7 +107,7 @@ function InvoiceListPage({
   );
 }
 
-function InvoiceDetailPage({
+function AdminInvoiceDetailView({
   client,
   listPath,
   returnLabel,
@@ -159,8 +122,6 @@ function InvoiceDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [downloading, setDownloading] = useState(false);
-  const [downloadError, setDownloadError] = useState(false);
 
   // Retry count is an intentional refetch trigger even though the request URL is unchanged.
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry state must trigger another fetch
@@ -184,31 +145,10 @@ function InvoiceDetailPage({
     };
   }, [attempt, client, id]);
 
-  async function downloadPdf() {
-    if (!invoice || downloading) return;
-    setDownloading(true);
-    setDownloadError(false);
-    let objectUrl: string | null = null;
-    try {
-      const blob = await client.getInvoicePdf(invoice.id);
-      objectUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = `${safeFilename(invoice.invoiceNo)}.pdf`;
-      anchor.hidden = true;
-      document.body.append(anchor);
-      anchor.click();
-      anchor.remove();
-    } catch {
-      setDownloadError(true);
-    } finally {
-      setDownloading(false);
-      const createdUrl = objectUrl;
-      if (createdUrl) {
-        window.setTimeout(() => URL.revokeObjectURL(createdUrl), 0);
-      }
-    }
-  }
+  const { downloading, downloadError, downloadPdf } = useInvoicePdfDownload(
+    client,
+    invoice,
+  );
 
   return (
     <main className="page-main">
@@ -391,7 +331,7 @@ export function AdminInvoiceDetailPage({
   apiClient: AdminApiClient;
 }) {
   return (
-    <InvoiceDetailPage
+    <AdminInvoiceDetailView
       client={apiClient}
       listPath="/admin/invoices"
       returnLabel={webMessages.invoiceListTitle}
@@ -399,41 +339,4 @@ export function AdminInvoiceDetailPage({
   );
 }
 
-export function MyInvoiceListPage({
-  apiClient,
-  returnPath,
-  returnLabel,
-  accessNotice,
-  showLogout,
-}: {
-  apiClient: ReturnTypeApiClient;
-  returnPath?: string | null | undefined;
-  returnLabel?: string | undefined;
-  accessNotice?: string | undefined;
-  showLogout?: boolean | undefined;
-}) {
-  return (
-    <InvoiceListPage
-      client={apiClient}
-      basePath="/me/invoices"
-      returnLabel={returnLabel ?? webMessages.homeTitle}
-      returnPath={returnPath}
-      accessNotice={accessNotice}
-      showLogout={showLogout}
-    />
-  );
-}
-
-export function MyInvoiceDetailPage({
-  apiClient,
-}: {
-  apiClient: ReturnTypeApiClient;
-}) {
-  return (
-    <InvoiceDetailPage
-      client={apiClient}
-      listPath="/me/invoices"
-      returnLabel={webMessages.invoiceListTitle}
-    />
-  );
-}
+export { MyInvoiceDetailPage, MyInvoiceListPage } from "./CustomerInvoices.js";

@@ -222,7 +222,7 @@ describe("LINE and contact visibility flag", () => {
       {},
       { lineLiffId: liffId },
     );
-    await screen.findByText(webMessages.contractPlanChangeGuidanceEmail);
+    await screen.findByText(/いまはメール（/);
     expect(screen.queryByText(webMessages.lineLinked)).toBeNull();
     expect(screen.queryByText(webMessages.lineLink)).toBeNull();
     expect(
@@ -318,24 +318,25 @@ describe("application request routes", () => {
         name: webMessages.contractTitle,
       }),
     ).toBeTruthy();
+    const plan = (await screen.findByText("契約時のライト")).closest("section");
+    expect(plan?.textContent).toContain("月額（税抜）5,000円");
+    expect(plan?.textContent).toContain("月額（税込）5,500円");
+    expect(plan?.textContent).toContain("契約日2026年10月26日");
     expect(
-      await screen.findByText(
-        /契約時のライト・月額5,000円（税抜）（税込5,500円）・1クレジット/,
-      ),
-    ).toBeTruthy();
-    expect(screen.getByText("2026-10-26")).toBeTruthy();
-    expect(screen.getByText(webMessages.contractCredits)).toBeTruthy();
-    expect(
-      screen.getByText("2026-11-26").closest("time")?.getAttribute("datetime"),
+      screen
+        .getByText("2026年11月26日")
+        .closest("time")
+        ?.getAttribute("datetime"),
     ).toBe("2026-11-26");
     expect(
-      screen.getByText("2026-12-25").closest("time")?.getAttribute("datetime"),
+      screen
+        .getByText("2026年12月25日")
+        .closest("time")
+        ?.getAttribute("datetime"),
     ).toBe("2026-12-25");
+    expect(screen.getByText(webMessages.contractCredits)).toBeTruthy();
     expect(screen.getByText("-1 クレジット")).toBeTruthy();
     expect(screen.getByText(webMessages.contractPreview)).toBeTruthy();
-    expect(
-      screen.getByText("次回の請求日は、請求書でご案内します。"),
-    ).toBeTruthy();
     expect(apiClient.getContract).toHaveBeenCalledOnce();
   });
 
@@ -355,7 +356,10 @@ describe("application request routes", () => {
       },
     );
     expect(
-      await screen.findByRole("heading", { name: webMessages.meWaitingTitle }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name: webMessages.meWaitingReviewTitle,
+      }),
     ).toBeTruthy();
     expect(apiClient.getContract).not.toHaveBeenCalled();
   });
@@ -428,10 +432,9 @@ describe("application request routes", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: webMessages.retry }));
     expect(
-      await screen.findByText(
-        /承諾済みプラン・月額5,000円（税抜）（税込5,500円）・1クレジット/,
-      ),
-    ).toBeTruthy();
+      (await screen.findByText("承諾済みプラン")).closest("section")
+        ?.textContent,
+    ).toContain("月額（税抜）5,000円");
     expect(
       screen.getByText(webMessages.contractCurrentPeriodUnavailable),
     ).toBeTruthy();
@@ -458,7 +461,10 @@ describe("application request routes", () => {
       },
     );
     expect(
-      await screen.findByRole("heading", { name: webMessages.meWaitingTitle }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name: webMessages.meWaitingReviewTitle,
+      }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: webMessages.logout }));
     expect(signOut).toHaveBeenCalledOnce();
@@ -546,7 +552,10 @@ describe("application request routes", () => {
     );
     signOut.mockRejectedValueOnce(new Error("sign-out unavailable"));
     expect(
-      await screen.findByRole("heading", { name: webMessages.meWaitingTitle }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name: webMessages.meWaitingReviewTitle,
+      }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: webMessages.logout }));
     expect((await screen.findByRole("alert")).textContent).toContain(
@@ -606,7 +615,10 @@ describe("application request routes", () => {
     expect(apiClient.getMe).toHaveBeenCalledOnce();
     resolveSecondAccess?.(pendingAccess);
     expect(
-      await screen.findByRole("heading", { name: webMessages.meWaitingTitle }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name: webMessages.meWaitingReviewTitle,
+      }),
     ).toBeTruthy();
     expect(apiClient.getMe).toHaveBeenCalledOnce();
   });
@@ -636,7 +648,7 @@ describe("application request routes", () => {
     ).toBeTruthy();
 
     fireEvent.click(
-      await screen.findByRole("link", { name: webMessages.myRequestsTitle }),
+      await screen.findByRole("link", { name: webMessages.homeRequestsAll }),
     );
 
     expect(
@@ -645,7 +657,8 @@ describe("application request routes", () => {
       }),
     ).toBeTruthy();
     expect(getCustomerAccess).toHaveBeenCalledTimes(3);
-    expect(apiClient.getCustomerRequests).not.toHaveBeenCalled();
+    // The home page loaded its own running requests once; the forbidden list page added no call.
+    expect(apiClient.getCustomerRequests).toHaveBeenCalledOnce();
     expect(apiClient.getMe).toHaveBeenCalledOnce();
   });
 
@@ -660,7 +673,10 @@ describe("application request routes", () => {
     }));
     const { apiClient } = setup("/me", {}, { getCustomerAccess });
     expect(
-      await screen.findByRole("heading", { name: webMessages.meWaitingTitle }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name: webMessages.meWaitingReviewTitle,
+      }),
     ).toBeTruthy();
     expect(window.location.pathname).toBe("/me/waiting");
     expect(screen.queryByText("喫茶ひだまり")).toBeNull();
@@ -691,7 +707,13 @@ describe("application request routes", () => {
       },
     );
     expect(
-      await screen.findByRole("heading", { name: webMessages.meWaitingTitle }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name:
+          contractStatus === "quoting"
+            ? webMessages.meWaitingQuotingTitle
+            : webMessages.meWaitingReviewTitle,
+      }),
     ).toBeTruthy();
     expect(
       await screen.findByRole("link", { name: webMessages.invoiceListTitle }),
@@ -716,12 +738,15 @@ describe("application request routes", () => {
       },
     );
     expect(
-      await screen.findByRole("heading", { name: webMessages.meWaitingTitle }),
+      await screen.findByRole("heading", {
+        level: 1,
+        name: webMessages.meWaitingPaymentTitle,
+      }),
     ).toBeTruthy();
     expect(
       screen.getByRole("link", { name: webMessages.invoiceListTitle }),
     ).toBeTruthy();
-    expect(apiClient.getInvoices).not.toHaveBeenCalled();
+    await waitFor(() => expect(apiClient.getInvoices).toHaveBeenCalledOnce());
     expect(apiClient.getMe).not.toHaveBeenCalled();
     expect(apiClient.getCustomerRequests).not.toHaveBeenCalled();
   });
@@ -936,14 +961,17 @@ describe("application request routes", () => {
   it("navigates from the real customer home through the request list to the estimate", async () => {
     const { apiClient } = setup("/me");
     fireEvent.click(
-      await screen.findByRole("link", { name: webMessages.myRequestsTitle }),
+      await screen.findByRole("link", { name: webMessages.homeRequestsAll }),
     );
     expect(
       await screen.findByRole("heading", { name: webMessages.myRequestsTitle }),
     ).toBeTruthy();
-    fireEvent.click(await screen.findByRole("link", { name: request.summary }));
+    fireEvent.click(
+      await screen.findByRole("link", { name: new RegExp(request.summary) }),
+    );
     expect(await screen.findByText("予約フォームの表示を整える")).toBeTruthy();
-    expect(apiClient.getCustomerRequests).toHaveBeenCalledOnce();
+    // Once for the home summary and once for the request list.
+    expect(apiClient.getCustomerRequests).toHaveBeenCalledTimes(2);
     expect(apiClient.getCustomerRequest).toHaveBeenCalledWith(requestId);
   });
 
@@ -1031,9 +1059,11 @@ describe("application request routes", () => {
       await screen.findByRole("heading", { name: webMessages.homeTitle }),
     ).toBeTruthy();
     fireEvent.click(
-      await screen.findByRole("link", { name: webMessages.myRequestsTitle }),
+      await screen.findByRole("link", { name: webMessages.homeRequestsAll }),
     );
-    fireEvent.click(await screen.findByRole("link", { name: request.summary }));
+    fireEvent.click(
+      await screen.findByRole("link", { name: new RegExp(request.summary) }),
+    );
     fireEvent.click(
       await screen.findByRole("button", { name: webMessages.myRequestApprove }),
     );
@@ -1046,10 +1076,10 @@ describe("application request routes", () => {
       await screen.findByText(webMessages.myRequestApprovalSuccess),
     ).toBeTruthy();
     fireEvent.click(
-      await screen.findByRole("link", { name: webMessages.myRequestsTitle }),
+      await screen.findByRole("link", { name: webMessages.navRequests }),
     );
     fireEvent.click(
-      await screen.findByRole("link", { name: webMessages.homeTitle }),
+      await screen.findByRole("link", { name: webMessages.navHome }),
     );
     await screen.findByRole("heading", { name: webMessages.homeTitle });
     await waitFor(() => expect(apiClient.getContract).toHaveBeenCalledTimes(2));

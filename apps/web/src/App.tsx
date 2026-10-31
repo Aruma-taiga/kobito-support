@@ -11,19 +11,19 @@ import {
   CustomerAccessGuard,
   CustomerFinishedPage,
   CustomerHomePage,
+  CustomerInvoiceDetailPage,
   CustomerInvoicesPage,
   CustomerPlanQuoteUnavailablePage,
   CustomerWaitingPage,
   CustomerWelcomePage,
 } from "./pages/CustomerAccessPages.js";
-import { MyInvoiceDetailPage } from "./pages/InvoicePages.js";
 import { LiffPage } from "./pages/LiffPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { MyRequestDetailPage, MyRequestsPage } from "./pages/RequestPages.js";
 import type { AdminApiClient } from "./platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "./platform/api-client.js";
 import { ContactProvider } from "./platform/contact.js";
-import { BrandHeader } from "./ui/index.js";
+import { BrandHeader, Button, Notice, Page } from "./ui/index.js";
 
 type PublicConfigState =
   | { status: "loading"; attempt: number }
@@ -89,27 +89,22 @@ export function App({
         right={<a href="/apply/shop">{webMessages.applicationTitle}</a>}
       />
       {configState.status === "loading" ? (
-        <main className="page-main">
-          <output className="status-message">
+        <Page>
+          <output className="ui-lead">
             {webMessages.serviceConfigLoading}
           </output>
-        </main>
+        </Page>
       ) : null}
       {configState.status === "error" ? (
-        <main className="page-main">
-          <section className="card config-error-card">
-            <p className="error-message" role="alert">
-              {webMessages.serviceConfigError}
-            </p>
-            <button
-              className="secondary-button"
-              onClick={() => setAttempt((value) => value + 1)}
-              type="button"
-            >
-              {webMessages.retry}
-            </button>
-          </section>
-        </main>
+        <Page>
+          <Notice tone="warn">{webMessages.serviceConfigError}</Notice>
+          <Button
+            variant="ghost"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            {webMessages.retry}
+          </Button>
+        </Page>
       ) : null}
       {configState.status === "ready" ? (
         <ContactProvider
@@ -170,7 +165,7 @@ export function App({
                     />
                     <Route
                       path="/me/waiting"
-                      element={<CustomerWaitingPage />}
+                      element={<CustomerWaitingPage apiClient={apiClient} />}
                     />
                     <Route
                       path="/me/welcome"
@@ -202,12 +197,18 @@ export function App({
                       element={<MyRequestDetailPage apiClient={apiClient} />}
                     />
                     <Route
+                      path="/me/requests/:id/estimate"
+                      element={<MyRequestDetailPage apiClient={apiClient} />}
+                    />
+                    <Route
                       path="/me/invoices"
                       element={<CustomerInvoicesPage apiClient={apiClient} />}
                     />
                     <Route
                       path="/me/invoices/:id"
-                      element={<MyInvoiceDetailPage apiClient={apiClient} />}
+                      element={
+                        <CustomerInvoiceDetailPage apiClient={apiClient} />
+                      }
                     />
                   </Route>
                 </Route>
