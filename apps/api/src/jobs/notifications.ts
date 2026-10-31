@@ -132,6 +132,9 @@ export async function runNotificationDispatch(
             ? { status: notification.payload.status }
             : {}),
           ...(data.credits === null ? {} : { credits: data.credits }),
+          ...(typeof notification.payload.extraCredits === "number"
+            ? { extraCredits: notification.payload.extraCredits }
+            : {}),
           ...(["NT-02", "NT-03"].includes(notification.kind) && details
             ? { bankDetails: details }
             : {}),

@@ -157,6 +157,9 @@ function makeApp(overrides: AppOverrides = {}) {
         throw new Error("not used");
       }),
       getCustomerContract: vi.fn(async () => ({ contract: null })),
+      purchaseExtraCredits: async () => {
+        throw new Error("not implemented");
+      },
     },
     customerAccess: {
       getAccess: vi.fn(async () => ({

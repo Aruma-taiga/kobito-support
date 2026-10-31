@@ -3,6 +3,30 @@ import { invoiceTotals } from "./pricing.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+export const extraCreditPurchaseRequestSchema = z
+  .object({ quantity: z.number().int().min(1).max(10) })
+  .strict();
+export type ExtraCreditPurchaseRequest = z.infer<
+  typeof extraCreditPurchaseRequestSchema
+>;
+
+export const extraCreditPurchaseResponseSchema = z
+  .object({
+    invoiceId: z.uuid(),
+    invoiceNo: z.string().min(1).max(64),
+    totalExclTax: z.number().int().safe().positive(),
+    taxAmount: z.number().int().safe().nonnegative(),
+    totalInclTax: z.number().int().safe().positive(),
+    paymentMethod: z.enum(["bank_transfer", "card"]),
+  })
+  .strict()
+  .refine(
+    (value) => value.totalExclTax + value.taxAmount === value.totalInclTax,
+  );
+export type ExtraCreditPurchaseResponse = z.infer<
+  typeof extraCreditPurchaseResponseSchema
+>;
+
 export const paymentLinkResponseSchema = z
   .object({ redirectUrl: z.url({ protocol: /^https$/ }) })
   .strict();
@@ -112,7 +136,10 @@ export const invoiceDetailSchema = invoiceListItemSchema
         message: "Invoice tax split must match the shared 10% calculation",
       });
     }
-    if (invoice.acceptedPlan.monthlyPriceExclTax !== invoice.totalExclTax) {
+    if (
+      invoice.kind !== "extra_credit" &&
+      invoice.acceptedPlan.monthlyPriceExclTax !== invoice.totalExclTax
+    ) {
       context.addIssue({
         code: "custom",
         path: ["acceptedPlan", "monthlyPriceExclTax"],

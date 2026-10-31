@@ -50,6 +50,12 @@ describe("PostgreSQL migrations and seed", () => {
       new URL("../migrations/006_request_completion.sql", import.meta.url),
     );
 
+    const seventhMigration = await readFile(
+      new URL(
+        "../migrations/007_extra_credit_once_per_invoice.sql",
+        import.meta.url,
+      ),
+    );
     const recorded = await pool.query<{ version: string; checksum: string }>(
       "select version, checksum from schema_migrations order by version",
     );
@@ -77,6 +83,10 @@ describe("PostgreSQL migrations and seed", () => {
       {
         version: "006",
         checksum: createHash("sha256").update(sixthMigration).digest("hex"),
+      },
+      {
+        version: "007",
+        checksum: createHash("sha256").update(seventhMigration).digest("hex"),
       },
     ]);
   });
@@ -120,7 +130,8 @@ describe("PostgreSQL migrations and seed", () => {
     const plans = await pool.query(
       `select distinct on (code) code, name, price_excl_tax, credits, is_custom
          from plans
-        where valid_from <= date '2026-10-31'
+        where code in ('custom', 'light', 'standard', 'premium')
+          and valid_from <= date '2026-10-31'
           and (valid_to is null or valid_to >= date '2026-10-31')
         order by code, valid_from desc, id desc`,
     );
@@ -279,6 +290,7 @@ async function copyAppliedMigrations(directory: string): Promise<void> {
     ["004", "komoju_webhook_inbox"],
     ["005", "requests_estimates"],
     ["006", "request_completion"],
+    ["007", "extra_credit_once_per_invoice"],
   ]) {
     const filename = `${version}_${name}.sql`;
     const sql = await readFile(

@@ -142,6 +142,9 @@ function makeApp(
         throw new Error("not used");
       },
       getCustomerContract: async () => ({ contract: null }),
+      purchaseExtraCredits: async () => {
+        throw new Error("not implemented");
+      },
     },
     publicSettings: new PublicSettingsRepository(pool),
     komojuInbox: { receive: async () => "accepted" as const },

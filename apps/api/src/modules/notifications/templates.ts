@@ -11,6 +11,7 @@ export interface NotificationTemplateData {
   amountInclTax?: number;
   bankDetails?: string;
   credits?: number;
+  extraCredits?: number;
   status?: string;
 }
 
@@ -51,6 +52,16 @@ export function renderNotification(
         text: `${greeting}初月分のご入金を確認しました。これにより契約が成立しました。今後のお手続きはマイページからご確認いただけます。${footer}`,
       };
     case "NT-03": {
+      if (data.extraCredits !== undefined) {
+        const payment =
+          data.paymentMethod === "card"
+            ? "カードでのお支払いは、マイページからお手続きください。"
+            : `銀行振込にてお支払いください。${data.bankDetails ? `\n振込先: ${data.bankDetails}` : ""}`;
+        return {
+          subject: "追加クレジットの請求書を発行しました",
+          text: `${greeting}追加クレジットの請求書を発行しました。お支払い確認後にご利用いただけます。\n請求書: ${data.invoiceNo ?? "マイページ"}\n数量: ${data.extraCredits}個\n${data.dueOn ? `お支払期日: ${data.dueOn}\n` : ""}${data.amountInclTax === undefined ? "" : `請求金額: ${data.amountInclTax.toLocaleString("ja-JP")}円（税込）\n`}${payment}${footer}`,
+        };
+      }
       const payment =
         data.paymentMethod === "card"
           ? "カードでのお支払いは、マイページからお手続きください。"
@@ -63,7 +74,10 @@ export function renderNotification(
     case "NT-04":
       return {
         subject: "クレジットをご利用いただけます",
-        text: `${greeting}月額分のご入金を確認し、クレジットをご利用いただけるようになりました。${data.credits === undefined ? "" : `今回ご利用いただけるクレジットは${data.credits}個です。`}マイページで残数と利用期限をご確認ください。${footer}`,
+        text:
+          data.extraCredits !== undefined
+            ? `${greeting}追加クレジット${data.extraCredits}個のご入金を確認し、現在の利用期間でご利用いただけるようになりました。マイページで残数をご確認ください。${footer}`
+            : `${greeting}月額分のご入金を確認し、クレジットをご利用いただけるようになりました。${data.credits === undefined ? "" : `今回ご利用いただけるクレジットは${data.credits}個です。`}マイページで残数と利用期限をご確認ください。${footer}`,
       };
     case "NT-06":
       return {

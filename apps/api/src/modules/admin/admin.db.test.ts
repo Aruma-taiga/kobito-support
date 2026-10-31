@@ -88,6 +88,9 @@ function makeApp(): ReturnType<typeof createApp> {
         throw new Error("not used");
       },
       getCustomerContract: async () => ({ contract: null }),
+      purchaseExtraCredits: async () => {
+        throw new Error("not implemented");
+      },
     },
     customerAccess: {
       getAccess: async () => ({

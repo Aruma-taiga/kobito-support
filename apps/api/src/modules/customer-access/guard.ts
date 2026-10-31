@@ -35,6 +35,14 @@ export function requireCustomerAccess(
       return;
     }
     if (
+      method === "POST" &&
+      path === "/api/v1/me/extra-credits" &&
+      ["active", "cancel_scheduled"].includes(state.contractStatus ?? "")
+    ) {
+      await next();
+      return;
+    }
+    if (
       method === "GET" &&
       path === "/api/v1/me" &&
       (state.access === "active" || state.access === "none")

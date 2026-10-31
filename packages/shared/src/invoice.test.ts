@@ -66,6 +66,52 @@ describe("invoiceDetailSchema", () => {
       }).success,
     ).toBe(true);
   });
+  it("accepts an extra-credit invoice whose total differs from the monthly plan", () => {
+    const totals = invoiceTotals([12_000]);
+    const parsed = invoiceDetailSchema.safeParse({
+      id: "00000000-0000-4000-8000-000000000003",
+      invoiceNo: "KS-2026-3",
+      kind: "extra_credit",
+      status: "issued",
+      issuedOn: "2026-11-01",
+      dueOn: "2026-11-08",
+      totalInclTax: totals.inclYen,
+      totalExclTax: totals.exclYen,
+      taxAmount: totals.taxYen,
+      paymentMethod: "bank_transfer",
+      preview: false,
+      billingName: "顧客",
+      billingAddress: "住所",
+      acceptedPlan: {
+        planId: "00000000-0000-4000-8000-000000000002",
+        planCode: "light",
+        planName: "ライト",
+        monthlyPriceExclTax: 5000,
+        credits: 1,
+      },
+      issuer: {
+        serviceName: "サービス",
+        companyName: "会社",
+        companyAddress: "住所",
+        invoiceRegistrationNo: null,
+        bankAccountName: null,
+        bankAccountBranch: null,
+        bankAccountType: null,
+        bankAccountNumber: null,
+      },
+      lines: [
+        {
+          description: "追加クレジット",
+          quantity: 3,
+          unitPriceExclTax: 4000,
+          amountExclTax: 12000,
+          taxRate: 0.1,
+        },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
   it("allows missing registration and bank details only as explicit nulls", () => {
     const totals = invoiceTotals([5000]);
     const detail = {

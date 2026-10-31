@@ -600,6 +600,82 @@ describe("c10 invoices", () => {
 });
 
 describe("c11 contract", () => {
+  it("creates an extra-credit invoice after confirming quantity and total", async () => {
+    const createExtraCreditPurchase = vi.fn(async () => ({
+      invoiceId,
+      invoiceNo: "SP-2026-0043",
+      totalExclTax: 8000,
+      taxAmount: 800,
+      totalInclTax: 8800,
+      paymentMethod: "bank_transfer",
+    }));
+    setup("/me/contract", { createExtraCreditPurchase });
+    const quantity = await screen.findByRole("spinbutton", {
+      name: "追加するクレジット数",
+    });
+    fireEvent.change(quantity, { target: { value: "2" } });
+    expect(text()).toContain("8,800円");
+    expect(text()).toContain("入金確認後");
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /追加クレジットの料金と有効期限を確認しました/,
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "追加クレジットを申し込む" }),
+    );
+    await waitFor(() =>
+      expect(createExtraCreditPurchase).toHaveBeenCalledWith(
+        { quantity: 2 },
+        expect.any(String),
+      ),
+    );
+    expect(
+      await screen.findByRole("heading", { name: "請求書の内容" }),
+    ).toBeTruthy();
+  });
+
+  it("requires confirmation, rejects out-of-range quantities, and reuses the key after failure", async () => {
+    const createExtraCreditPurchase = vi.fn(async () => {
+      throw new Error("network");
+    });
+    setup("/me/contract", { createExtraCreditPurchase });
+    const quantity = await screen.findByRole("spinbutton", {
+      name: "追加するクレジット数",
+    });
+    const button = screen.getByRole("button", {
+      name: "追加クレジットを申し込む",
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.change(quantity, { target: { value: "11" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(button.disabled).toBe(true);
+    fireEvent.change(quantity, { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(button);
+    await screen.findByText(
+      "追加クレジットを申し込めませんでした。内容を確認して再度お試しください。",
+    );
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(createExtraCreditPurchase).toHaveBeenCalledTimes(2),
+    );
+    expect(createExtraCreditPurchase.mock.calls[1]).toEqual(
+      createExtraCreditPurchase.mock.calls[0],
+    );
+  });
+
+  it("requires confirmation and hides purchase for inactive contracts", async () => {
+    const { apiClient } = setup("/me/contract", {
+      getContract: vi.fn(async () => ({
+        contract: { ...activeContract.contract, status: "suspended" },
+      })),
+    });
+    await screen.findByText("スタンダード");
+    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(apiClient.getContract).toHaveBeenCalled();
+  });
+
   it("shows the tax-exclusive price first, dates and next billing date", async () => {
     setup("/me/contract");
     expect(
