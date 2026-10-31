@@ -124,10 +124,10 @@ describe("notification outbox database behavior", () => {
       { pool, sender, notificationIds: queued.rows.map((row) => row.id) },
     );
     expect(result).toEqual({ sent: 2, failed: 0, skipped: 0 });
-    expect(sender.messages.map((mail) => mail.subject)).toEqual([
-      "お見積りをお送りしました",
-      "ご依頼が完了しました",
-    ]);
+    // 同じ予定時刻の2件は送信の順番が決まらないので、順不同で比べる。
+    expect(sender.messages.map((mail) => mail.subject).sort()).toEqual(
+      ["お見積りをお送りしました", "ご依頼が完了しました"].sort(),
+    );
     expect(
       sender.messages.every((mail) => mail.to === `${suffix}@example.test`),
     ).toBe(true);
