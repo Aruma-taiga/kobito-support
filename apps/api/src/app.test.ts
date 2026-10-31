@@ -84,6 +84,14 @@ function makeApp(overrides: AppOverrides = {}) {
         eventCount: 0,
         failedInvoiceCount: 0,
       })),
+      listNotificationFailures: vi.fn(async () => ({
+        items: [],
+        totalCount: 0,
+      })),
+      retryNotificationFailure: vi.fn(async () => ({
+        id: "11111111-1111-4111-8111-111111111111",
+        scheduled: true as const,
+      })),
       listApplications: vi.fn(async () => ({
         items: [],
         page: 1,

@@ -59,6 +59,24 @@ export function createAdminRoutes(dependencies: {
       await dependencies.admin.listPaymentReviews(Object.fromEntries(params)),
     );
   });
+  routes.get("/notification-failures", async (context) => {
+    const params = [...new URL(context.req.url).searchParams.entries()];
+    if (new Set(params.map(([key]) => key)).size !== params.length)
+      throw new ApiError(422, "validation_error");
+    return context.json(
+      await dependencies.admin.listNotificationFailures(
+        Object.fromEntries(params),
+      ),
+    );
+  });
+  routes.post("/notification-failures/:id/retry", async (context) =>
+    context.json(
+      await dependencies.admin.retryNotificationFailure(
+        context.get("principal"),
+        context.req.param("id"),
+      ),
+    ),
+  );
   if (dependencies.requests)
     createRequestAdminRoutes(routes, dependencies.requests);
   if (dependencies.planQuotes)

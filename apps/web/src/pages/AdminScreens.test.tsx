@@ -220,6 +220,11 @@ function setup(path: string, overrides: Record<string, unknown> = {}) {
       eventCount: 0,
       failedInvoiceCount: 0,
     })),
+    getNotificationFailures: vi.fn(async () => ({ items: [], totalCount: 0 })),
+    retryNotificationFailure: vi.fn(async () => ({
+      id: customerId,
+      scheduled: true as const,
+    })),
     getAdminRequests: vi.fn(async () => ({
       items: [
         adminRequest,

@@ -3,6 +3,9 @@ import type {
   AdminApplicationQueueResponse,
   AdminCancellation,
   AdminCustomerDetail,
+  AdminNotificationFailureRetryResponse,
+  AdminNotificationFailuresQuery,
+  AdminNotificationFailuresResponse,
   AdminPaymentReviewsQuery,
   AdminPaymentReviewsResponse,
   DeclineApplicationRequest,
@@ -59,6 +62,28 @@ function isoDate(value: Date | string): string {
   return value instanceof Date
     ? value.toISOString()
     : new Date(value).toISOString();
+}
+
+function safeNotificationReason(
+  value: string | null,
+):
+  | "recipient_unavailable"
+  | "settings_unavailable"
+  | "mail_http_4xx"
+  | "mail_http_5xx"
+  | "mail_network_error"
+  | "send_failed"
+  | "unknown" {
+  if (
+    value === "recipient_unavailable" ||
+    value === "settings_unavailable" ||
+    value === "mail_http_4xx" ||
+    value === "mail_http_5xx" ||
+    value === "mail_network_error" ||
+    value === "send_failed"
+  )
+    return value;
+  return "unknown";
 }
 
 function objectSnapshot(value: unknown): Record<string, unknown> {
@@ -376,6 +401,76 @@ export class AdminRepository implements AdminModule {
       eventCount: counts.rows[0]?.event_count ?? 0,
       failedInvoiceCount: counts.rows[0]?.failed_invoice_count ?? 0,
     });
+  }
+
+  async listNotificationFailures(
+    query: AdminNotificationFailuresQuery,
+  ): Promise<AdminNotificationFailuresResponse> {
+    const count = await this.pool.query<{ count: number }>(
+      `select count(*)::int as count from notifications n
+        where n.sent_at is null and n.attempts >= 3
+          and n.last_error not in ('cancelled','invoice_not_payable')`,
+    );
+    const result = await this.pool.query<{
+      id: string;
+      kind: string;
+      scheduled_at: Date;
+      last_error: string | null;
+      shop_name: string | null;
+    }>(
+      `select n.id,n.kind,n.scheduled_at,n.last_error,c.shop_name
+         from notifications n
+         left join customers c on c.id=n.customer_id
+        where n.sent_at is null and n.attempts >= 3
+          and n.last_error not in ('cancelled','invoice_not_payable')
+        order by n.scheduled_at desc,n.id desc limit $1`,
+      [query.limit],
+    );
+    return {
+      totalCount: count.rows[0]?.count ?? 0,
+      items: result.rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        scheduledAt: isoDate(row.scheduled_at),
+        reasonCode: safeNotificationReason(row.last_error),
+        shopName: row.shop_name ?? "当社あて",
+      })),
+    };
+  }
+
+  retryNotificationFailure(
+    principal: Principal,
+    notificationId: string,
+  ): Promise<AdminNotificationFailureRetryResponse> {
+    return withAdminAudit(
+      this.pool,
+      principal,
+      {
+        action: "notification.retry_scheduled",
+        targetType: "notification",
+        targetId: notificationId,
+        detail: { resourceId: notificationId },
+      },
+      async (client) => {
+        const locked = await client.query<{
+          id: string;
+          last_error: string | null;
+        }>(
+          `select id,last_error from notifications
+            where id=$1 and sent_at is null and attempts >= 3
+              and last_error not in ('cancelled','invoice_not_payable')
+            for update`,
+          [notificationId],
+        );
+        const notification = locked.rows[0];
+        if (!notification) throw new ApiError(409, "conflict");
+        await client.query(
+          "update notifications set attempts=0,last_error=null,scheduled_at=clock_timestamp() where id=$1",
+          [notificationId],
+        );
+        return { id: notification.id, scheduled: true };
+      },
+    );
   }
 
   async listApplications(

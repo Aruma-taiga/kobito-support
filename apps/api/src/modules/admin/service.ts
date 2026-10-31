@@ -4,6 +4,10 @@ import type {
 } from "@kobito/shared";
 import {
   adminCancellationSchema,
+  adminNotificationFailureIdSchema,
+  adminNotificationFailureRetryResponseSchema,
+  adminNotificationFailuresQuerySchema,
+  adminNotificationFailuresResponseSchema,
   adminPaymentReviewsQuerySchema,
   adminPaymentReviewsResponseSchema,
 } from "@kobito/shared";
@@ -22,6 +26,22 @@ export class AdminService implements AdminModule {
     if (!parsed.success) throw new ApiError(422, "validation_error");
     return adminPaymentReviewsResponseSchema.parse(
       await this.repository.listPaymentReviews(parsed.data),
+    );
+  }
+
+  async listNotificationFailures(query: unknown) {
+    const parsed = adminNotificationFailuresQuerySchema.safeParse(query);
+    if (!parsed.success) throw new ApiError(422, "validation_error");
+    return adminNotificationFailuresResponseSchema.parse(
+      await this.repository.listNotificationFailures(parsed.data),
+    );
+  }
+
+  async retryNotificationFailure(principal: Principal, notificationId: string) {
+    if (!adminNotificationFailureIdSchema.safeParse(notificationId).success)
+      throw new ApiError(404, "not_found");
+    return adminNotificationFailureRetryResponseSchema.parse(
+      await this.repository.retryNotificationFailure(principal, notificationId),
     );
   }
 
