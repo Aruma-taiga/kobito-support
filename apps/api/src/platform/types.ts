@@ -16,7 +16,7 @@ export type ApiMiddleware = MiddlewareHandler<{ Variables: ApiVariables }>;
 
 export class ApiError extends Error {
   constructor(
-    readonly status: 400 | 401 | 403 | 404 | 409 | 422 | 500 | 503,
+    readonly status: 400 | 401 | 403 | 404 | 409 | 422 | 500 | 502 | 503,
     readonly code:
       | "invalid_request"
       | "unauthorized"
@@ -36,6 +36,8 @@ export class ApiError extends Error {
       | "settings_revision_conflict"
       | "conflict"
       | "service_unavailable"
+      | "payment_link_unavailable"
+      | "payment_link_failed"
       | "invalid_line_token",
   ) {
     super(code);

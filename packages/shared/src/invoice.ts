@@ -3,6 +3,11 @@ import { invoiceTotals } from "./pricing.js";
 
 const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
+export const paymentLinkResponseSchema = z
+  .object({ redirectUrl: z.url({ protocol: /^https$/ }) })
+  .strict();
+export type PaymentLinkResponse = z.infer<typeof paymentLinkResponseSchema>;
+
 export function addCalendarDays(date: string, days: number): string {
   if (!isoDateSchema.safeParse(date).success || !Number.isSafeInteger(days)) {
     throw new RangeError("Invalid calendar date or day count");

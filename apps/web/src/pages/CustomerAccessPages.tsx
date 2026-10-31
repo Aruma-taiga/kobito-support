@@ -325,6 +325,7 @@ function WaitingInvoices({ apiClient }: { apiClient: ReturnTypeApiClient }) {
           detail={state.details[invoice.id]}
           initialStage
           invoice={invoice}
+          apiClient={apiClient}
           key={invoice.id}
         />
       ))}

@@ -293,7 +293,7 @@ describe("c04 waiting page", () => {
     ).toBe("mailto:info@cingulata.jp");
   });
 
-  it("card invoices show guidance only, with no card entry and no payment link", async () => {
+  it("card invoices show a hosted payment link without accepting card details", async () => {
     setup("/me/waiting", {
       getCustomerAccess: vi.fn(async () => pendingAccess("awaiting_payment")),
       getInvoices: vi.fn(async () => ({
@@ -301,7 +301,10 @@ describe("c04 waiting page", () => {
       })),
     });
     expect(await screen.findByText(/クレジットカードで支払う/)).toBeTruthy();
-    expect(text()).toContain("決済会社の画面");
+    expect(text()).toContain("KOMOJUのお支払い画面");
+    expect(
+      screen.getByRole("button", { name: "お支払いページへ進む" }),
+    ).toBeTruthy();
     expect(document.querySelectorAll("input").length).toBe(0);
     expect(screen.queryByText("ゴウドウガイシャ シングラータ")).toBeNull();
   });
@@ -562,7 +565,10 @@ describe("c10 invoices", () => {
     expect(
       await screen.findByText("カードでのお支払いができませんでした"),
     ).toBeTruthy();
-    expect(text()).toContain("決済会社の画面");
+    expect(text()).toContain("カードでのお支払いをご案内できません");
+    expect(
+      screen.queryByRole("button", { name: "お支払いページへ進む" }),
+    ).toBeNull();
     expect(document.querySelectorAll("input").length).toBe(0);
   });
 

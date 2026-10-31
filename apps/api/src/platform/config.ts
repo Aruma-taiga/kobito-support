@@ -51,6 +51,7 @@ const environmentSchema = z
     BANK_ACCOUNT_NUMBER: optionalText,
     DEV_INVOICE_PREVIEW: z.enum(["0", "1"]).default("0"),
     KOMOJU_WEBHOOK_SECRET: optionalSecret,
+    KOMOJU_SECRET_KEY: optionalSecret,
     LINE_ENABLED: z.preprocess(
       (value) =>
         typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -99,6 +100,7 @@ export interface RuntimeConfig {
   bankAccountNumber?: string;
   devInvoicePreview?: boolean;
   komojuWebhookSecret?: string;
+  komojuSecretKey?: string;
   lineEnabled?: boolean;
   lineLoginChannelId?: string;
 }
@@ -160,6 +162,9 @@ export function loadConfig(
     ...(value.KOMOJU_WEBHOOK_SECRET === undefined
       ? {}
       : { komojuWebhookSecret: value.KOMOJU_WEBHOOK_SECRET }),
+    ...(value.KOMOJU_SECRET_KEY === undefined
+      ? {}
+      : { komojuSecretKey: value.KOMOJU_SECRET_KEY }),
     lineEnabled: value.LINE_ENABLED === "true",
     ...(value.LINE_LOGIN_CHANNEL_ID === undefined
       ? {}

@@ -2,10 +2,13 @@ import {
   lineLinkResponseSchema,
   lineLinkStatusResponseSchema,
   lineSignInResponseSchema,
+  paymentLinkResponseSchema,
 } from "@kobito/shared";
 import { describe, expect, it, vi } from "vitest";
 import { type AppDependencies, createApp } from "./app.js";
+import { FakeKomojuClient } from "./integrations/komoju/fake-client.js";
 import { LineService } from "./modules/accounts/line/service.js";
+import { PaymentLinkService } from "./modules/payment-links/service.js";
 
 type TestAccount = NonNullable<
   Awaited<ReturnType<AppDependencies["accounts"]["findByAuthUserId"]>>
@@ -192,6 +195,50 @@ function makeApp(overrides: AppOverrides = {}) {
 }
 
 describe("API routes and auth pipeline", () => {
+  it("runs the payment-link route through customer auth and returns only a safe error code", async () => {
+    const app = makeApp({
+      customerAccess: {
+        getAccess: vi.fn(async () => ({
+          contractStatus: "awaiting_payment" as const,
+          landingPath: "/me/waiting" as const,
+          access: "pending" as const,
+          welcomeRequired: false,
+          invoiceAccess: true,
+          invoiceAccessUntil: null,
+        })),
+      },
+      paymentLinks: new PaymentLinkService(
+        {
+          getCustomerInvoice: vi.fn(async (scope) => {
+            expect(scope.customerId).toBe("customer-a");
+            return {
+              invoiceNo: "KS-2026-00001",
+              amountYen: 5500,
+              paymentMethod: "card",
+              status: "issued",
+            };
+          }),
+          recordCustomerLinkCreated: vi.fn(async () => undefined),
+        },
+        new FakeKomojuClient(undefined, new Error("private key and card data")),
+        "https://app.example.test",
+      ),
+    });
+    const response = await app.request(
+      "/api/v1/me/invoices/44444444-4444-4444-8444-444444444444/payment-link",
+      {
+        method: "POST",
+        headers: { authorization: "Bearer customer-token" },
+      },
+    );
+    expect(response.status).toBe(502);
+    const body: unknown = await response.json();
+    expect(body).toEqual({ error: { code: "payment_link_failed" } });
+    expect(JSON.stringify(body)).not.toContain("private key");
+    expect(JSON.stringify(body)).not.toContain("card data");
+    expect(paymentLinkResponseSchema.safeParse(body).success).toBe(false);
+  });
+
   it("exposes LINE login publicly and scopes linking/status to the verified customer", async () => {
     const line = {
       signIn: vi.fn(async () => ({

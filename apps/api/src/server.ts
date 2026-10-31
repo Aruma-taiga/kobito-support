@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import dotenv from "dotenv";
 import { Pool } from "pg";
 import { createApp } from "./app.js";
+import { HttpKomojuClient } from "./integrations/komoju/client.js";
 import { LineIdTokenVerifier } from "./integrations/line/verify-id-token.js";
 import { PostgresLineRepository } from "./modules/accounts/line/repository.js";
 import { LineService } from "./modules/accounts/line/service.js";
@@ -18,6 +19,8 @@ import { InvoiceRepository } from "./modules/invoices/repository.js";
 import { InvoiceService } from "./modules/invoices/service.js";
 import { IssuerSettingsRepository } from "./modules/issuer-settings/repository.js";
 import { IssuerSettingsService } from "./modules/issuer-settings/service.js";
+import { PostgresPaymentLinkRepository } from "./modules/payment-links/repository.js";
+import { PaymentLinkService } from "./modules/payment-links/service.js";
 import { PlanQuoteRepository } from "./modules/plan-quotes/repository.js";
 import { PlanQuoteService } from "./modules/plan-quotes/service.js";
 import { ReferralRepository } from "./modules/referrals/repository.js";
@@ -61,6 +64,13 @@ const app = createApp({
   admin: new AdminService(new AdminRepository(pool)),
   issuerSettings: new IssuerSettingsService(new IssuerSettingsRepository(pool)),
   invoices,
+  paymentLinks: new PaymentLinkService(
+    new PostgresPaymentLinkRepository(pool),
+    config.komojuSecretKey
+      ? new HttpKomojuClient(config.komojuSecretKey)
+      : undefined,
+    config.webOrigin,
+  ),
   requests: new RequestService(new RequestRepository(pool)),
   planQuotes: new PlanQuoteService(
     new PlanQuoteRepository(pool, invoiceRepository),

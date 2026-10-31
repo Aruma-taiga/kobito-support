@@ -3,11 +3,13 @@ import {
   approveApplicationResponseSchema,
   customerAccessSchema,
   invoiceDetailSchema,
+  paymentLinkResponseSchema,
   welcomeSeenResponseSchema,
 } from "@kobito/shared";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type AppDependencies, createApp } from "../../app.js";
+import { FakeKomojuClient } from "../../integrations/komoju/fake-client.js";
 import type { VerifiedIdentity } from "../../platform/auth.js";
 import type { RuntimeConfig } from "../../platform/config.js";
 import { customerScopeFor } from "../../platform/scope.js";
@@ -16,6 +18,8 @@ import { AdminRepository } from "../admin/repository.js";
 import { AdminService } from "../admin/service.js";
 import { PostgresCustomerAccessRepository } from "../customer-access/repository.js";
 import { CustomerAccessService } from "../customer-access/service.js";
+import { PostgresPaymentLinkRepository } from "../payment-links/repository.js";
+import { PaymentLinkService } from "../payment-links/service.js";
 import { InvoiceRepository } from "./repository.js";
 import { InvoiceService } from "./service.js";
 
@@ -106,6 +110,11 @@ function makeApp(
     },
     admin: new AdminService(new AdminRepository(pool)),
     invoices: new InvoiceService(invoiceRepository),
+    paymentLinks: new PaymentLinkService(
+      new PostgresPaymentLinkRepository(pool),
+      new FakeKomojuClient(),
+      runtimeConfig.webOrigin,
+    ),
     customerAccess: new CustomerAccessService(
       new PostgresCustomerAccessRepository(pool, () => now),
       () => now,
@@ -320,6 +329,42 @@ afterAll(async () => {
 });
 
 describe("initial invoice approval and customer access", () => {
+  it("scopes card payment-link requests to the authenticated customer", async () => {
+    // カードの審査完了は未実装（409）のため、振込で発行した請求書をカード請求書に更新して検証する。
+    const owner = await makeApplication();
+    const other = await makeApplication();
+    const issueApp = makeApp();
+    const issued = await approve(issueApp, owner.applicationId);
+    expect(issued.status).toBe(200);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    await pool.query("update invoices set payment_method='card' where id=$1", [
+      invoiceId,
+    ]);
+
+    const ownResponse = await issueApp.request(
+      `/api/v1/me/invoices/${invoiceId}/payment-link`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${owner.token}` },
+      },
+    );
+    expect(ownResponse.status).toBe(200);
+    const ownBody: unknown = await ownResponse.json();
+    expect(paymentLinkResponseSchema.parse(ownBody)).toEqual({
+      redirectUrl: "https://komoju.com/sessions/fake-session-id",
+    });
+
+    const otherResponse = await issueApp.request(
+      `/api/v1/me/invoices/${invoiceId}/payment-link`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${other.token}` },
+      },
+    );
+    expect(otherResponse.status).toBe(404);
+  });
+
   it.each([
     "under_review",
     "quoting",

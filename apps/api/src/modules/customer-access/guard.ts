@@ -43,8 +43,9 @@ export function requireCustomerAccess(
       return;
     }
     if (
-      method === "GET" &&
-      path.startsWith("/api/v1/me/invoices") &&
+      ((method === "GET" && path.startsWith("/api/v1/me/invoices")) ||
+        (method === "POST" &&
+          /^\/api\/v1\/me\/invoices\/[^/]+\/payment-link$/.test(path))) &&
       state.invoiceAccess
     ) {
       await next();
