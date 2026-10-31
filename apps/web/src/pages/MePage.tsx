@@ -1,5 +1,6 @@
 import {
   contractStatusLabels,
+  inclYenFor,
   type MeResponse,
   webMessages,
 } from "@kobito/shared";
@@ -147,9 +148,15 @@ export function MePage({
                             .replace("{name}", contract.contract.plan.name)
                             .replace(
                               "{price}",
-                              contract.contract.plan.priceInclTax.toLocaleString(
+                              contract.contract.plan.priceExclTax.toLocaleString(
                                 "ja-JP",
                               ),
+                            )
+                            .replace(
+                              "{inclPrice}",
+                              inclYenFor(
+                                contract.contract.plan.priceExclTax,
+                              ).toLocaleString("ja-JP"),
                             )
                             .replace(
                               "{credits}",

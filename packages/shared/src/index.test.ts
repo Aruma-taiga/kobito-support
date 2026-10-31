@@ -10,7 +10,7 @@ import {
   completionEntries,
   completionEntriesForPeriod,
   confirmStepSchema,
-  extraCreditGrossYen,
+  extraCreditExclYen,
   formatInvoiceNo,
   invoiceKinds,
   invoiceTotals,
@@ -22,52 +22,16 @@ import {
   planCatalog,
   planStepSchema,
   shopStepSchema,
-  splitTax,
   validationMessages,
 } from "./index.js";
 
-describe("gross-price calculations", () => {
-  it.each([
-    [5000, 454, 4546],
-    [10000, 909, 9091],
-    [15000, 1363, 13637],
-    [4000, 363, 3637],
-    [0, 0, 0],
-  ])("splits %i yen into tax %i and net %i", (grossYen, taxYen, netYen) => {
-    expect(splitTax(grossYen)).toEqual({ grossYen, taxYen, netYen });
-  });
-
-  it("uses integer arithmetic safely through the largest safe gross amount", () => {
-    const grossYen = Number.MAX_SAFE_INTEGER;
-    const result = splitTax(grossYen);
-    expect(result.grossYen).toBe(grossYen);
-    expect(result.taxYen + result.netYen).toBe(grossYen);
-    expect(Number.isSafeInteger(result.taxYen)).toBe(true);
-    expect(Number.isSafeInteger(result.netYen)).toBe(true);
-  });
-
-  it.each([
-    -1,
-    0.5,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    Number.MAX_SAFE_INTEGER + 1,
-  ])("rejects invalid gross amount %s", (grossYen) =>
-    expect(() => splitTax(grossYen)).toThrow());
-
-  it("sums invoice lines before rounding tax once", () => {
-    expect(invoiceTotals([6, 6])).toEqual({
-      grossYen: 12,
-      taxYen: 1,
-      netYen: 11,
+describe("tax-exclusive calculations", () => {
+  it("is covered in pricing.test.ts", () => {
+    expect(invoiceTotals([5000])).toEqual({
+      exclYen: 5000,
+      taxYen: 500,
+      inclYen: 5500,
     });
-    expect(splitTax(6).taxYen + splitTax(6).taxYen).toBe(0);
-  });
-
-  it("rejects invalid line amounts and overflow in an invoice sum", () => {
-    expect(() => invoiceTotals([10, -1])).toThrow();
-    expect(() => invoiceTotals([10.5])).toThrow();
-    expect(() => invoiceTotals([Number.MAX_SAFE_INTEGER, 1])).toThrow();
   });
 
   it("exposes the four approved plans and one-time credit price", () => {
@@ -75,30 +39,30 @@ describe("gross-price calculations", () => {
       light: {
         code: "light",
         label: "ライト",
-        monthlyGrossYen: 5500,
+        monthlyExclYen: 5000,
         monthlyCredits: 1,
       },
       standard: {
         code: "standard",
         label: "スタンダード",
-        monthlyGrossYen: 11000,
+        monthlyExclYen: 10000,
         monthlyCredits: 3,
       },
       premium: {
         code: "premium",
         label: "プレミアム",
-        monthlyGrossYen: 16500,
+        monthlyExclYen: 15000,
         monthlyCredits: 5,
       },
       custom: {
         code: "custom",
         label: "個別見積り",
-        monthlyGrossYen: null,
+        monthlyExclYen: null,
         monthlyCredits: null,
       },
     });
-    expect(planCatalog.custom.monthlyGrossYen).toBeNull();
-    expect(extraCreditGrossYen).toBe(4400);
+    expect(planCatalog.custom.monthlyExclYen).toBeNull();
+    expect(extraCreditExclYen).toBe(4000);
     expect(planCatalog.custom.monthlyCredits).toBeNull();
     expect(planCatalog.light.label).toBe("ライト");
     expect(paymentMethods).toEqual(["card", "konbini", "bank_transfer"]);

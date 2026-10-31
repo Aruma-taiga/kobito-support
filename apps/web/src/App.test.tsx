@@ -198,7 +198,7 @@ describe("LINE and contact visibility flag", () => {
     const contract = {
       contract: {
         status: "active",
-        plan: { name: "ライト", priceInclTax: 5500, credits: 3 },
+        plan: { name: "ライト", priceExclTax: 5000, credits: 3 },
         anchorDate: "2026-10-01",
         currentPeriod: {
           startsOn: "2026-10-01",
@@ -241,7 +241,7 @@ describe("LINE and contact visibility flag", () => {
         getContract: vi.fn(async () => ({
           contract: {
             status: "active",
-            plan: { name: "ライト", priceInclTax: 5500, credits: 3 },
+            plan: { name: "ライト", priceExclTax: 5000, credits: 3 },
             anchorDate: "2026-10-01",
             currentPeriod: null,
             preview: false,
@@ -298,13 +298,13 @@ describe("application request routes", () => {
             status: "cancel_scheduled" as const,
             anchorDate: "2026-10-26",
             preview: true,
-            plan: { name: "契約時のライト", priceInclTax: 5500, credits: 1 },
+            plan: { name: "契約時のライト", priceExclTax: 5000, credits: 1 },
             currentPeriod: {
               id: "55555555-5555-4555-8555-555555555555",
               seq: 2,
               startsOn: "2026-11-26",
               endsOn: "2026-12-25",
-              priceInclTax: 5500,
+              priceExclTax: 5000,
               credits: 1,
               balance: -1,
             },
@@ -319,7 +319,9 @@ describe("application request routes", () => {
       }),
     ).toBeTruthy();
     expect(
-      await screen.findByText(/契約時のライト・5,500円（税込）・1クレジット/),
+      await screen.findByText(
+        /契約時のライト・月額5,000円（税抜）（税込5,500円）・1クレジット/,
+      ),
     ).toBeTruthy();
     expect(screen.getByText("2026-10-26")).toBeTruthy();
     expect(screen.getByText(webMessages.contractCredits)).toBeTruthy();
@@ -418,7 +420,7 @@ describe("application request routes", () => {
           status: "active" as const,
           anchorDate: "2026-10-26",
           preview: false,
-          plan: { name: "承諾済みプラン", priceInclTax: 5500, credits: 1 },
+          plan: { name: "承諾済みプラン", priceExclTax: 5000, credits: 1 },
           currentPeriod: null,
         },
       });
@@ -426,7 +428,9 @@ describe("application request routes", () => {
     expect(await screen.findByRole("alert")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: webMessages.retry }));
     expect(
-      await screen.findByText(/承諾済みプラン・5,500円（税込）・1クレジット/),
+      await screen.findByText(
+        /承諾済みプラン・月額5,000円（税抜）（税込5,500円）・1クレジット/,
+      ),
     ).toBeTruthy();
     expect(
       screen.getByText(webMessages.contractCurrentPeriodUnavailable),
@@ -828,7 +832,7 @@ describe("application request routes", () => {
       }),
     ).toBeTruthy();
     expect(window.location.pathname).toBe("/me/invoices");
-    expect(apiClient.getInvoices).toHaveBeenCalledOnce();
+    await waitFor(() => expect(apiClient.getInvoices).toHaveBeenCalledOnce());
     expect(apiClient.getMe).not.toHaveBeenCalled();
     expect(apiClient.getContract).not.toHaveBeenCalled();
     expect(apiClient.getCustomerRequests).not.toHaveBeenCalled();

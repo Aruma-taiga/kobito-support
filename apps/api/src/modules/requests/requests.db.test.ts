@@ -124,7 +124,7 @@ async function makeContract(
   const customerId = requireRow(customer.rows[0]).id;
   customerIds.push(customerId);
   const plan = await pool.query<{ id: string }>(
-    "insert into plans(code,name,price_incl_tax,credits,is_custom,valid_from) values($1,'test',5000,2,false,current_date) returning id",
+    "insert into plans(code,name,price_excl_tax,credits,is_custom,valid_from) values($1,'test',5000,2,false,current_date) returning id",
     [`${prefix}-${suffix}`],
   );
   const planId = requireRow(plan.rows[0]).id;
@@ -145,7 +145,7 @@ async function makeContract(
     const startsOn = periodMode === "expired" ? "2026-09-01" : "2026-10-01";
     const endsOn = periodMode === "expired" ? "2026-09-30" : "2026-10-31";
     const period = await pool.query<{ id: string }>(
-      "insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_incl_tax,credits) values($1,1,$2,$3,$4,5000,2) returning id",
+      "insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_excl_tax,credits) values($1,1,$2,$3,$4,5000,2) returning id",
       [contractId, startsOn, endsOn, planId],
     );
     await pool.query(
@@ -340,7 +340,7 @@ describe("request estimate API integration", () => {
         [january.id],
       );
       const february = await pool.query<{ id: string }>(
-        "insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_incl_tax,credits) select contract_id,2,'2026-02-01','2026-02-28',plan_id,5000,4 from billing_periods where id=$1 returning id",
+        "insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_excl_tax,credits) select contract_id,2,'2026-02-01','2026-02-28',plan_id,5000,4 from billing_periods where id=$1 returning id",
         [january.id],
       );
       const februaryId = requireRow(february.rows[0]).id;
@@ -1128,7 +1128,7 @@ describe("request estimate API integration", () => {
       [fixture.periodId],
     );
     const nextPeriod = await pool.query<{ id: string }>(
-      `insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_incl_tax,credits)
+      `insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_excl_tax,credits)
        select contract_id,2,'2026-11-01','2026-11-30',plan_id,5000,5
        from billing_periods where id=$1 returning id`,
       [fixture.periodId],

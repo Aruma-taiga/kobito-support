@@ -111,7 +111,7 @@ async function makeReviewCase(
     plan?: {
       code: string;
       name: string;
-      priceInclTax: number | null;
+      priceExclTax: number | null;
       credits: number | null;
     };
     shownTerms?: Record<string, unknown>;
@@ -129,12 +129,12 @@ async function makeReviewCase(
 
   const plan = options.plan
     ? await pool.query<{ id: string }>(
-        `insert into plans (code, name, price_incl_tax, credits, is_custom, valid_from)
+        `insert into plans (code, name, price_excl_tax, credits, is_custom, valid_from)
          values ($1, $2, $3, $4, $3::integer is null, current_date) returning id`,
         [
           options.plan.code,
           options.plan.name,
-          options.plan.priceInclTax,
+          options.plan.priceExclTax,
           options.plan.credits,
         ],
       )
@@ -159,7 +159,7 @@ async function makeReviewCase(
       JSON.stringify(
         options.shownTerms ?? {
           planName: options.plan?.name ?? "ライト",
-          priceInclTax: options.plan?.priceInclTax ?? 5000,
+          priceExclTax: options.plan?.priceExclTax ?? 5000,
           credits: options.plan?.credits ?? 1,
         },
       ),
@@ -269,7 +269,7 @@ describe("admin application review with PostgreSQL", () => {
           shopName: `${testPrefix}-対象店舗`,
           status: "under_review",
           planName: "ライト",
-          priceInclTax: 5000,
+          priceExclTax: 5000,
         }),
       ],
     });
@@ -285,7 +285,7 @@ describe("admin application review with PostgreSQL", () => {
         id: first.applicationId,
         consentBusinessUse: true,
         consentTerms: true,
-        shownTerms: { priceInclTax: 5000, credits: 1 },
+        shownTerms: { priceExclTax: 5000, credits: 1 },
         reviewResult: null,
         rejectionNote: null,
       },
@@ -304,13 +304,13 @@ describe("admin application review with PostgreSQL", () => {
       plan: {
         code: `review-${randomUUID()}`,
         name: "申込時ライト",
-        priceInclTax: 5000,
+        priceExclTax: 5000,
         credits: 1,
       },
-      shownTerms: { planName: "申込時ライト", priceInclTax: 5000, credits: 1 },
+      shownTerms: { planName: "申込時ライト", priceExclTax: 5000, credits: 1 },
     });
     await pool.query(
-      "update plans set name = '改定後ライト', price_incl_tax = 7000, credits = 2 where id = (select plan_id from applications where id = $1)",
+      "update plans set name = '改定後ライト', price_excl_tax = 7000, credits = 2 where id = (select plan_id from applications where id = $1)",
       [fixture.applicationId],
     );
 
@@ -325,7 +325,7 @@ describe("admin application review with PostgreSQL", () => {
       result.items.find((item) => item.customerId === fixture.customerId),
     ).toMatchObject({
       planName: "申込時ライト",
-      priceInclTax: 5000,
+      priceExclTax: 5000,
       credits: 1,
     });
   });
@@ -335,13 +335,13 @@ describe("admin application review with PostgreSQL", () => {
       plan: {
         code: `review-custom-${randomUUID()}`,
         name: "個別見積り",
-        priceInclTax: null,
+        priceExclTax: null,
         credits: null,
       },
-      shownTerms: { planName: "個別見積り", priceInclTax: null, credits: null },
+      shownTerms: { planName: "個別見積り", priceExclTax: null, credits: null },
     });
     await pool.query(
-      "update plans set price_incl_tax = 7000, credits = 2 where id = (select plan_id from applications where id = $1)",
+      "update plans set price_excl_tax = 7000, credits = 2 where id = (select plan_id from applications where id = $1)",
       [fixture.applicationId],
     );
 
@@ -355,7 +355,7 @@ describe("admin application review with PostgreSQL", () => {
       result.items.find((item) => item.customerId === fixture.customerId),
     ).toMatchObject({
       planName: "個別見積り",
-      priceInclTax: null,
+      priceExclTax: null,
       credits: null,
     });
   });

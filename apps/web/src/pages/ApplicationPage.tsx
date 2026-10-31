@@ -4,6 +4,7 @@ import {
   applicationSubmissionSchema,
   authenticatedApplicationFormSchema,
   authenticatedShopStepSchema,
+  inclYenFor,
   notesStepSchema,
   type PublicConfig,
   type PublicPartner,
@@ -11,7 +12,6 @@ import {
   paymentStepSchema,
   planStepSchema,
   shopStepSchema,
-  splitTax,
   webMessages,
 } from "@kobito/shared";
 import {
@@ -57,23 +57,22 @@ type Draft = {
   consentMarketing: boolean;
 };
 
-function formatMonthlyPrice(priceInclTax: number | null) {
-  if (priceInclTax === null) return null;
-  const tax = splitTax(priceInclTax);
+function formatMonthlyPrice(priceExclTax: number | null) {
+  if (priceExclTax === null) return null;
   return (
     <>
       <span className="choice-price-segment">
-        {webMessages.applicationPlanChoiceNetPrice.replace(
+        {webMessages.applicationPlanChoiceExclPrice.replace(
           "{price}",
-          tax.netYen.toLocaleString("ja-JP"),
+          priceExclTax.toLocaleString("ja-JP"),
         )}
       </span>
-      <span className="choice-price-segment">
-        {webMessages.applicationPlanChoiceGrossPrice.replace(
+      <small className="choice-price-segment">
+        {webMessages.applicationPlanChoiceInclPrice.replace(
           "{price}",
-          tax.grossYen.toLocaleString("ja-JP"),
+          inclYenFor(priceExclTax).toLocaleString("ja-JP"),
         )}
-      </span>
+      </small>
     </>
   );
 }
@@ -696,7 +695,7 @@ export function ApplicationPage({
                       <span className="choice-price">
                         {item.isCustom
                           ? webMessages.applicationCustomPrice
-                          : formatMonthlyPrice(item.priceInclTax)}
+                          : formatMonthlyPrice(item.priceExclTax)}
                       </span>
                       <small>
                         {item.isCustom
@@ -855,17 +854,17 @@ export function ApplicationPage({
                     : webMessages.applicationPlanSummaryFixed
                         .replace("{name}", plan?.name ?? "")
                         .replace(
-                          "{netPrice}",
-                          plan?.priceInclTax === null ||
-                            plan?.priceInclTax === undefined
-                            ? ""
-                            : splitTax(plan.priceInclTax).netYen.toLocaleString(
-                                "ja-JP",
-                              ),
+                          "{exclPrice}",
+                          plan?.priceExclTax?.toLocaleString("ja-JP") ?? "",
                         )
                         .replace(
-                          "{grossPrice}",
-                          plan?.priceInclTax?.toLocaleString("ja-JP") ?? "",
+                          "{inclPrice}",
+                          plan?.priceExclTax === null ||
+                            plan?.priceExclTax === undefined
+                            ? ""
+                            : inclYenFor(plan.priceExclTax).toLocaleString(
+                                "ja-JP",
+                              ),
                         )
                         .replace("{credits}", String(plan?.credits ?? ""))}
                 </dd>
@@ -943,16 +942,16 @@ export function ApplicationPage({
                   <li>
                     {webMessages.applicationExtraCredit
                       .replace(
-                        "{netAmount}",
-                        splitTax(
-                          policy.conditions.extraCreditGrossYen,
-                        ).netYen.toLocaleString("ja-JP"),
-                      )
-                      .replace(
-                        "{grossAmount}",
-                        policy.conditions.extraCreditGrossYen.toLocaleString(
+                        "{exclAmount}",
+                        policy.conditions.extraCreditExclYen.toLocaleString(
                           "ja-JP",
                         ),
+                      )
+                      .replace(
+                        "{inclAmount}",
+                        inclYenFor(
+                          policy.conditions.extraCreditExclYen,
+                        ).toLocaleString("ja-JP"),
                       )}
                   </li>
                 </ul>

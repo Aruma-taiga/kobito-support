@@ -23,6 +23,7 @@ import { MyRequestDetailPage, MyRequestsPage } from "./pages/RequestPages.js";
 import type { AdminApiClient } from "./platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "./platform/api-client.js";
 import { ContactProvider } from "./platform/contact.js";
+import { BrandHeader } from "./ui/index.js";
 
 type PublicConfigState =
   | { status: "loading"; attempt: number }
@@ -83,12 +84,10 @@ export function App({
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <span className="service-name">{serviceName}</span>
-        <a className="topbar-link" href="/apply/shop">
-          {webMessages.applicationTitle}
-        </a>
-      </header>
+      <BrandHeader
+        serviceName={serviceName}
+        right={<a href="/apply/shop">{webMessages.applicationTitle}</a>}
+      />
       {configState.status === "loading" ? (
         <main className="page-main">
           <output className="status-message">

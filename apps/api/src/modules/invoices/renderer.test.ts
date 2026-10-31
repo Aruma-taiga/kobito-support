@@ -10,8 +10,8 @@ const sample: InvoiceDetail = {
   status: "issued" as const,
   issuedOn: "2026-01-31",
   dueOn: "2026-02-07",
-  totalInclTax: totals.grossYen,
-  totalExclTax: totals.netYen,
+  totalInclTax: totals.inclYen,
+  totalExclTax: totals.exclYen,
   taxAmount: totals.taxYen,
   paymentMethod: "bank_transfer" as const,
   preview: true,
@@ -21,7 +21,7 @@ const sample: InvoiceDetail = {
     planId: "00000000-0000-4000-8000-000000000002",
     planCode: "light",
     planName: "ライト",
-    monthlyPriceInclTax: 5000,
+    monthlyPriceExclTax: 5000,
     credits: 1,
   },
   issuer: {
@@ -38,8 +38,8 @@ const sample: InvoiceDetail = {
     {
       description: "<script>bad()</script>",
       quantity: 1,
-      unitPriceInclTax: 5000,
-      amountInclTax: 5000,
+      unitPriceExclTax: 5000,
+      amountExclTax: 5000,
       taxRate: 0.1,
     },
   ],
@@ -56,6 +56,9 @@ describe("invoice HTML renderer", () => {
     expect(html).toContain("登録番号：未設定");
     expect(html).toContain("口座番号：未設定");
     expect(html).toContain("script-src 'none'");
+    expect(html).toContain("小計（税抜）：5,000円");
+    expect(html).toContain("消費税（10%）：500円");
+    expect(html).toContain("ご請求金額（税込）：5,500円");
     expect(() =>
       invoiceHtml({ ...sample, taxAmount: sample.taxAmount + 1 }),
     ).toThrow();

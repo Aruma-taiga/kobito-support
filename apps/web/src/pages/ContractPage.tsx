@@ -1,4 +1,4 @@
-import { contractStatusLabels, webMessages } from "@kobito/shared";
+import { contractStatusLabels, inclYenFor, webMessages } from "@kobito/shared";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuthSession } from "../auth/session.js";
@@ -150,7 +150,13 @@ export function ContractPage({
                         .replace("{name}", contract.plan.name)
                         .replace(
                           "{price}",
-                          contract.plan.priceInclTax.toLocaleString("ja-JP"),
+                          contract.plan.priceExclTax.toLocaleString("ja-JP"),
+                        )
+                        .replace(
+                          "{inclPrice}",
+                          inclYenFor(contract.plan.priceExclTax).toLocaleString(
+                            "ja-JP",
+                          ),
                         )
                         .replace("{credits}", String(contract.plan.credits))
                     : webMessages.contractWaitingPayment}

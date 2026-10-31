@@ -133,7 +133,7 @@ async function makeApplication(
   if (!customerId) throw new Error("Invoice test customer insert failed");
   customerIds.push(customerId);
   const plan = await pool.query<{ id: string }>(
-    `insert into plans (code,name,price_incl_tax,credits,is_custom,valid_from)
+    `insert into plans (code,name,price_excl_tax,credits,is_custom,valid_from)
      values ($1,$2,$3,$4,$5,current_date) returning id`,
     [
       `${prefix}-${suffix}`,
@@ -150,7 +150,7 @@ async function makeApplication(
     planId,
     planCode: options.custom ? "custom" : "light",
     planName: options.custom ? "個別見積り" : "申込時プラン",
-    priceInclTax: options.custom ? null : (options.price ?? 5000),
+    priceExclTax: options.custom ? null : (options.price ?? 5000),
     credits: options.custom ? null : 1,
     paymentMethod: options.paymentMethod ?? "bank_transfer",
   };
@@ -659,13 +659,13 @@ describe("initial invoice approval and customer access", () => {
               authorization: `Bearer ${noMfaToken}`,
               "content-type": "application/json",
             },
-            body: JSON.stringify({ amount: 5432, paidOn: "2026-01-31" }),
+            body: JSON.stringify({ amount: 5975, paidOn: "2026-01-31" }),
           },
         )
       ).status,
     ).toBe(403);
     await pool.query(
-      "update plans set name='後日改定プラン',price_incl_tax=9999,credits=3 where id=(select (issuer_snapshot->'acceptedPlan'->>'planId')::uuid from invoices where id=$1)",
+      "update plans set name='後日改定プラン',price_excl_tax=9999,credits=3 where id=(select (issuer_snapshot->'acceptedPlan'->>'planId')::uuid from invoices where id=$1)",
       [invoiceId],
     );
     const response = await app.request(
@@ -676,21 +676,21 @@ describe("initial invoice approval and customer access", () => {
           authorization: `Bearer ${adminToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ amount: 5432, paidOn: "2026-01-31" }),
+        body: JSON.stringify({ amount: 5975, paidOn: "2026-01-31" }),
       },
     );
     expect(response.status).toBe(200);
     const confirmation = await response.json();
     expect(confirmation).toMatchObject({
       invoiceId,
-      amount: 5432,
+      amount: 5975,
       paidOn: "2026-01-31",
       anchorDate: "2026-01-31",
       period: {
         seq: 1,
         startsOn: "2026-01-31",
         endsOn: "2026-02-27",
-        priceInclTax: 5432,
+        priceExclTax: 5432,
         credits: 1,
       },
       preview: false,
@@ -725,7 +725,7 @@ describe("initial invoice approval and customer access", () => {
           authorization: `Bearer ${adminToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({ amount: 5432, paidOn: "2026-01-31" }),
+        body: JSON.stringify({ amount: 5975, paidOn: "2026-01-31" }),
       },
     );
     expect(retry.status).toBe(200);
@@ -734,11 +734,11 @@ describe("initial invoice approval and customer access", () => {
       replayed: true,
     });
     expect(
-      (await confirm(app, invoiceId, { amount: 5433, paidOn: "2026-01-31" }))
+      (await confirm(app, invoiceId, { amount: 5976, paidOn: "2026-01-31" }))
         .status,
     ).toBe(409);
     expect(
-      (await confirm(app, invoiceId, { amount: 5432, paidOn: "2026-01-30" }))
+      (await confirm(app, invoiceId, { amount: 5975, paidOn: "2026-01-30" }))
         .status,
     ).toBe(409);
     const contract = await app.request("/api/v1/me/contract", {
@@ -750,7 +750,7 @@ describe("initial invoice approval and customer access", () => {
         status: "active",
         anchorDate: "2026-01-31",
         preview: false,
-        plan: { name: "申込時プラン", priceInclTax: 5432, credits: 1 },
+        plan: { name: "申込時プラン", priceExclTax: 5432, credits: 1 },
         currentPeriod: {
           seq: 1,
           startsOn: "2026-01-31",
@@ -785,7 +785,7 @@ describe("initial invoice approval and customer access", () => {
       invoiceId,
     ]);
     expect(
-      (await confirm(app, invoiceId, { amount: 5432, paidOn: "2026-01-31" }))
+      (await confirm(app, invoiceId, { amount: 5975, paidOn: "2026-01-31" }))
         .status,
     ).toBe(409);
     await pool.query(
@@ -796,7 +796,7 @@ describe("initial invoice approval and customer access", () => {
       invoiceId,
     ]);
     expect(
-      (await confirm(app, invoiceId, { amount: 5432, paidOn: "2026-01-31" }))
+      (await confirm(app, invoiceId, { amount: 5975, paidOn: "2026-01-31" }))
         .status,
     ).toBe(409);
   });
@@ -812,7 +812,7 @@ describe("initial invoice approval and customer access", () => {
       new Date("2024-02-28T15:30:00.000Z"),
     );
     const response = await confirm(confirmationApp, invoiceId, {
-      amount: 5000,
+      amount: 5500,
       paidOn: "2024-02-28",
     });
     expect(await response.json()).toMatchObject({
@@ -829,15 +829,15 @@ describe("initial invoice approval and customer access", () => {
     const invoiceId = ((await issued.json()) as { invoice: { id: string } })
       .invoice.id;
     expect(
-      (await confirm(app, invoiceId, { amount: 4999, paidOn: "2026-01-31" }))
+      (await confirm(app, invoiceId, { amount: 5499, paidOn: "2026-01-31" }))
         .status,
     ).toBe(422);
     expect(
-      (await confirm(app, invoiceId, { amount: 5000, paidOn: "2026-02-08" }))
+      (await confirm(app, invoiceId, { amount: 5500, paidOn: "2026-02-08" }))
         .status,
     ).toBe(422);
     expect(
-      (await confirm(app, invoiceId, { amount: 5000, paidOn: "2026-02-01" }))
+      (await confirm(app, invoiceId, { amount: 5500, paidOn: "2026-02-01" }))
         .status,
     ).toBe(422);
     const beforeAcceptedLatePayment = await pool.query<{
@@ -858,7 +858,7 @@ describe("initial invoice approval and customer access", () => {
       fixture.contractId,
     ]);
     expect(
-      (await confirm(app, invoiceId, { amount: 5000, paidOn: "2026-01-31" }))
+      (await confirm(app, invoiceId, { amount: 5500, paidOn: "2026-01-31" }))
         .status,
     ).toBe(409);
     await pool.query(
@@ -881,7 +881,7 @@ describe("initial invoice approval and customer access", () => {
       }),
     );
     expect(
-      (await confirm(app, invoiceId, { amount: 5000, paidOn: "2026-01-30" }))
+      (await confirm(app, invoiceId, { amount: 5500, paidOn: "2026-01-30" }))
         .status,
     ).toBe(200);
   });
@@ -893,8 +893,8 @@ describe("initial invoice approval and customer access", () => {
     const invoiceId = ((await issued.json()) as { invoice: { id: string } })
       .invoice.id;
     const responses = await Promise.all([
-      confirm(app, invoiceId, { amount: 5000, paidOn: "2026-01-31" }),
-      confirm(app, invoiceId, { amount: 5000, paidOn: "2026-01-31" }),
+      confirm(app, invoiceId, { amount: 5500, paidOn: "2026-01-31" }),
+      confirm(app, invoiceId, { amount: 5500, paidOn: "2026-01-31" }),
     ]);
     expect(responses.map((response) => response.status)).toEqual([200, 200]);
     const results = (await Promise.all(
@@ -951,7 +951,7 @@ describe("initial invoice approval and customer access", () => {
     expect(
       (
         await confirm(localApp, invoiceId, {
-          amount: 5000,
+          amount: 5500,
           paidOn: "2026-01-31",
         })
       ).status,
@@ -959,7 +959,7 @@ describe("initial invoice approval and customer access", () => {
     expect(
       (
         await confirm(makeApp(), invoiceId, {
-          amount: 5000,
+          amount: 5500,
           paidOn: "2026-01-31",
           previewAcknowledged: true,
         })
@@ -969,14 +969,14 @@ describe("initial invoice approval and customer access", () => {
     expect(
       (
         await confirm(productionApp, invoiceId, {
-          amount: 5000,
+          amount: 5500,
           paidOn: "2026-01-31",
           previewAcknowledged: true,
         })
       ).status,
     ).toBe(409);
     const confirmed = await confirm(localApp, invoiceId, {
-      amount: 5000,
+      amount: 5500,
       paidOn: "2026-01-31",
       previewAcknowledged: true,
     });
@@ -1010,7 +1010,7 @@ describe("initial invoice approval and customer access", () => {
       `create trigger ${trigger} before insert on audit_logs for each row execute function ${fn}()`,
     );
     const response = await confirm(app, invoiceId, {
-      amount: 5000,
+      amount: 5500,
       paidOn: "2026-01-31",
     });
     await pool.query(`drop trigger ${trigger} on audit_logs`);
@@ -1042,22 +1042,22 @@ describe("initial invoice approval and customer access", () => {
     });
   });
 
-  it("issues the new fixed gross price and keeps an older accepted 5000-yen invoice frozen", async () => {
+  it("issues the current tax-exclusive price and keeps an older invoice frozen", async () => {
     const oldOffer = await makeApplication({ price: 5000 });
-    const currentOffer = await makeApplication({ price: 5500 });
+    const currentOffer = await makeApplication({ price: 10000 });
     const app = makeApp();
 
     const oldApproval = approveApplicationResponseSchema.parse(
       await (await approve(app, oldOffer.applicationId)).json(),
     );
     expect(oldApproval.invoice).toMatchObject({
-      totalInclTax: 5000,
-      totalExclTax: 4546,
-      taxAmount: 454,
+      totalExclTax: 5000,
+      taxAmount: 500,
+      totalInclTax: 5500,
     });
 
     await pool.query(
-      "update plans set price_incl_tax=5500 where id=(select plan_id from applications where id=$1)",
+      "update plans set price_excl_tax=10000 where id=(select plan_id from applications where id=$1)",
       [oldOffer.applicationId],
     );
 
@@ -1065,9 +1065,9 @@ describe("initial invoice approval and customer access", () => {
       await (await approve(app, currentOffer.applicationId)).json(),
     );
     expect(currentApproval.invoice).toMatchObject({
-      totalInclTax: 5500,
-      totalExclTax: 5000,
-      taxAmount: 500,
+      totalExclTax: 10000,
+      taxAmount: 1000,
+      totalInclTax: 11000,
     });
     const currentInvoiceId = currentApproval.invoice?.id;
     const oldInvoiceId = oldApproval.invoice?.id;
@@ -1083,11 +1083,11 @@ describe("initial invoice approval and customer access", () => {
       await currentDetailResponse.json(),
     );
     expect(currentDetail).toMatchObject({
-      totalInclTax: 5500,
-      totalExclTax: 5000,
-      taxAmount: 500,
-      acceptedPlan: { monthlyPriceInclTax: 5500 },
-      lines: [{ unitPriceInclTax: 5500, amountInclTax: 5500 }],
+      totalExclTax: 10000,
+      taxAmount: 1000,
+      totalInclTax: 11000,
+      acceptedPlan: { monthlyPriceExclTax: 10000 },
+      lines: [{ unitPriceExclTax: 10000, amountExclTax: 10000 }],
     });
 
     const oldDetailResponse = await app.request(
@@ -1096,18 +1096,37 @@ describe("initial invoice approval and customer access", () => {
     );
     const oldDetail = invoiceDetailSchema.parse(await oldDetailResponse.json());
     expect(oldDetail).toMatchObject({
-      totalInclTax: 5000,
-      totalExclTax: 4546,
-      taxAmount: 454,
-      acceptedPlan: { monthlyPriceInclTax: 5000 },
-      lines: [{ unitPriceInclTax: 5000, amountInclTax: 5000 }],
+      totalExclTax: 5000,
+      taxAmount: 500,
+      totalInclTax: 5500,
+      acceptedPlan: { monthlyPriceExclTax: 5000 },
+      lines: [{ unitPriceExclTax: 5000, amountExclTax: 5000 }],
     });
+  });
+
+  it("rounds the invoice tax down once and enforces total_incl_tax = total_excl_tax + tax_amount", async () => {
+    const fixture = await makeApplication({ price: 5432 });
+    const app = makeApp();
+    const approval = approveApplicationResponseSchema.parse(
+      await (await approve(app, fixture.applicationId)).json(),
+    );
+    expect(approval.invoice).toMatchObject({
+      totalExclTax: 5432,
+      taxAmount: 543,
+      totalInclTax: 5975,
+    });
+    await expect(
+      pool.query(
+        "update invoices set total_incl_tax = total_incl_tax + 1 where id=$1",
+        [approval.invoice?.id],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
   });
 
   it("creates a frozen, dated bank-transfer invoice from the application offer and replays it without re-rendering", async () => {
     const fixture = await makeApplication({ price: 5432 });
     await pool.query(
-      "update plans set price_incl_tax=9999,name='後日変更' where id=(select plan_id from applications where id=$1)",
+      "update plans set price_excl_tax=9999,name='後日変更' where id=(select plan_id from applications where id=$1)",
       [fixture.applicationId],
     );
     const app = makeApp();
@@ -1126,9 +1145,9 @@ describe("initial invoice approval and customer access", () => {
       };
     };
     expect(body.invoice).toMatchObject({
-      totalInclTax: 5432,
-      totalExclTax: 4939,
-      taxAmount: 493,
+      totalInclTax: 5975,
+      totalExclTax: 5432,
+      taxAmount: 543,
       issuedOn: "2026-01-31",
       dueOn: "2026-02-07",
       preview: false,
@@ -1183,7 +1202,7 @@ describe("initial invoice approval and customer access", () => {
       issuer: { companyName: "テスト発行会社" },
       acceptedPlan: {
         planName: "申込時プラン",
-        monthlyPriceInclTax: 5432,
+        monthlyPriceExclTax: 5432,
         credits: 1,
       },
     });
@@ -1208,7 +1227,7 @@ describe("initial invoice approval and customer access", () => {
     );
     expect(await adminDetail.json()).toMatchObject({
       invoiceNo: body.invoice.invoiceNo,
-      acceptedPlan: { monthlyPriceInclTax: 5432 },
+      acceptedPlan: { monthlyPriceExclTax: 5432 },
     });
     const adminPdf = await app.request(
       `/api/v1/admin/invoices/${body.invoice.id}/pdf`,
@@ -1402,7 +1421,7 @@ describe("initial invoice approval and customer access", () => {
   it("rejects an incomplete fixed-plan offer instead of reclassifying it as a custom quote", async () => {
     const fixture = await makeApplication();
     await pool.query(
-      "update applications set shown_terms=jsonb_set(shown_terms,'{priceInclTax}','null'::jsonb) where id=$1",
+      "update applications set shown_terms=jsonb_set(shown_terms,'{priceExclTax}','null'::jsonb) where id=$1",
       [fixture.applicationId],
     );
     expect((await approve(makeApp(), fixture.applicationId)).status).toBe(409);

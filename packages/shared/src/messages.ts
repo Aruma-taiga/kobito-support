@@ -266,11 +266,11 @@ export const webMessages = {
   applicationPaymentDescription:
     "お支払い方法を選択してください。今ご利用いただける方法を表示します。",
   applicationPlanPriceHint:
-    "月額料金は税抜金額と税込金額を表示しています。申込内容の税込金額が契約時の料金として記録されます。",
-  applicationPlanChoiceNetPrice: "月額{price}円（税抜）",
-  applicationPlanChoiceGrossPrice: "{price}円（税込）",
+    "月額料金は税抜金額を基準に表示し、消費税を含む税込金額を併記しています。申込内容の税抜金額が契約時の料金として記録されます。",
+  applicationPlanChoiceExclPrice: "月額{price}円（税抜）",
+  applicationPlanChoiceInclPrice: "{price}円（税込）",
   applicationPlanSummaryFixed:
-    "{name}：月額{netPrice}円（税抜）・{grossPrice}円（税込）、毎月{credits}クレジット",
+    "{name}：月額{exclPrice}円（税抜）（{inclPrice}円（税込））、毎月{credits}クレジット",
   applicationCustomDescription:
     "個別の条件はお申し込みの審査後にご案内します。",
   applicationCustomPrice: "お見積り",
@@ -296,7 +296,7 @@ export const webMessages = {
   applicationCancelPeriodEnd:
     "解約は契約期間の末日に適用され、日割り計算はありません。",
   applicationExtraCredit:
-    "追加クレジットは1C {netAmount}円（税抜）・{grossAmount}円（税込）です。",
+    "追加クレジットは1C {exclAmount}円（税抜）（{inclAmount}円（税込））です。",
   applicationReceiptTitle: "お申し込みを受け付けました",
   applicationReceiptDescription: "入力内容を確認し、審査を進めます。",
   applicationReceiptReview:
@@ -385,7 +385,7 @@ export const webMessages = {
   adminIssuerSettingsAccountHolder: "口座名義",
   issuerSettingsControlCharacterError: "制御文字は使用できません。",
   adminQueuePlanSummaryFixed:
-    "{name}：月額{price}円（税込）、毎月{credits}クレジット",
+    "{name}：月額{price}円（税抜）（税込{inclPrice}円）、毎月{credits}クレジット",
   adminConsentGiven: "同意あり",
   adminConsentNotGiven: "同意なし",
   adminConsentNotApplicable: "対象外",
@@ -448,12 +448,12 @@ export const webMessages = {
   invoiceLinesHeading: "請求内容",
   invoiceLineDescription: "内容",
   invoiceLineQuantity: "数量",
-  invoiceLineUnitPrice: "単価（税込）",
-  invoiceLineAmount: "金額（税込）",
+  invoiceLineUnitPrice: "単価（税抜）",
+  invoiceLineAmount: "金額（税抜）",
   invoiceTaxRate: "税率",
-  invoiceTotalExclTax: "税抜金額",
-  invoiceTaxAmount: "消費税",
-  invoiceTotalInclTax: "合計（税込）",
+  invoiceTotalExclTax: "小計（税抜）",
+  invoiceTaxAmount: "消費税（10%）",
+  invoiceTotalInclTax: "ご請求金額（税込）",
   invoiceBankHeading: "銀行振込先",
   invoiceBankName: "銀行・名義",
   invoiceBankBranch: "支店",
@@ -469,7 +469,7 @@ export const webMessages = {
   invoicePlanMonthlyPrice: "月額料金（税込）",
   invoicePlanCredits: "月間クレジット",
   invoiceAcceptedPlan: "申込時に合意したプラン",
-  invoiceAcceptedMonthlyPrice: "申込時の月額料金（税込）",
+  invoiceAcceptedMonthlyPrice: "申込時の月額料金（税抜）",
   invoiceAcceptedCredits: "申込時の月間クレジット",
   bankTransferTitle: "銀行振込の入金確認",
   bankTransferIntro:
@@ -479,7 +479,7 @@ export const webMessages = {
   bankTransferEmpty: "入金待ちの請求書はありません。",
   bankTransferCustomer: "お店",
   bankTransferInvoice: "請求書",
-  bankTransferAmount: "請求金額",
+  bankTransferAmount: "請求金額（税込）",
   bankTransferDue: "支払期限",
   bankTransferDate: "通帳で確認した入金日",
   bankTransferPreviewWarning: "開発用データです。実際の入金ではありません。",
@@ -501,7 +501,8 @@ export const webMessages = {
     "請求の状態が変わっています。一覧を更新して確認してください。",
   bankTransferError:
     "入金を記録できませんでした。入力を確認して再試行してください。",
-  bankTransferAmountInvalid: "請求金額と一致する正の整数を入力してください。",
+  bankTransferAmountInvalid:
+    "税込の請求金額と一致する正の整数を入力してください。",
   bankTransferDateInvalid:
     "入金日を確認してください。発行日から支払期限までの日付を入力できます。",
   bankTransferAckRequired: "開発用データの記録には確認チェックが必要です。",
@@ -514,7 +515,8 @@ export const webMessages = {
   contractPeriod: "現在の契約期間",
   contractDate: "契約日",
   contractPlan: "ご契約プラン",
-  contractPlanSummary: "{name}・{price}円（税込）・{credits}クレジット",
+  contractPlanSummary:
+    "{name}・月額{price}円（税抜）（税込{inclPrice}円）・{credits}クレジット",
   contractCredits: "今期の残りクレジット",
   contractNoCredits: "入金確認後にクレジットをご利用いただけます。",
   contractCurrentPeriodUnavailable: "現在の利用期間を確認できません。",
