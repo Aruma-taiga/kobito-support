@@ -886,14 +886,18 @@ describe("admin MFA and review UI", () => {
     expect(apiClient.getCustomerDetail).toHaveBeenCalledWith(customerId);
   });
 
-  it("routes /admin to the protected review queue", async () => {
+  it("routes /admin to the protected 今日やること page", async () => {
     const { apiClient } = setup({
       initialPath: "/admin",
       signedIn: true,
     });
-    expect(await screen.findByText(queueItem.shopName)).toBeTruthy();
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: webMessages.adminTodayTitle,
+      }),
+    ).toBeTruthy();
     expect(apiClient.getSession).toHaveBeenCalledOnce();
-    expect(apiClient.getApplications).toHaveBeenCalledOnce();
   });
 
   it("lets an MFA-authorized admin edit issuer settings and explains readiness and invoice snapshots", async () => {

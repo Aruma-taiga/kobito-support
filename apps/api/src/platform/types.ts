@@ -31,6 +31,8 @@ export class ApiError extends Error {
       | "request_conflict"
       | "estimate_conflict"
       | "insufficient_credits"
+      | "plan_quote_conflict"
+      | "plan_quote_expired"
       | "settings_revision_conflict"
       | "conflict"
       | "service_unavailable"

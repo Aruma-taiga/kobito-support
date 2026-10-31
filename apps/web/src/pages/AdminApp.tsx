@@ -9,11 +9,13 @@ import type { AdminApiClient } from "../platform/admin-api-client.js";
 import { AdminCustomerPage, AdminQueuePage } from "./AdminCustomerPages.js";
 import { AdminLayout } from "./AdminLayout.js";
 import { AdminLoginPage } from "./AdminLoginPage.js";
+import { AdminPlanQuotePage } from "./AdminPlanQuotePage.js";
 import {
   AdminRequestCreatePage,
   AdminRequestDetailPage,
   AdminRequestListPage,
 } from "./AdminRequestPages.js";
+import { AdminTodayPage } from "./AdminTodayPage.js";
 import { AdminBankTransferPage } from "./BankTransferPage.js";
 import {
   AdminInvoiceDetailPage,
@@ -49,7 +51,7 @@ export function AdminApp({
             />
           }
         >
-          <Route index element={<Navigate to="/admin/customers" replace />} />
+          <Route index element={<AdminTodayPage apiClient={apiClient} />} />
           <Route
             path="customers"
             element={<AdminQueuePage apiClient={apiClient} />}
@@ -57,6 +59,10 @@ export function AdminApp({
           <Route
             path="customers/:id"
             element={<AdminCustomerPage apiClient={apiClient} />}
+          />
+          <Route
+            path="customers/:id/plan-quote"
+            element={<AdminPlanQuotePage apiClient={apiClient} />}
           />
           <Route
             path="invoices"

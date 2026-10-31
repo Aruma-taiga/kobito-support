@@ -152,3 +152,21 @@ export type ApproveApplicationResponse = z.infer<
 >;
 
 export const approveApplicationRequestSchema = z.object({}).strict();
+
+/** 「期限が近い請求」にする基準：支払期限まで、この日数以内（期限切れも含む）。 */
+export const adminDueSoonDays = 7;
+
+function dayNumber(date: string): number {
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) throw new RangeError("Invalid calendar date");
+  return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
+}
+
+/** 期限までの日数（今日が期限なら0、過ぎていれば負）。 */
+export function daysUntil(dueOn: string, today: string): number {
+  return dayNumber(dueOn) - dayNumber(today);
+}
+
+export function isDueSoon(dueOn: string, today: string): boolean {
+  return daysUntil(dueOn, today) <= adminDueSoonDays;
+}

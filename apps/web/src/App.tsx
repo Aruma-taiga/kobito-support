@@ -19,12 +19,12 @@ import {
   CustomerHomePage,
   CustomerInvoiceDetailPage,
   CustomerInvoicesPage,
-  CustomerPlanQuoteUnavailablePage,
   CustomerWaitingPage,
   CustomerWelcomePage,
 } from "./pages/CustomerAccessPages.js";
 import { LiffPage } from "./pages/LiffPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
+import { CustomerPlanQuotePage } from "./pages/PlanQuotePage.js";
 import { MyRequestDetailPage, MyRequestsPage } from "./pages/RequestPages.js";
 import type { AdminApiClient } from "./platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "./platform/api-client.js";
@@ -202,7 +202,7 @@ export function App({
                     />
                     <Route
                       path="/me/plan-quote"
-                      element={<CustomerPlanQuoteUnavailablePage />}
+                      element={<CustomerPlanQuotePage apiClient={apiClient} />}
                     />
                     <Route
                       path="/me/requests"

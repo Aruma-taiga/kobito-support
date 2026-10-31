@@ -231,14 +231,24 @@ describe("admin shell (mock a03〜a08)", () => {
     const links = within(nav)
       .getAllByRole("link")
       .map((link) => link.textContent);
-    expect(links).toEqual(["顧客", "依頼", "入金確認", "請求書", "設定"]);
+    expect(links).toEqual([
+      "今日やること",
+      "顧客",
+      "依頼",
+      "入金確認",
+      "請求書",
+      "設定",
+    ]);
     const current = within(nav).getByRole("link", { name: "顧客" });
     expect(current.getAttribute("aria-current")).toBe("page");
     expect(screen.getByText("管理画面")).toBeTruthy();
-    // 新規APIが要る画面や、LINE・コンビニの入口は出さない
+    // LINE・コンビニの入口や、まだ無い画面は出さない
     expect(
-      within(nav).queryByText(/今日やること|紹介|LINE|コンビニ/),
+      within(nav)
+        .getByRole("link", { name: "今日やること" })
+        .getAttribute("aria-current"),
     ).toBeNull();
+    expect(within(nav).queryByText(/紹介|LINE|コンビニ/)).toBeNull();
     expect(
       within(nav).getByRole("button", { name: "ログアウト" }),
     ).toBeTruthy();

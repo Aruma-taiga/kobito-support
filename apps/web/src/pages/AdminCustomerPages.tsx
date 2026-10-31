@@ -552,6 +552,16 @@ export function AdminCustomerPage({
             >
               {webMessages.adminRequestsNew}
             </Link>
+          ) : data.contract.status === "quoting" ||
+            data.contract.status === "awaiting_quote_approval" ? (
+            <Link
+              className={buttonClass("primary", { size: "sm" })}
+              to={`/admin/customers/${encodeURIComponent(data.customer.id)}/plan-quote`}
+            >
+              {data.contract.status === "quoting"
+                ? webMessages.adminPlanQuoteCreate
+                : webMessages.adminPlanQuoteTitle}
+            </Link>
           ) : null
         }
       />
