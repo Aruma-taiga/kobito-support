@@ -1,6 +1,12 @@
 import { webMessages } from "@kobito/shared";
 import { useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
 import type { AdminAuthClient } from "./auth/admin-session.js";
 import type { AuthClient } from "./auth/session.js";
 import { AuthProvider, RequireAuth } from "./auth/session.js";
@@ -29,6 +35,18 @@ type PublicConfigState =
   | { status: "loading"; attempt: number }
   | { status: "ready"; serviceName: string; contactEmail: string | null }
   | { status: "error" };
+
+/** 管理画面は自分のメニューとロゴを持つので、お客様向けの上部ヘッダーは出さない。 */
+function AppHeader({ serviceName }: { serviceName: string }) {
+  const { pathname } = useLocation();
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) return null;
+  return (
+    <BrandHeader
+      serviceName={serviceName}
+      right={<a href="/apply/shop">{webMessages.applicationTitle}</a>}
+    />
+  );
+}
 
 export function App({
   apiClient,
@@ -83,35 +101,32 @@ export function App({
   }, [serviceName]);
 
   return (
-    <div className="app-shell">
-      <BrandHeader
-        serviceName={serviceName}
-        right={<a href="/apply/shop">{webMessages.applicationTitle}</a>}
-      />
-      {configState.status === "loading" ? (
-        <Page>
-          <output className="ui-lead">
-            {webMessages.serviceConfigLoading}
-          </output>
-        </Page>
-      ) : null}
-      {configState.status === "error" ? (
-        <Page>
-          <Notice tone="warn">{webMessages.serviceConfigError}</Notice>
-          <Button
-            variant="ghost"
-            onClick={() => setAttempt((value) => value + 1)}
+    <BrowserRouter>
+      <div className="app-shell">
+        <AppHeader serviceName={serviceName} />
+        {configState.status === "loading" ? (
+          <Page>
+            <output className="ui-lead">
+              {webMessages.serviceConfigLoading}
+            </output>
+          </Page>
+        ) : null}
+        {configState.status === "error" ? (
+          <Page>
+            <Notice tone="warn">{webMessages.serviceConfigError}</Notice>
+            <Button
+              variant="ghost"
+              onClick={() => setAttempt((value) => value + 1)}
+            >
+              {webMessages.retry}
+            </Button>
+          </Page>
+        ) : null}
+        {configState.status === "ready" ? (
+          <ContactProvider
+            value={{ lineEnabled, contactEmail: configState.contactEmail }}
           >
-            {webMessages.retry}
-          </Button>
-        </Page>
-      ) : null}
-      {configState.status === "ready" ? (
-        <ContactProvider
-          value={{ lineEnabled, contactEmail: configState.contactEmail }}
-        >
-          <AuthProvider client={authClient}>
-            <BrowserRouter>
+            <AuthProvider client={authClient}>
               <Routes>
                 <Route path="/" element={<Navigate to="/me" replace />} />
                 <Route
@@ -152,6 +167,7 @@ export function App({
                     <AdminApp
                       apiClient={adminApiClient}
                       authClient={adminAuthClient}
+                      serviceName={serviceName}
                     />
                   }
                 />
@@ -214,10 +230,10 @@ export function App({
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
-            </BrowserRouter>
-          </AuthProvider>
-        </ContactProvider>
-      ) : null}
-    </div>
+            </AuthProvider>
+          </ContactProvider>
+        ) : null}
+      </div>
+    </BrowserRouter>
   );
 }

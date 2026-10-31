@@ -8,11 +8,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet } from "react-router-dom";
 import {
   type AdminApiClient,
   AdminApiError,
 } from "../platform/admin-api-client.js";
+import { AdminAuthFrame, AdminBrand, Button, Notice } from "../ui/index.js";
 
 export type AdminFactorId = "phone" | "totp";
 
@@ -139,7 +140,14 @@ export function useAdminAuth(): AdminAuthContextValue {
   return context;
 }
 
-export function RequireAdminAuth() {
+export function RequireAdminAuth({
+  serviceName = webMessages.genericServiceName,
+  layout,
+}: {
+  serviceName?: string;
+  /** 認証済みの本文を包む骨組み（左メニューなど） */
+  layout?: (content: ReactNode) => ReactNode;
+}) {
   const { state } = useAdminAuth();
   if (state.status === "loading" || state.status === "verifying") {
     return (
@@ -151,34 +159,25 @@ export function RequireAdminAuth() {
   }
   if (state.status === "denied") {
     return (
-      <main className="page-main">
-        <section
-          className="card admin-card"
-          aria-labelledby="admin-denied-title"
-        >
-          <h1 id="admin-denied-title">{webMessages.adminLoginTitle}</h1>
-          <p className="error-message" role="alert">
-            {state.message}
-          </p>
-          <AdminLogoutButton />
-        </section>
-      </main>
+      <AdminAuthFrame
+        brand={<AdminBrand serviceName={serviceName} />}
+        badge={webMessages.adminBadge}
+      >
+        <h1 id="admin-denied-title">{webMessages.adminLoginTitle}</h1>
+        <Notice tone="warn">{state.message}</Notice>
+        <AdminLogoutButton />
+      </AdminAuthFrame>
     );
   }
-  return (
-    <div className="admin-authorized-layout">
-      <header className="admin-toolbar">
-        <Link to="/admin/bank-transfers">{webMessages.bankTransferTitle}</Link>
-        <Link to="/admin/invoices">{webMessages.invoiceListTitle}</Link>
-        <Link to="/admin/requests">{webMessages.adminRequestsTitle}</Link>
-        <AdminLogoutButton />
-      </header>
-      <Outlet />
-    </div>
-  );
+  const content = <Outlet />;
+  return <>{layout ? layout(content) : content}</>;
 }
 
-export function AdminLogoutButton() {
+export function AdminLogoutButton({
+  variant = "button",
+}: {
+  variant?: "button" | "nav";
+}) {
   const { signOut } = useAdminAuth();
   const [error, setError] = useState(false);
 
@@ -193,18 +192,20 @@ export function AdminLogoutButton() {
 
   return (
     <>
-      {error ? (
-        <p className="error-message" role="alert">
-          {webMessages.logoutError}
-        </p>
-      ) : null}
-      <button
-        className="secondary-button"
-        onClick={() => void logout()}
-        type="button"
-      >
-        {webMessages.adminLogout}
-      </button>
+      {error ? <Notice tone="warn">{webMessages.logoutError}</Notice> : null}
+      {variant === "nav" ? (
+        <button
+          className="ui-admin__link ui-admin__out"
+          onClick={() => void logout()}
+          type="button"
+        >
+          {webMessages.adminLogout}
+        </button>
+      ) : (
+        <Button variant="ghost" size="sm" onClick={() => void logout()}>
+          {webMessages.adminLogout}
+        </Button>
+      )}
     </>
   );
 }

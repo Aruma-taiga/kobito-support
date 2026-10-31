@@ -14,7 +14,7 @@ function cx(...names: Array<string | false | undefined>): string {
 
 /* ---------- Button ---------- */
 type ButtonBase = {
-  variant?: "primary" | "ghost" | "dark";
+  variant?: "primary" | "ghost" | "dark" | "danger";
   size?: "md" | "sm";
   fullWidth?: boolean;
   className?: string;
@@ -34,7 +34,7 @@ export type ButtonProps = ButtonBase &
 
 /** ルーターのリンクなどにボタンの見た目を付けるときのクラス名。 */
 export function buttonClass(
-  variant: "primary" | "ghost" | "dark" = "primary",
+  variant: "primary" | "ghost" | "dark" | "danger" = "primary",
   options: {
     size?: "md" | "sm" | undefined;
     fullWidth?: boolean | undefined;
@@ -121,16 +121,19 @@ export type NoticeTone = "info" | "yellow" | "warn";
 export function Notice({
   tone = "info",
   title,
+  live,
   children,
 }: {
   tone?: NoticeTone;
   title?: ReactNode;
+  /** 操作の結果を知らせる表示。読み上げ対象（status）にする */
+  live?: boolean;
   children?: ReactNode;
 }) {
   return (
     <div
       className={cx("ui-notice", `ui-notice--${tone}`)}
-      role={tone === "warn" ? "alert" : undefined}
+      role={tone === "warn" ? "alert" : live ? "status" : undefined}
     >
       {title ? <b className="ui-notice__title">{title}</b> : null}
       {children}
@@ -256,10 +259,13 @@ export function Table({
   caption,
   columns,
   rows,
+  highlightRows,
 }: {
   caption: string;
   columns: TableColumn[];
   rows: Array<Record<string, ReactNode>>;
+  /** 操作が必要な行（審査待ちなど）を黄色にする。0 始まりの行番号。 */
+  highlightRows?: ReadonlyArray<number>;
 }) {
   return (
     <div className="ui-table-wrap">
@@ -279,8 +285,11 @@ export function Table({
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: 表示専用の行
-            <tr key={index}>
+            <tr
+              // biome-ignore lint/suspicious/noArrayIndexKey: 表示専用の行
+              key={index}
+              className={cx(highlightRows?.includes(index) && "ui-table__hl")}
+            >
               {columns.map((column) => (
                 <td
                   key={column.key}
@@ -694,5 +703,130 @@ export function TabBarItem({
       <i aria-hidden="true">{icon}</i>
       {children}
     </Component>
+  );
+}
+
+/* ---------- 管理画面の骨組み ---------- */
+/** 左の濃いメニュー＋右の本文。狭幅ではメニューが上の横並びになる。 */
+export function AdminShell({
+  brand,
+  subtitle,
+  navLabel,
+  nav,
+  children,
+}: {
+  brand: ReactNode;
+  subtitle?: ReactNode;
+  navLabel: string;
+  nav: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="ui-admin">
+      <div className="ui-admin__side">
+        <div className="ui-admin__brand">{brand}</div>
+        {subtitle ? <div className="ui-admin__sub">{subtitle}</div> : null}
+        <nav className="ui-admin__nav" aria-label={navLabel}>
+          {nav}
+        </nav>
+      </div>
+      <main className="ui-admin__main">{children}</main>
+    </div>
+  );
+}
+
+/** 左メニューの1項目。component にルーターの NavLink などを渡せる。 */
+export function AdminNavItem({
+  component: Component = "a",
+  badge,
+  children,
+  ...rest
+}: {
+  component?: ElementType;
+  badge?: ReactNode;
+  children: ReactNode;
+} & Record<string, unknown>) {
+  return (
+    <Component {...rest} className="ui-admin__link">
+      {children}
+      {badge ? <span className="ui-admin__count">{badge}</span> : null}
+    </Component>
+  );
+}
+
+/** 画面の見出し行。crumb は「顧客 ›」のような戻り先、actions は右端のボタン。 */
+export function AdminHeading({
+  id,
+  crumb,
+  title,
+  badge,
+  actions,
+}: {
+  id?: string;
+  crumb?: ReactNode;
+  title: ReactNode;
+  badge?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="ui-admin__top">
+      <div>
+        {crumb ? <div className="ui-admin__crumb">{crumb}</div> : null}
+        <h1 className="ui-admin__title" id={id}>
+          {title}
+          {badge ? <span className="ui-admin__badge">{badge}</span> : null}
+        </h1>
+      </div>
+      {actions ? <div className="ui-admin__actions">{actions}</div> : null}
+    </div>
+  );
+}
+
+/** 本文を左右2列に並べる（狭幅では1列）。 */
+export function AdminColumns({ children }: { children: ReactNode }) {
+  return <div className="ui-admin__cols">{children}</div>;
+}
+
+/** 中央に置く小さなカード（ログインなど）。ロゴと「管理」の印つき。 */
+export function AdminAuthFrame({
+  brand,
+  badge,
+  children,
+}: {
+  brand: ReactNode;
+  badge: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="ui-admin-auth">
+      <div className="ui-admin-auth__card">
+        <div className="ui-admin-auth__brand">
+          {brand}
+          <Badge tone="dark">{badge}</Badge>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** 行の並び（操作ボタンなど）。 */
+export function ActionBar({ children }: { children: ReactNode }) {
+  return <div className="ui-actionbar">{children}</div>;
+}
+
+/** 管理画面のロゴと名前（左メニュー・ログイン画面で共通）。 */
+export function AdminBrand({
+  serviceName,
+  logoSrc = "/kobito-symbol.svg",
+}: {
+  serviceName: string;
+  logoSrc?: string;
+}) {
+  return (
+    <>
+      <img src={logoSrc} alt="" />
+      <span>{serviceName}</span>
+    </>
   );
 }
