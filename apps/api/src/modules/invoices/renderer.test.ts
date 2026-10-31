@@ -79,4 +79,18 @@ describe("invoice HTML renderer", () => {
     expect(html).not.toContain("自動で課金");
     expect(html).not.toContain("銀行振込</h2>");
   });
+
+  it("marks a void invoice with its cancellation date without disclosing its reason", () => {
+    const html = invoiceHtml({ ...sample, voidedOn: "2026-10-31" });
+    expect(html).toContain("取消");
+    expect(html).toContain(
+      "この請求書は2026年10月31日に取り消されました。お支払いいただく必要はありません。",
+    );
+    expect(html).not.toContain("voidReason");
+  });
+
+  it("does not show a cancellation mark when no cancellation date is supplied", () => {
+    const html = invoiceHtml(sample);
+    expect(html).not.toContain("この請求書は");
+  });
 });

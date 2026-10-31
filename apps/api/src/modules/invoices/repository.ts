@@ -170,6 +170,23 @@ function todayInTokyo(now: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function calendarDateInTokyo(value: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const part = (type: string) =>
+    parts.find((item) => item.type === type)?.value;
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  if (!year || !month || !day)
+    throw new Error("Unable to resolve invoice cancellation date");
+  return `${year}-${month}-${day}`;
+}
+
 export class InvoiceRepository implements InvoiceModule {
   constructor(
     private readonly pool: Pool,
@@ -1376,11 +1393,12 @@ export class InvoiceRepository implements InvoiceModule {
       throw new ApiError(503, "invoice_unavailable");
     const result = await this.pool.query<{
       invoice_no: string;
+      status: InvoiceListItem["status"];
       content: Buffer | null;
       storage_key: string | null;
       sha256: string;
     }>(
-      `select i.invoice_no, d.content, d.storage_key, d.sha256 from invoices i join invoice_documents d on d.invoice_id = i.id
+      `select i.invoice_no, i.status, d.content, d.storage_key, d.sha256 from invoices i join invoice_documents d on d.invoice_id = i.id
        join contracts c on c.id = i.contract_id where i.id = $1 and i.kind in ('initial','monthly','extra_credit')
        and ($2::text is null or c.customer_id::text = $2)`,
       [invoiceId, kind === "customer" ? (scope?.customerId ?? null) : null],
@@ -1401,6 +1419,21 @@ export class InvoiceRepository implements InvoiceModule {
     const actualHash = createHash("sha256").update(content).digest("hex");
     if (actualHash !== row.sha256)
       throw new Error("Persisted invoice document checksum mismatch");
+    if (row.status === "void") {
+      const detailResult = await this.pool.query<InvoiceRow>(
+        `${detailQuery} where i.id = $1 and i.kind in ('initial','monthly','extra_credit')
+         and ($2::text is null or c.customer_id::text = $2)`,
+        [invoiceId, kind === "customer" ? (scope?.customerId ?? null) : null],
+      );
+      const detailRow = detailResult.rows[0];
+      if (!detailRow) throw new ApiError(404, "not_found");
+      const detail = this.toDetail(detailRow);
+      const voidedOn = detailRow.voided_at
+        ? calendarDateInTokyo(detailRow.voided_at)
+        : undefined;
+      if (!voidedOn) throw new Error("Voided invoice has no cancellation date");
+      content = await this.renderer.render({ ...detail, voidedOn });
+    }
     return { invoiceNo: row.invoice_no, content };
   }
 

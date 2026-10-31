@@ -57,6 +57,7 @@ const userIds: string[] = [adminUid];
 const pdf = Buffer.from("%PDF-1.7\ninvoice fixture\n");
 let renderFailure = false;
 let renderCount = 0;
+const renderedInvoices: import("@kobito/shared").InvoiceDetail[] = [];
 
 const config: RuntimeConfig = {
   nodeEnv: "test",
@@ -98,8 +99,9 @@ function makeApp(
     pool,
     runtimeConfig,
     {
-      render: async () => {
+      render: async (invoice) => {
         renderCount += 1;
+        renderedInvoices.push(invoice);
         if (renderFailure) throw new Error("render failed");
         return pdf;
       },
@@ -1892,6 +1894,28 @@ describe("initial invoice approval and customer access", () => {
       id: original.id,
       status: "void",
     });
+
+    const documentBefore = await pool.query<{
+      sha256: string;
+      content: Buffer;
+    }>("select sha256,content from invoice_documents where invoice_id=$1", [
+      original.id,
+    ]);
+    const regeneratedPdf = await app.request(
+      `/api/v1/me/invoices/${original.id}/pdf`,
+      { headers: { authorization: `Bearer ${fixture.token}` } },
+    );
+    expect(regeneratedPdf.status).toBe(200);
+    expect(renderedInvoices.at(-1)).toMatchObject({
+      id: original.id,
+      voidedOn: expect.any(String),
+    });
+    expect(renderedInvoices.at(-1)).not.toHaveProperty("voidReason");
+    const documentAfter = await pool.query<{ sha256: string; content: Buffer }>(
+      "select sha256,content from invoice_documents where invoice_id=$1",
+      [original.id],
+    );
+    expect(documentAfter.rows[0]).toEqual(documentBefore.rows[0]);
 
     const persisted = await pool.query<{
       status: string;
