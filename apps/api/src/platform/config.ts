@@ -64,6 +64,8 @@ const environmentSchema = z
     BANK_ACCOUNT_TYPE: optionalText,
     BANK_ACCOUNT_NUMBER: optionalText,
     DEV_INVOICE_PREVIEW: z.enum(["0", "1"]).default("0"),
+    PDF_STORAGE: z.enum(["postgres", "gcs"]).default("postgres"),
+    PDF_BUCKET: optionalText,
     KOMOJU_WEBHOOK_SECRET: optionalSecret,
     KOMOJU_SECRET_KEY: optionalSecret,
     LINE_ENABLED: z.preprocess(
@@ -81,6 +83,13 @@ const environmentSchema = z
     LINE_LOGIN_CHANNEL_ID: optionalText,
   })
   .superRefine((environment, context) => {
+    if (environment.PDF_STORAGE === "gcs" && !environment.PDF_BUCKET) {
+      context.addIssue({
+        code: "custom",
+        path: ["PDF_BUCKET"],
+        message: "required when GCS PDF storage is selected",
+      });
+    }
     if (environment.MAIL_PROVIDER === "resend") {
       if (!environment.RESEND_API_KEY)
         context.addIssue({
@@ -128,6 +137,8 @@ export interface RuntimeConfig {
   serviceName?: string;
   companyName?: string;
   invoicePrefix: string;
+  pdfStorage?: "postgres" | "gcs";
+  pdfBucket?: string;
   invoiceRegistrationNo?: string;
   bankAccountName?: string;
   bankAccountBranch?: string;
@@ -182,6 +193,8 @@ export function loadConfig(
       ? {}
       : { companyName: value.COMPANY_NAME }),
     invoicePrefix: value.INVOICE_PREFIX,
+    pdfStorage: value.PDF_STORAGE,
+    ...(value.PDF_BUCKET === undefined ? {} : { pdfBucket: value.PDF_BUCKET }),
     ...(value.INVOICE_REGISTRATION_NO === undefined
       ? {}
       : { invoiceRegistrationNo: value.INVOICE_REGISTRATION_NO }),

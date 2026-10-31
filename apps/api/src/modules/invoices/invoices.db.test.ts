@@ -21,6 +21,7 @@ import {
 } from "vitest";
 import { type AppDependencies, createApp } from "../../app.js";
 import { FakeKomojuClient } from "../../integrations/komoju/fake-client.js";
+import type { PdfStore } from "../../integrations/storage/pdf-store.js";
 import { DailyBillingJob } from "../../jobs/daily-billing.js";
 import { DailyLifecycleJob } from "../../jobs/daily-lifecycle.js";
 import type { VerifiedIdentity } from "../../platform/auth.js";
@@ -89,6 +90,7 @@ const settingsBackup = new Map<string, unknown>();
 function makeApp(
   runtimeConfig: RuntimeConfig = config,
   now = new Date("2026-01-30T15:30:00.000Z"),
+  pdfStore?: PdfStore,
 ): ReturnType<typeof createApp> {
   const accounts = new AccountsRepository(pool);
   const invoiceRepository = new InvoiceRepository(
@@ -102,6 +104,7 @@ function makeApp(
       },
     },
     () => now,
+    pdfStore,
   );
   const dependencies: AppDependencies = {
     config: runtimeConfig,
@@ -2237,5 +2240,133 @@ describe("initial invoice approval and customer access", () => {
     } finally {
       client.release();
     }
+  });
+
+  it("issues production invoices to GCS and returns only the scoped PDF after checksum verification", async () => {
+    const fixture = await makeApplication();
+    const objects = new Map<string, Uint8Array>();
+    const store: PdfStore = {
+      put: async (key, bytes) => {
+        const existing = objects.get(key);
+        if (existing && !Buffer.from(existing).equals(Buffer.from(bytes)))
+          throw new Error("object conflict");
+        objects.set(key, new Uint8Array(bytes));
+      },
+      get: async (key) => {
+        const value = objects.get(key);
+        if (!value) throw new Error("not found");
+        return new Uint8Array(value);
+      },
+    };
+    const runtimeConfig: RuntimeConfig = {
+      ...config,
+      nodeEnv: "production",
+      pdfStorage: "gcs",
+      pdfBucket: "private-test-bucket",
+    };
+    const app = makeApp(runtimeConfig, new Date("2026-01-30T15:30:00Z"), store);
+    const response = await approve(app, fixture.applicationId);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { invoice: { id: string } };
+    const document = await pool.query<{
+      content: Buffer | null;
+      storage_key: string | null;
+      sha256: string;
+    }>(
+      "select content, storage_key, sha256 from invoice_documents where invoice_id=$1",
+      [body.invoice.id],
+    );
+    expect(document.rows[0]).toMatchObject({
+      content: null,
+      storage_key: `invoices/${body.invoice.id}.pdf`,
+    });
+    expect(objects.has(document.rows[0]?.storage_key ?? "")).toBe(true);
+    const ownerPdf = await app.request(
+      `/api/v1/me/invoices/${body.invoice.id}/pdf`,
+      {
+        headers: { authorization: `Bearer ${fixture.token}` },
+      },
+    );
+    expect(ownerPdf.status).toBe(200);
+    expect(Buffer.from(await ownerPdf.arrayBuffer())).toEqual(pdf);
+    const other = await makeApplication();
+    const otherPdf = await app.request(
+      `/api/v1/me/invoices/${body.invoice.id}/pdf`,
+      {
+        headers: { authorization: `Bearer ${other.token}` },
+      },
+    );
+    expect(otherPdf.status).toBe(404);
+    objects.set(
+      document.rows[0]?.storage_key ?? "",
+      Buffer.from("%PDF-corrupt"),
+    );
+    await expect(
+      new InvoiceRepository(
+        pool,
+        runtimeConfig,
+        { render: async () => pdf },
+        () => new Date(),
+        store,
+      ).getCustomerPdf(
+        customerScopeFor({
+          authUserId: fixture.uid,
+          role: "customer",
+          customerId: fixture.customerId,
+          secondFactor: null,
+        }),
+        body.invoice.id,
+      ),
+    ).rejects.toThrow(/checksum/i);
+  });
+
+  it("rolls back production invoice issuance when the GCS store fails", async () => {
+    const fixture = await makeApplication();
+    const store: PdfStore = {
+      put: async () => {
+        throw new Error("simulated storage failure");
+      },
+      get: async () => {
+        throw new Error("not found");
+      },
+    };
+    const runtimeConfig: RuntimeConfig = {
+      ...config,
+      nodeEnv: "production",
+      pdfStorage: "gcs",
+      pdfBucket: "private-test-bucket",
+    };
+    const app = makeApp(runtimeConfig, new Date("2026-01-30T15:30:00Z"), store);
+    const response = await approve(app, fixture.applicationId);
+    expect(response.status).toBe(500);
+    const state = await pool.query<{ invoice_count: string; status: string }>(
+      `select (select count(*)::text from invoices where contract_id=$1) invoice_count,
+       (select status from contracts where id=$1) status`,
+      [fixture.contractId],
+    );
+    expect(state.rows[0]).toEqual({
+      invoice_count: "0",
+      status: "under_review",
+    });
+  });
+
+  it("keeps production invoice issuance unavailable when storage remains PostgreSQL", async () => {
+    const fixture = await makeApplication();
+    const app = makeApp({
+      ...config,
+      nodeEnv: "production",
+      pdfStorage: "postgres",
+    });
+    const response = await approve(app, fixture.applicationId);
+    expect(response.status).toBe(503);
+    const state = await pool.query<{ invoice_count: string; status: string }>(
+      `select (select count(*)::text from invoices where contract_id=$1) invoice_count,
+       (select status from contracts where id=$1) status`,
+      [fixture.contractId],
+    );
+    expect(state.rows[0]).toEqual({
+      invoice_count: "0",
+      status: "under_review",
+    });
   });
 });

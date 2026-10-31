@@ -42,6 +42,23 @@ describe("loadConfig", () => {
     );
   });
 
+  it("defaults PDF storage to postgres and requires a bucket only for GCS", () => {
+    expect(loadConfig(validEnvironment).pdfStorage).toBe("postgres");
+    expect(
+      loadConfig({
+        ...validEnvironment,
+        PDF_STORAGE: "gcs",
+        PDF_BUCKET: "pdfs",
+      }),
+    ).toMatchObject({ pdfStorage: "gcs", pdfBucket: "pdfs" });
+    expect(() =>
+      loadConfig({ ...validEnvironment, PDF_STORAGE: "gcs" }),
+    ).toThrow(/PDF_BUCKET/);
+    expect(() =>
+      loadConfig({ ...validEnvironment, PDF_STORAGE: "invalid" }),
+    ).toThrow(/PDF_STORAGE/);
+  });
+
   it("preserves the configured KOMOJU secret bytes and treats blank as unset", () => {
     expect(
       loadConfig({ ...validEnvironment, KOMOJU_WEBHOOK_SECRET: " secret " })

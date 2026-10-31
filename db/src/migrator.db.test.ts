@@ -56,6 +56,12 @@ describe("PostgreSQL migrations and seed", () => {
         import.meta.url,
       ),
     );
+    const eighthMigration = await readFile(
+      new URL(
+        "../migrations/008_invoice_document_storage.sql",
+        import.meta.url,
+      ),
+    );
     const recorded = await pool.query<{ version: string; checksum: string }>(
       "select version, checksum from schema_migrations order by version",
     );
@@ -87,6 +93,10 @@ describe("PostgreSQL migrations and seed", () => {
       {
         version: "007",
         checksum: createHash("sha256").update(seventhMigration).digest("hex"),
+      },
+      {
+        version: "008",
+        checksum: createHash("sha256").update(eighthMigration).digest("hex"),
       },
     ]);
   });
@@ -218,7 +228,7 @@ describe("PostgreSQL migrations and seed", () => {
     try {
       await copyAppliedMigrations(directory);
       await writeFile(
-        join(directory, "008_partial_failure.sql"),
+        join(directory, "009_partial_failure.sql"),
         "create table migration_partial_failure (id integer); select 1 / 0;",
       );
 
@@ -227,7 +237,7 @@ describe("PostgreSQL migrations and seed", () => {
         "select to_regclass('migration_partial_failure')::text as relation",
       );
       const history = await pool.query<{ count: string }>(
-        "select count(*)::text as count from schema_migrations where version = '008'",
+        "select count(*)::text as count from schema_migrations where version = '009'",
       );
       expect(marker.rows[0]?.relation).toBeNull();
       expect(history.rows[0]?.count).toBe("0");
@@ -291,6 +301,7 @@ async function copyAppliedMigrations(directory: string): Promise<void> {
     ["005", "requests_estimates"],
     ["006", "request_completion"],
     ["007", "extra_credit_once_per_invoice"],
+    ["008", "invoice_document_storage"],
   ]) {
     const filename = `${version}_${name}.sql`;
     const sql = await readFile(

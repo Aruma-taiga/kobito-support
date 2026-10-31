@@ -19,6 +19,10 @@ locals {
     "RESEND_API_KEY",
     "MAIL_FROM"
   ])
+  pdf_storage_env = var.pdf_storage_gcs_enabled ? {
+    PDF_STORAGE = "gcs"
+    PDF_BUCKET  = google_storage_bucket.invoices.name
+  } : {}
   labels = {
     app         = "kobito-support"
     environment = "prod"
@@ -167,6 +171,13 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "NODE_ENV"
         value = "production"
       }
+      dynamic "env" {
+        for_each = local.pdf_storage_env
+        content {
+          name  = env.key
+          value = env.value
+        }
+      }
       env {
         name  = "PORT"
         value = "8080"
@@ -261,7 +272,7 @@ resource "google_cloud_run_v2_service" "api" {
       }
     }
   }
-  depends_on = [google_project_service.enabled]
+  depends_on = [google_project_service.enabled, google_storage_bucket_iam_member.run_pdf_objects]
 }
 
 resource "google_cloud_run_v2_service_iam_member" "public" {
@@ -289,6 +300,24 @@ resource "google_storage_bucket" "invoices" {
   }
 }
 
+# PDF 保存・取得だけを許可する。上書き・削除・一覧・公開権限は付与しない。
+resource "google_project_iam_custom_role" "pdf_objects" {
+  count       = var.pdf_storage_gcs_enabled ? 1 : 0
+  project     = var.gcp_project_id
+  role_id     = "${replace(var.name_prefix, "-", "_")}_pdf_objects"
+  title       = "Invoice PDF object access"
+  description = "Create and read invoice PDF objects in the private invoice bucket"
+  permissions = ["storage.objects.create", "storage.objects.get"]
+  depends_on  = [google_project_service.enabled]
+}
+
+resource "google_storage_bucket_iam_member" "run_pdf_objects" {
+  count  = var.pdf_storage_gcs_enabled ? 1 : 0
+  bucket = google_storage_bucket.invoices.name
+  role   = google_project_iam_custom_role.pdf_objects[0].name
+  member = "serviceAccount:${google_service_account.run.email}"
+}
+
 resource "google_cloud_run_v2_job" "daily" {
   project  = var.gcp_project_id
   name     = "${var.name_prefix}-daily"
@@ -310,6 +339,13 @@ resource "google_cloud_run_v2_job" "daily" {
           name  = "NODE_ENV"
           value = "production"
         }
+        dynamic "env" {
+          for_each = local.pdf_storage_env
+          content {
+            name  = env.key
+            value = env.value
+          }
+        }
         env {
           name  = "FIREBASE_PROJECT_ID"
           value = var.gcp_project_id
@@ -330,6 +366,7 @@ resource "google_cloud_run_v2_job" "daily" {
       }
     }
   }
+  depends_on = [google_storage_bucket_iam_member.run_pdf_objects]
 }
 
 resource "google_cloud_run_v2_job" "notifications" {
@@ -352,6 +389,13 @@ resource "google_cloud_run_v2_job" "notifications" {
         env {
           name  = "NODE_ENV"
           value = "production"
+        }
+        dynamic "env" {
+          for_each = local.pdf_storage_env
+          content {
+            name  = env.key
+            value = env.value
+          }
         }
         env {
           name  = "FIREBASE_PROJECT_ID"
@@ -404,6 +448,7 @@ resource "google_cloud_run_v2_job" "notifications" {
       }
     }
   }
+  depends_on = [google_storage_bucket_iam_member.run_pdf_objects]
 }
 
 resource "google_cloud_run_v2_job" "retention" {
@@ -427,6 +472,13 @@ resource "google_cloud_run_v2_job" "retention" {
           name  = "NODE_ENV"
           value = "production"
         }
+        dynamic "env" {
+          for_each = local.pdf_storage_env
+          content {
+            name  = env.key
+            value = env.value
+          }
+        }
         env {
           name  = "FIREBASE_PROJECT_ID"
           value = var.gcp_project_id
@@ -447,6 +499,7 @@ resource "google_cloud_run_v2_job" "retention" {
       }
     }
   }
+  depends_on = [google_storage_bucket_iam_member.run_pdf_objects]
 }
 
 resource "google_project_iam_member" "scheduler_run_jobs" {

@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import { Pool } from "pg";
+import { createPdfStore } from "../integrations/storage/configured.js";
 import { ChromiumInvoicePdfRenderer } from "../modules/invoices/renderer.js";
 import { InvoiceRepository } from "../modules/invoices/repository.js";
 import { loadConfig } from "../platform/config.js";
@@ -30,7 +31,13 @@ try {
   const result = await runDaily(
     todayInTokyo(new Date()),
     pool,
-    new InvoiceRepository(pool, config, new ChromiumInvoicePdfRenderer()),
+    new InvoiceRepository(
+      pool,
+      config,
+      new ChromiumInvoicePdfRenderer(),
+      undefined,
+      createPdfStore(config, pool),
+    ),
   );
   process.stdout.write(`${JSON.stringify(result)}\n`);
   if (result.billing.failed > 0 || result.lifecycle.failed > 0)
