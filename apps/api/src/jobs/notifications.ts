@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from "pg";
+import { MailSendError } from "../integrations/mail/resend.js";
 import type { MailSender } from "../integrations/mail/sender.js";
 import { renderNotification } from "../modules/notifications/templates.js";
 
@@ -8,6 +9,7 @@ interface NotificationRow {
   customer_id: string | null;
   payload: Record<string, unknown>;
   attempts: number;
+  dedupe_key: string;
 }
 
 interface NotificationDataRow {
@@ -71,7 +73,7 @@ export async function runNotificationDispatch(
   try {
     await client.query("begin");
     const rows = await client.query<NotificationRow>(
-      `select id,kind,customer_id,payload,attempts from notifications
+      `select id,kind,customer_id,payload,attempts,dedupe_key from notifications
         where channel='email' and kind=any($4::text[])
           and sent_at is null and attempts < 3 and scheduled_at <= $1
           and ($3::uuid[] is null or id = any($3::uuid[]))
@@ -134,7 +136,11 @@ export async function runNotificationDispatch(
             ? { bankDetails: details }
             : {}),
         });
-        await options.sender.send({ to: recipient, ...template });
+        await options.sender.send({
+          to: recipient,
+          ...template,
+          idempotencyKey: notification.dedupe_key,
+        });
         await client.query(
           "update notifications set sent_at=$2,last_error=null where id=$1",
           [notification.id, now],
@@ -147,7 +153,9 @@ export async function runNotificationDispatch(
             error.message,
           )
             ? error.message
-            : "send_failed";
+            : error instanceof MailSendError
+              ? error.reason
+              : "send_failed";
         await client.query(
           "update notifications set attempts=attempts+1,last_error=$2 where id=$1",
           [notification.id, reason],

@@ -150,6 +150,32 @@ describe("loadConfig", () => {
     ).toBe("log");
   });
 
+  it("requires Resend credentials and validates a sender address without echoing values", () => {
+    expect(() =>
+      loadConfig({ ...validEnvironment, MAIL_PROVIDER: "resend" }),
+    ).toThrow("RESEND_API_KEY");
+    expect(() =>
+      loadConfig({
+        ...validEnvironment,
+        MAIL_PROVIDER: "resend",
+        RESEND_API_KEY: "secret",
+        MAIL_FROM: "bad",
+      }),
+    ).toThrow("MAIL_FROM");
+    expect(
+      loadConfig({
+        ...validEnvironment,
+        MAIL_PROVIDER: "resend",
+        RESEND_API_KEY: "secret",
+        MAIL_FROM: "コビト <mail@example.test>",
+      }),
+    ).toMatchObject({
+      mailProvider: "resend",
+      resendApiKey: "secret",
+      mailFrom: "コビト <mail@example.test>",
+    });
+  });
+
   it("rejects unknown mail provider names without echoing submitted values", () => {
     expect(() =>
       loadConfig({

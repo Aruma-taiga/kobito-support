@@ -2,6 +2,7 @@ export interface MailMessage {
   to: string;
   subject: string;
   text: string;
+  idempotencyKey?: string;
 }
 
 export interface MailSender {

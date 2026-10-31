@@ -228,7 +228,7 @@ describe("notification outbox database behavior", () => {
     expect(fourth).toEqual({ sent: 0, failed: 0, skipped: 0 });
     expect(stored.rows[0]?.attempts).toBe(3);
     expect(stored.rows[0]?.last_error).toMatch(
-      /^(settings_unavailable|send_failed)$/,
+      /^(settings_unavailable|send_failed|mail_http_4xx|mail_http_5xx|mail_network_error)$/,
     );
     expect(stored.rows[0]?.last_error).not.toContain(
       "private provider failure detail",
