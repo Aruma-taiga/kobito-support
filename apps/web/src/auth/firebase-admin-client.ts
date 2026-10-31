@@ -5,6 +5,7 @@ import {
   getMultiFactorResolver,
   type MultiFactorError,
   type MultiFactorInfo,
+  multiFactor,
   onAuthStateChanged,
   PhoneAuthProvider,
   PhoneMultiFactorGenerator,
@@ -28,7 +29,10 @@ export class AdminAuthClientError extends Error {
     readonly code:
       | "unsupported_factor"
       | "invalid_code"
-      | "no_pending_challenge",
+      | "no_pending_challenge"
+      | "reauth_required"
+      | "already_enrolled"
+      | "mfa_unavailable",
   ) {
     super(code);
   }
@@ -78,6 +82,9 @@ export function createFirebaseAdminAuthClient(
   let selectedFactorUid: string | null = null;
   let smsVerificationId: string | null = null;
   let recaptchaVerifier: RecaptchaVerifier | null = null;
+  let enrollmentSecret: Awaited<
+    ReturnType<typeof TotpMultiFactorGenerator.generateSecret>
+  > | null = null;
 
   const clearVerifier = () => {
     const verifier = recaptchaVerifier;
@@ -110,6 +117,59 @@ export function createFirebaseAdminAuthClient(
         listeners.delete(listener);
         unsubscribe();
       };
+    },
+    startTotpEnrollment: async (issuer) => {
+      const user = auth.currentUser;
+      if (!user) throw new AdminAuthClientError("reauth_required");
+      const factors = multiFactor(user);
+      if (factors.enrolledFactors.length > 0) {
+        throw new AdminAuthClientError("already_enrolled");
+      }
+      try {
+        const session = await factors.getSession();
+        enrollmentSecret =
+          await TotpMultiFactorGenerator.generateSecret(session);
+        return {
+          secret: enrollmentSecret.secretKey,
+          uri: enrollmentSecret.generateQrCodeUrl(
+            user.email ?? "admin",
+            issuer,
+          ),
+        };
+      } catch (error) {
+        enrollmentSecret = null;
+        if (
+          (error as { code?: string })?.code === "auth/requires-recent-login"
+        ) {
+          throw new AdminAuthClientError("reauth_required");
+        }
+        if (
+          [
+            "auth/multi-factor-auth-not-enabled",
+            "auth/operation-not-allowed",
+          ].includes((error as { code?: string })?.code ?? "")
+        ) {
+          throw new AdminAuthClientError("mfa_unavailable");
+        }
+        throw error;
+      }
+    },
+    completeTotpEnrollment: async (secret, code) => {
+      const user = auth.currentUser;
+      if (!user) throw new AdminAuthClientError("reauth_required");
+      if (!enrollmentSecret || enrollmentSecret.secretKey !== secret) {
+        throw new AdminAuthClientError("no_pending_challenge");
+      }
+      if (!/^\d{6}$/.test(code)) throw new AdminAuthClientError("invalid_code");
+      const assertion = TotpMultiFactorGenerator.assertionForEnrollment(
+        enrollmentSecret,
+        code,
+      );
+      await multiFactor(user).enroll(assertion, "管理者の認証アプリ");
+      enrollmentSecret = null;
+    },
+    clearTotpEnrollment: () => {
+      enrollmentSecret = null;
     },
     signIn: async (email, password): Promise<AdminSignInResult> => {
       clearChallenge();

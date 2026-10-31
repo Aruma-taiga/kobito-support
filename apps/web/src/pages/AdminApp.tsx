@@ -7,6 +7,7 @@ import {
 } from "../auth/admin-session.js";
 import type { AdminApiClient } from "../platform/admin-api-client.js";
 import { AdminCustomerPage, AdminQueuePage } from "./AdminCustomerPages.js";
+import { AdminEnrollPage } from "./AdminEnrollPage.js";
 import { AdminLayout } from "./AdminLayout.js";
 import { AdminLoginPage } from "./AdminLoginPage.js";
 import { AdminPlanQuotePage } from "./AdminPlanQuotePage.js";
@@ -42,6 +43,10 @@ export function AdminApp({
         <Route
           path="login"
           element={<AdminLoginPage serviceName={serviceName} />}
+        />
+        <Route
+          path="enroll"
+          element={<AdminEnrollPage serviceName={serviceName} />}
         />
         <Route
           element={

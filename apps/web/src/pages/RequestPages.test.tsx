@@ -78,6 +78,9 @@ function adminSetup(
       return () => undefined;
     },
     signIn: vi.fn(async () => ({ status: "signed_in" as const })),
+    startTotpEnrollment: vi.fn(async () => ({ secret: "", uri: "" })),
+    completeTotpEnrollment: vi.fn(async () => undefined),
+    clearTotpEnrollment: vi.fn(),
     startSecondFactor: vi.fn(async () => undefined),
     completeSecondFactor: vi.fn(async () => undefined),
     cancelSecondFactor: vi.fn(),

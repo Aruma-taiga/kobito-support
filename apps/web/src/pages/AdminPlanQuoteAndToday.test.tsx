@@ -180,6 +180,9 @@ function setup(path: string, apiClient: AdminApiClient) {
       return () => undefined;
     },
     signIn: vi.fn(),
+    startTotpEnrollment: vi.fn(async () => ({ secret: "", uri: "" })),
+    completeTotpEnrollment: vi.fn(async () => undefined),
+    clearTotpEnrollment: vi.fn(),
     startSecondFactor: vi.fn(),
     completeSecondFactor: vi.fn(),
     cancelSecondFactor: vi.fn(),

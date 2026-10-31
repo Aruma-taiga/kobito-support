@@ -1,6 +1,6 @@
 import { webMessages } from "@kobito/shared";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import {
   type AdminFactorId,
   AdminLogoutButton,
@@ -205,6 +205,9 @@ export function AdminLoginPage({ serviceName }: { serviceName: string }) {
               ? webMessages.loginSubmitting
               : webMessages.adminLoginButton}
           </Button>
+          <p>
+            <Link to="/admin/enroll">{webMessages.adminEnrollLink}</Link>
+          </p>
         </form>
       ) : (
         <form onSubmit={(event) => void submitCode(event)}>

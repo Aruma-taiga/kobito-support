@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import {
   type AdminApiClient,
   AdminApiError,
@@ -37,6 +37,9 @@ export interface AdminAuthClient {
   currentUser(): AdminAuthUser | null;
   subscribe(listener: (user: AdminAuthUser | null) => void): () => void;
   signIn(email: string, password: string): Promise<AdminSignInResult>;
+  startTotpEnrollment(issuer: string): Promise<{ secret: string; uri: string }>;
+  completeTotpEnrollment(secret: string, code: string): Promise<void>;
+  clearTotpEnrollment(): void;
   startSecondFactor(
     factorUid: string,
     recaptchaContainer?: HTMLElement | null,
@@ -73,12 +76,19 @@ export function AdminAuthProvider({
 }) {
   const [state, setState] = useState<AdminAuthState>({ status: "loading" });
   const sequence = useRef(0);
+  const { pathname } = useLocation();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
 
   useEffect(() => {
     let active = true;
     const unsubscribe = client.subscribe((user) => {
       const currentSequence = ++sequence.current;
       if (!user) {
+        setState({ status: "signed_out" });
+        return;
+      }
+      if (pathnameRef.current === "/admin/enroll") {
         setState({ status: "signed_out" });
         return;
       }

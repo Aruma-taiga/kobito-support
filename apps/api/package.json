@@ -13,6 +13,7 @@
     "seed:dev-auth": "tsx scripts/seed-dev-auth.ts",
     "seed:dev-billing": "tsx scripts/seed-dev-billing.ts",
     "seed:dev-admin": "tsx scripts/seed-dev-admin.ts",
+    "admin:bootstrap": "tsx scripts/admin-bootstrap.ts",
     "admin:dev-code": "tsx scripts/dev-admin-code.ts",
     "smoke:local-auth": "tsx scripts/smoke-local-auth.ts",
     "smoke:line-auth": "tsx scripts/smoke-line-auth.ts",
