@@ -18,6 +18,20 @@ const optionalEmail = z.preprocess(
   z.string().trim().email().optional(),
 );
 
+const mailFrom = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === "" ? undefined : value,
+  z
+    .string()
+    .trim()
+    .refine(
+      (value) =>
+        /^(?:[^<>\r\n]+\s)?<[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+>$/.test(value) ||
+        /^[^<>\s@]+@[^<>\s@]+\.[^<>\s@]+$/.test(value),
+    )
+    .optional(),
+);
+
 const environmentSchema = z
   .object({
     NODE_ENV: z
@@ -60,11 +74,27 @@ const environmentSchema = z
     MAIL_PROVIDER: z.preprocess(
       (value) =>
         typeof value === "string" && value.trim() === "" ? undefined : value,
-      z.enum(["log"]).optional(),
+      z.enum(["log", "resend"]).optional(),
     ),
+    RESEND_API_KEY: optionalSecret,
+    MAIL_FROM: mailFrom,
     LINE_LOGIN_CHANNEL_ID: optionalText,
   })
   .superRefine((environment, context) => {
+    if (environment.MAIL_PROVIDER === "resend") {
+      if (!environment.RESEND_API_KEY)
+        context.addIssue({
+          code: "custom",
+          path: ["RESEND_API_KEY"],
+          message: "required when Resend is selected",
+        });
+      if (!environment.MAIL_FROM)
+        context.addIssue({
+          code: "custom",
+          path: ["MAIL_FROM"],
+          message: "required and must be a sender address",
+        });
+    }
     if (
       environment.NODE_ENV === "production" &&
       environment.FIREBASE_AUTH_EMULATOR_HOST
@@ -109,7 +139,9 @@ export interface RuntimeConfig {
   cardPaymentEnabled?: boolean;
   lineEnabled?: boolean;
   lineLoginChannelId?: string;
-  mailProvider?: "log";
+  mailProvider?: "log" | "resend";
+  resendApiKey?: string;
+  mailFrom?: string;
 }
 
 export function loadConfig(
@@ -180,5 +212,9 @@ export function loadConfig(
     ...(value.MAIL_PROVIDER === undefined
       ? {}
       : { mailProvider: value.MAIL_PROVIDER }),
+    ...(value.RESEND_API_KEY === undefined
+      ? {}
+      : { resendApiKey: value.RESEND_API_KEY }),
+    ...(value.MAIL_FROM === undefined ? {} : { mailFrom: value.MAIL_FROM }),
   };
 }
