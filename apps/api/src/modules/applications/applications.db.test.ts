@@ -558,11 +558,17 @@ describe("public application submission with PostgreSQL", () => {
     });
     invalidApplicant.payload.displayVersion = await currentDisplayVersion(app);
     const invalidResponse = await submit(app, invalidApplicant);
-    expect(invalidResponse.status).toBe(422);
+    expect(invalidResponse.status).toBe(201);
     await expect(countForUid(invalidApplicant.uid)).resolves.toMatchObject({
-      customer_count: "0",
-      application_count: "0",
+      customer_count: "1",
+      application_count: "1",
     });
+    const invalidReferral = await pool.query(
+      `select 1 from referrals r join contracts c on c.id=r.contract_id
+        join user_accounts u on u.customer_id=c.customer_id where u.auth_user_id=$1`,
+      [invalidApplicant.uid],
+    );
+    expect(invalidReferral.rowCount).toBe(0);
 
     const applicant = createApplicant({
       referralCode: activeCode,

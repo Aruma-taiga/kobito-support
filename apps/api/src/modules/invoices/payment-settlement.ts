@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { periodFor, planCodes } from "@kobito/shared";
 import type { PoolClient } from "pg";
 import { schedule } from "../notifications/service.js";
+import { recordPartnerReward } from "./partner-rewards.js";
 
 export interface InitialInvoiceSettlementInput {
   invoiceId: string;
@@ -84,6 +85,12 @@ export async function settleInitialInvoicePayment(
     "update contracts set status='active',anchor_date=$2 where id=$1",
     [input.contractId, input.anchorDate],
   );
+  await recordPartnerReward(client, {
+    contractId: input.contractId,
+    invoiceId: input.invoiceId,
+    paymentId,
+    paidOn: input.paidOn,
+  });
   await client.query("update customers set deletion_due_on=null where id=$1", [
     input.customerId,
   ]);

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  adminReferralsResponseSchema,
   approveApplicationResponseSchema,
   confirmBankPaymentResponseSchema,
   customerAccessSchema,
@@ -32,6 +33,8 @@ import { PostgresCustomerAccessRepository } from "../customer-access/repository.
 import { CustomerAccessService } from "../customer-access/service.js";
 import { PostgresPaymentLinkRepository } from "../payment-links/repository.js";
 import { PaymentLinkService } from "../payment-links/service.js";
+import { ReferralRepository } from "../referrals/repository.js";
+import { ReferralService } from "../referrals/service.js";
 import { InvoiceRepository } from "./repository.js";
 import { InvoiceService } from "./service.js";
 
@@ -47,6 +50,7 @@ const customerIds: string[] = [];
 const applicationIds: string[] = [];
 const contractIds: string[] = [];
 const planIds: string[] = [];
+const partnerIds: string[] = [];
 const userIds: string[] = [adminUid];
 const pdf = Buffer.from("%PDF-1.7\ninvoice fixture\n");
 let renderFailure = false;
@@ -122,6 +126,7 @@ function makeApp(
     },
     admin: new AdminService(new AdminRepository(pool)),
     invoices: new InvoiceService(invoiceRepository),
+    referrals: new ReferralService(new ReferralRepository(pool)),
     paymentLinks: new PaymentLinkService(
       new PostgresPaymentLinkRepository(pool),
       new FakeKomojuClient(),
@@ -279,6 +284,13 @@ afterAll(async () => {
     [...applicationIds, ...contractIds],
   ]);
   await pool.query(
+    "delete from partner_rewards where referral_id in (select id from referrals where contract_id=any($1::uuid[]))",
+    [contractIds],
+  );
+  await pool.query("delete from referrals where contract_id=any($1::uuid[])", [
+    contractIds,
+  ]);
+  await pool.query(
     "delete from notifications where customer_id = any($1::uuid[])",
     [customerIds],
   );
@@ -327,6 +339,9 @@ afterAll(async () => {
     customerIds,
   ]);
   await pool.query("delete from plans where id = any($1::uuid[])", [planIds]);
+  await pool.query("delete from partners where id=any($1::uuid[])", [
+    partnerIds,
+  ]);
   for (const [key] of settings) {
     const prior = settingsBackup.get(key);
     if (prior === undefined)
@@ -871,6 +886,19 @@ describe("initial invoice approval and customer access", () => {
 
   it("confirms a monthly bank invoice into its existing period and grants once", async () => {
     const fixture = await makeApplication({ price: 5000 });
+    const partner = await pool.query<{ id: string }>(
+      `insert into partners(name,referral_code,reward_type,reward_rate,active)
+       values('Reward test partner',$1,'closing',0.200,true) returning id`,
+      [`${prefix}-${randomUUID()}`],
+    );
+    const partnerId = partner.rows[0]?.id;
+    if (!partnerId) throw new Error("Partner fixture was not created");
+    partnerIds.push(partnerId);
+    await pool.query(
+      `insert into referrals(partner_id,contract_id,reward_type,reward_rate)
+       values($1,$2,'closing',0.200)`,
+      [partnerId, fixture.contractId],
+    );
     const app = makeApp();
     const initial = await approve(app, fixture.applicationId);
     const initialInvoiceId = (
@@ -881,6 +909,24 @@ describe("initial invoice approval and customer access", () => {
       paidOn: "2026-01-31",
     });
     expect(initialPayment.status).toBe(200);
+    const firstReward = await pool.query<{
+      month_index: number;
+      base_amount: number;
+      reward_amount: number;
+      tax_amount: number;
+      paid_on: string | null;
+    }>(
+      `select pr.month_index,pr.base_amount,pr.reward_amount,pr.tax_amount,pr.paid_on::text
+         from partner_rewards pr join payments p on p.id=pr.payment_id where p.invoice_id=$1`,
+      [initialInvoiceId],
+    );
+    expect(firstReward.rows[0]).toMatchObject({
+      month_index: 1,
+      base_amount: 5000,
+      reward_amount: 1000,
+      tax_amount: 100,
+      paid_on: null,
+    });
     const initialPeriod = await pool.query<{ id: string }>(
       "select id from billing_periods where contract_id=$1 and seq=1",
       [fixture.contractId],
@@ -984,6 +1030,33 @@ describe("initial invoice approval and customer access", () => {
       grant_count: "1",
       periods: "2",
       notice_count: "1",
+    });
+    const secondReward = await pool.query<{
+      month_index: number;
+      reward_amount: number;
+    }>(
+      `select pr.month_index,pr.reward_amount from partner_rewards pr
+        join payments p on p.id=pr.payment_id where p.invoice_id=$1`,
+      [monthlyInvoiceId],
+    );
+    expect(secondReward.rows[0]).toEqual({
+      month_index: 2,
+      reward_amount: 1000,
+    });
+    const reportResponse = await monthlyApp.request(
+      "/api/v1/admin/referrals?month=2026-02",
+      { headers: { authorization: `Bearer ${adminToken}` } },
+    );
+    expect(reportResponse.status).toBe(200);
+    const report = adminReferralsResponseSchema.parse(
+      await reportResponse.json(),
+    );
+    expect(report.total).toMatchObject({
+      count: 1,
+      baseAmount: 5000,
+      rewardAmount: 1000,
+      taxAmount: 100,
+      payableAmount: 1100,
     });
   });
 

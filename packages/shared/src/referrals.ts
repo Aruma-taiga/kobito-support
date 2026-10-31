@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { taxOnExcl } from "./pricing.js";
 
 /** 紹介・報酬（管理画面 a08）。閲覧用。報酬の消費税は台帳（DB）の値を信頼し、計算し直さない。 */
 
@@ -12,6 +13,22 @@ export type AdminReferralsQuery = z.infer<typeof adminReferralsQuerySchema>;
 
 export const referralRewardTypes = ["appointment", "closing"] as const;
 export type ReferralRewardType = (typeof referralRewardTypes)[number];
+
+/** Tax-exclusive partner reward and provisional 10% tax, both rounded down. */
+export function calculatePartnerReward(baseAmount: number, rewardRate: number) {
+  if (!Number.isSafeInteger(baseAmount) || baseAmount < 0) {
+    throw new RangeError("Base amount must be a non-negative safe integer");
+  }
+  if (!Number.isFinite(rewardRate) || rewardRate < 0 || rewardRate > 1) {
+    throw new RangeError("Reward rate must be between zero and one");
+  }
+  const rewardAmount = Math.floor(baseAmount * rewardRate);
+  return {
+    baseAmount,
+    rewardAmount,
+    taxAmount: taxOnExcl(rewardAmount),
+  };
+}
 
 const yen = z.number().int().nonnegative();
 
