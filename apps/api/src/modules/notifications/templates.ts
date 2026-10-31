@@ -97,6 +97,16 @@ export function renderNotification(
         subject: "カードのお支払いについて",
         text: `${greeting}カードのお支払いを確認できていません。マイページから請求書の状況をご確認のうえ、お支払い手続きをお願いいたします。すでにお支払い済みの場合は、行き違いのためご容赦ください。${footer}`,
       };
+    case "NT-08":
+      return {
+        subject: "解約予定を承りました",
+        text: `${greeting}ご契約は${data.dueOn ?? "現在の期間末"}をもって終了する予定です。終了日までは通常どおりご利用・ご請求が続きます。終了後1年間は、マイページから請求書をダウンロードできます。ご不明な点はお問い合わせください。${footer}`,
+      };
+    case "NT-09":
+      return {
+        subject: "ご契約が終了しました",
+        text: `${greeting}ご契約が終了しました。終了から1年間は、マイページから請求書をダウンロードいただけます。ご利用いただきありがとうございました。ご不明な点はお問い合わせください。${footer}`,
+      };
     default:
       throw new Error("Unsupported notification kind");
   }

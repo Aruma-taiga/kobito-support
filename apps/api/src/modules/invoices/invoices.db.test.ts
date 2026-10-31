@@ -1246,6 +1246,11 @@ describe("initial invoice approval and customer access", () => {
       invoices: "0",
     });
     expect(state.rows[0]?.ended_at).toBeTruthy();
+    const endNotice = await pool.query<{ count: string }>(
+      "select count(*)::text count from notifications where customer_id=(select customer_id from contracts where id=$1) and kind='NT-09' and dedupe_key=$2 and sent_at is null",
+      [fixture.contractId, `NT-09:${fixture.contractId}`],
+    );
+    expect(endNotice.rows[0]?.count).toBe("1");
   });
 
   it("lapses only the selected expired quote and ignores approved or paid applications", async () => {

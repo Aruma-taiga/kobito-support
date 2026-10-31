@@ -1,6 +1,7 @@
 import {
   type AdminApplicationQueueQuery,
   type AdminApplicationQueueResponse,
+  type AdminCancellation,
   type AdminCustomerDetail,
   type AdminIssuerSettings,
   type AdminIssuerSettingsResponse,
@@ -12,6 +13,7 @@ import {
   type AdminSession,
   adminApplicationQueueQuerySchema,
   adminApplicationQueueResponseSchema,
+  adminCancellationSchema,
   adminCustomerDetailSchema,
   adminIssuerSettingsResponseSchema,
   adminPaymentReviewsResponseSchema,
@@ -54,7 +56,9 @@ import {
   type RequestEstimate,
   type RetentionItem,
   retentionListSchema,
+  type UpdateCancellationChecklist,
   updateAdminIssuerSettingsRequestSchema,
+  updateCancellationChecklistSchema,
 } from "@kobito/shared";
 
 export interface AdminApiAuthUser {
@@ -279,6 +283,38 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
       return request(
         `/api/v1/admin/customers/${encodeURIComponent(customerId)}`,
         adminCustomerDetailSchema,
+      );
+    },
+    getCancellation(contractId: string): Promise<AdminCancellation> {
+      return request(
+        `/api/v1/admin/contracts/${encodeURIComponent(contractId)}/cancellation`,
+        adminCancellationSchema,
+      );
+    },
+    scheduleCancellation(contractId: string): Promise<AdminCancellation> {
+      return request(
+        `/api/v1/admin/contracts/${encodeURIComponent(contractId)}/cancellation`,
+        adminCancellationSchema,
+        { method: "POST", body: "{}" },
+      );
+    },
+    revokeCancellation(contractId: string): Promise<AdminCancellation> {
+      return request(
+        `/api/v1/admin/contracts/${encodeURIComponent(contractId)}/cancellation`,
+        adminCancellationSchema,
+        { method: "DELETE" },
+      );
+    },
+    updateCancellationChecklist(
+      contractId: string,
+      value: UpdateCancellationChecklist,
+    ): Promise<AdminCancellation> {
+      const parsed = updateCancellationChecklistSchema.safeParse(value);
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      return request(
+        `/api/v1/admin/contracts/${encodeURIComponent(contractId)}/cancellation/checklist`,
+        adminCancellationSchema,
+        { method: "PUT", body: JSON.stringify(parsed.data) },
       );
     },
     declineApplication(

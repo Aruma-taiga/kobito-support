@@ -93,6 +93,18 @@ function makeApp(overrides: AppOverrides = {}) {
       getCustomerDetail: vi.fn(async () => {
         throw new Error("not found in test admin detail");
       }),
+      getCancellation: vi.fn(async () => {
+        throw new Error("not used");
+      }),
+      scheduleCancellation: vi.fn(async () => {
+        throw new Error("not used");
+      }),
+      revokeCancellation: vi.fn(async () => {
+        throw new Error("not used");
+      }),
+      updateCancellationChecklist: vi.fn(async () => {
+        throw new Error("not used");
+      }),
       declineApplication: vi.fn(async () => ({
         applicationId: "00000000-0000-4000-8000-000000000001",
         contractId: "00000000-0000-4000-8000-000000000002",

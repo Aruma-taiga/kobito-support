@@ -144,6 +144,17 @@ export class DailyBillingJob {
                 "update customers set deletion_due_on=coalesce(deletion_due_on,$2::date) where id=$1",
                 [ended.rows[0].customer_id, retentionDueDate("ended", today)],
               );
+              await client.query(
+                `insert into notifications(customer_id,kind,channel,dedupe_key,scheduled_at,payload)
+                 values($1,'NT-09','email', $2, ($3::date::timestamp at time zone 'Asia/Tokyo'), $4::jsonb)
+                 on conflict (dedupe_key) do nothing`,
+                [
+                  ended.rows[0].customer_id,
+                  `NT-09:${contract.id}`,
+                  today,
+                  JSON.stringify({ contractId: contract.id }),
+                ],
+              );
             }
             changed = true;
             break;
