@@ -744,8 +744,18 @@ export const webMessages = {
     "カードの期限切れなどが考えられます。お支払いのご案内をご確認ください。",
   invoiceCardHeading: "クレジットカードで支払う",
   invoiceCardGuidance:
-    "カードの入力は、決済会社の画面で行います。お支払い用の画面へのリンクは、準備ができ次第こちらに表示します。お急ぎのときは、メールでご連絡ください。",
+    "下のボタンからKOMOJUのお支払い画面へ進み、カード情報を入力してください。",
+  invoiceCardNoLinkGuidance:
+    "カードでのお支払いをご案内できません。メール（{email}）でご連絡ください。",
   invoiceCardPrivacy: "カード番号は決済会社が管理し、当社には残りません。",
+  invoiceHostedCardPrivacy:
+    "カード情報は当社では入力・保存せず、KOMOJUの画面で入力します。",
+  invoicePaymentLinkAction: "お支払いページへ進む",
+  invoicePaymentLinkWorking: "お支払いページを準備しています…",
+  invoicePaymentUnavailable:
+    "ただいまカードでのお支払いをご案内できません。メール（{email}）でご連絡ください。",
+  invoicePaymentLinkError:
+    "お支払いページを開けませんでした。時間をおいてもう一度お試しください。",
   invoiceOtherPaymentGuidance:
     "お支払いの方法は、請求書PDFに記載しています。ご不明な点は、メールでご連絡ください。",
   invoiceBankTransferHeading: "銀行振込で支払う",

@@ -57,6 +57,32 @@ describe("loadConfig", () => {
     ).toBeUndefined();
   });
 
+  it("keeps the optional KOMOJU API secret unset when blank and does not echo invalid values", () => {
+    expect(loadConfig(validEnvironment).komojuSecretKey).toBeUndefined();
+    expect(
+      loadConfig({
+        ...validEnvironment,
+        KOMOJU_SECRET_KEY: "komoju-test-secret",
+      }).komojuSecretKey,
+    ).toBe("komoju-test-secret");
+    expect(
+      loadConfig({ ...validEnvironment, KOMOJU_SECRET_KEY: "   " })
+        .komojuSecretKey,
+    ).toBeUndefined();
+    const secret = "komoju-private-sentinel";
+    try {
+      loadConfig({
+        ...validEnvironment,
+        KOMOJU_SECRET_KEY: secret,
+        PORT: "not-a-port",
+      });
+      throw new Error("expected configuration error");
+    } catch (error) {
+      expect(String(error)).toContain("PORT");
+      expect(String(error)).not.toContain(secret);
+    }
+  });
+
   it("does not echo an invalid KOMOJU secret value", () => {
     const secret = "SECRET_SENTINEL";
     expect(() =>

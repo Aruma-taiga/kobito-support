@@ -2,6 +2,56 @@ import { describe, expect, it, vi } from "vitest";
 import { createApiClient } from "./api-client.js";
 
 describe("authenticated web API client", () => {
+  it("posts for a payment link with customer authentication and validates its response", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () =>
+      Response.json({ redirectUrl: "https://komoju.com/sessions/session-1" }),
+    );
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({
+        getIdToken: vi.fn(async () => "signed-id-token"),
+      }),
+      signOut: vi.fn(async () => undefined),
+      fetcher,
+    });
+    await expect(
+      client.createInvoicePaymentLink("invoice/one"),
+    ).resolves.toEqual({
+      redirectUrl: "https://komoju.com/sessions/session-1",
+    });
+    expect(String(fetcher.mock.calls[0]?.[0])).toBe(
+      "https://api.example.test/api/v1/me/invoices/invoice%2Fone/payment-link",
+    );
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      headers: {
+        Authorization: "Bearer signed-id-token",
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+      credentials: "omit",
+    });
+  });
+
+  it("preserves the dedicated payment-link unavailable code", async () => {
+    const client = createApiClient({
+      baseUrl: "https://api.example.test",
+      getCurrentUser: () => ({ getIdToken: vi.fn(async () => "signed-token") }),
+      signOut: vi.fn(async () => undefined),
+      fetcher: vi.fn<typeof fetch>(async () =>
+        Response.json(
+          { error: { code: "payment_link_unavailable" } },
+          { status: 503 },
+        ),
+      ),
+    });
+    await expect(
+      client.createInvoicePaymentLink("invoice-1"),
+    ).rejects.toMatchObject({
+      code: "payment_link_unavailable",
+    });
+  });
+
   it("exchanges a public LINE ID token without an existing Firebase session", async () => {
     const fetcher = vi.fn<typeof fetch>(async () =>
       Response.json({

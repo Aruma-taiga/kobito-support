@@ -16,6 +16,8 @@ import {
   AdminApiError,
 } from "../platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
+import { ApiClientError } from "../platform/api-client.js";
+import { ContactProvider } from "../platform/contact.js";
 import {
   AdminInvoiceDetailPage,
   AdminInvoiceListPage,
@@ -87,6 +89,7 @@ const authClient: AuthClient = {
 function setup(
   page: "admin-list" | "admin-detail" | "me-list" | "me-detail",
   overrides: Record<string, ReturnType<typeof vi.fn>> = {},
+  redirectTo?: (url: string) => void,
 ) {
   const adminApiClient = {
     getInvoices: vi.fn(async () => ({ invoices: [invoice] })),
@@ -94,6 +97,9 @@ function setup(
     getInvoicePdf: vi.fn(
       async () => new Blob(["pdf"], { type: "application/pdf" }),
     ),
+    createInvoicePaymentLink: vi.fn(async () => ({
+      redirectUrl: "https://komoju.com/sessions/test-session",
+    })),
     ...overrides,
   } as unknown as AdminApiClient;
   const customerApiClient = adminApiClient as unknown as ReturnTypeApiClient;
@@ -111,21 +117,31 @@ function setup(
     ) : page === "admin-detail" ? (
       <AdminInvoiceDetailPage apiClient={adminApiClient} />
     ) : page === "me-list" ? (
-      <MyInvoiceListPage apiClient={customerApiClient} />
+      <MyInvoiceListPage
+        apiClient={customerApiClient}
+        redirectTo={redirectTo}
+      />
     ) : (
-      <MyInvoiceDetailPage apiClient={customerApiClient} />
+      <MyInvoiceDetailPage
+        apiClient={customerApiClient}
+        redirectTo={redirectTo}
+      />
     );
   render(
     <MemoryRouter initialEntries={[path]}>
       {page.startsWith("me") ? (
-        <AuthProvider client={authClient}>
-          <Routes>
-            <Route element={<RequireAuth />}>
-              <Route path="/me/invoices" element={component} />
-              <Route path="/me/invoices/:id" element={component} />
-            </Route>
-          </Routes>
-        </AuthProvider>
+        <ContactProvider
+          value={{ lineEnabled: false, contactEmail: "help@example.jp" }}
+        >
+          <AuthProvider client={authClient}>
+            <Routes>
+              <Route element={<RequireAuth />}>
+                <Route path="/me/invoices" element={component} />
+                <Route path="/me/invoices/:id" element={component} />
+              </Route>
+            </Routes>
+          </AuthProvider>
+        </ContactProvider>
       ) : (
         <Routes>
           <Route path="/admin/invoices" element={component} />
@@ -150,6 +166,125 @@ describe("invoice pages", () => {
     ).toBeTruthy();
     expect(screen.getByText(webMessages.invoicePreviewShort)).toBeTruthy();
     expect(adminApiClient.getInvoices).toHaveBeenCalledOnce();
+  });
+
+  it("offers a hosted payment action only for issued card invoices", async () => {
+    setup("me-detail", {
+      getInvoice: vi.fn(async () => ({ ...invoice, paymentMethod: "card" })),
+    });
+    expect(
+      await screen.findByRole("button", {
+        name: webMessages.invoicePaymentLinkAction,
+      }),
+    ).toBeTruthy();
+    expect(screen.getByText(webMessages.invoiceHostedCardPrivacy)).toBeTruthy();
+
+    cleanup();
+    setup("me-detail", {
+      getInvoice: vi.fn(async () => ({
+        ...invoice,
+        paymentMethod: "card",
+        status: "paid",
+      })),
+    });
+    await screen.findByRole("heading", {
+      name: webMessages.invoiceDetailTitle,
+    });
+    expect(
+      screen.queryByRole("button", {
+        name: webMessages.invoicePaymentLinkAction,
+      }),
+    ).toBeNull();
+  });
+
+  it("shows the payment action on the customer invoice list for issued cards only", async () => {
+    setup("me-list", {
+      getInvoices: vi.fn(async () => ({
+        invoices: [{ ...invoice, paymentMethod: "card" }],
+      })),
+    });
+    expect(
+      await screen.findByRole("button", {
+        name: webMessages.invoicePaymentLinkAction,
+      }),
+    ).toBeTruthy();
+  });
+
+  it("calls the API and redirects to the returned hosted URL", async () => {
+    const redirectTo = vi.fn();
+    const createLink = vi.fn(async () => ({
+      redirectUrl: "https://komoju.com/sessions/card-session",
+    }));
+    setup(
+      "me-detail",
+      {
+        getInvoice: vi.fn(async () => ({ ...invoice, paymentMethod: "card" })),
+        createInvoicePaymentLink: createLink,
+      },
+      redirectTo,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: webMessages.invoicePaymentLinkAction,
+      }),
+    );
+    await waitFor(() => expect(createLink).toHaveBeenCalledWith(invoiceId));
+    await waitFor(() =>
+      expect(redirectTo).toHaveBeenCalledWith(
+        "https://komoju.com/sessions/card-session",
+      ),
+    );
+  });
+
+  it("prevents a second request while the payment link is being created", async () => {
+    let resolveLink: ((value: { redirectUrl: string }) => void) | undefined;
+    const createLink = vi.fn(
+      () =>
+        new Promise<{ redirectUrl: string }>((resolve) => {
+          resolveLink = resolve;
+        }),
+    );
+    setup(
+      "me-detail",
+      {
+        getInvoice: vi.fn(async () => ({ ...invoice, paymentMethod: "card" })),
+        createInvoicePaymentLink: createLink,
+      },
+      () => undefined,
+    );
+    const button = await screen.findByRole("button", {
+      name: webMessages.invoicePaymentLinkAction,
+    });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(createLink).toHaveBeenCalledTimes(1);
+    expect(button.hasAttribute("disabled")).toBe(true);
+    resolveLink?.({ redirectUrl: "https://komoju.com/sessions/session" });
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
+  });
+
+  it("shows contact guidance when hosted payment is unavailable", async () => {
+    setup("me-detail", {
+      getInvoice: vi.fn(async () => ({ ...invoice, paymentMethod: "card" })),
+      createInvoicePaymentLink: vi.fn(async () => {
+        throw new ApiClientError("payment_link_unavailable");
+      }),
+    });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: webMessages.invoicePaymentLinkAction,
+      }),
+    );
+    expect(
+      await screen.findByText(/ただいまカードでのお支払いをご案内できません/),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getAllByRole("link", { name: "help@example.jp" })
+        .every(
+          (link) => link.getAttribute("href") === "mailto:help@example.jp",
+        ),
+    ).toBe(true);
   });
 
   it("shows the unpaid customer invoice with its number, preview label and a link to the detail", async () => {

@@ -3,10 +3,11 @@ import {
   type InvoiceListItem,
   webMessages,
 } from "@kobito/shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { SignOutAction } from "../auth/SignOutAction.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
+import { ApiClientError } from "../platform/api-client.js";
 import { MailText } from "../platform/contact.js";
 import { formatDate, formatYen } from "../platform/format.js";
 import {
@@ -31,7 +32,7 @@ import { useInvoicePdfDownload } from "./invoice-pdf.js";
 
 type InvoiceClient = Pick<
   ReturnTypeApiClient,
-  "getInvoices" | "getInvoice" | "getInvoicePdf"
+  "getInvoices" | "getInvoice" | "getInvoicePdf" | "createInvoicePaymentLink"
 >;
 
 const unpaidStatuses: ReadonlyArray<InvoiceListItem["status"]> = [
@@ -107,7 +108,7 @@ export function InvoicePaymentGuide({
   invoice,
   issuer,
 }: {
-  invoice: Pick<InvoiceListItem, "paymentMethod">;
+  invoice: Pick<InvoiceListItem, "paymentMethod" | "status">;
   issuer: InvoiceDetail["issuer"] | undefined;
 }) {
   if (invoice.paymentMethod === "bank_transfer") {
@@ -133,15 +134,83 @@ export function InvoicePaymentGuide({
     );
   }
   if (invoice.paymentMethod === "card") {
+    const cardGuidance =
+      invoice.status === "issued"
+        ? webMessages.invoiceCardGuidance
+        : webMessages.invoiceCardNoLinkGuidance;
     return (
       <>
         <h4 className="ui-card__subtitle">{webMessages.invoiceCardHeading}</h4>
-        <p className="ui-text">{webMessages.invoiceCardGuidance}</p>
+        <p className="ui-text">
+          {invoice.status === "issued" ? (
+            cardGuidance
+          ) : (
+            <MailText template={cardGuidance} />
+          )}
+        </p>
         <Hint>{webMessages.invoiceCardPrivacy}</Hint>
       </>
     );
   }
   return <p className="ui-text">{webMessages.invoiceOtherPaymentGuidance}</p>;
+}
+
+function PaymentLinkAction({
+  invoice,
+  apiClient,
+  redirectTo = (url) => window.location.assign(url),
+}: {
+  invoice: InvoiceListItem;
+  apiClient: InvoiceClient;
+  redirectTo?: ((url: string) => void) | undefined;
+}) {
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<"unavailable" | "general" | null>(null);
+  const busy = useRef(false);
+  if (invoice.paymentMethod !== "card" || invoice.status !== "issued")
+    return null;
+
+  async function openPaymentPage() {
+    if (busy.current) return;
+    busy.current = true;
+    setWorking(true);
+    setError(null);
+    try {
+      const { redirectUrl } = await apiClient.createInvoicePaymentLink(
+        invoice.id,
+      );
+      redirectTo(redirectUrl);
+    } catch (cause) {
+      busy.current = false;
+      setError(
+        cause instanceof ApiClientError &&
+          cause.code === "payment_link_unavailable"
+          ? "unavailable"
+          : "general",
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div>
+      <Button disabled={working} onClick={() => void openPaymentPage()}>
+        {working
+          ? webMessages.invoicePaymentLinkWorking
+          : webMessages.invoicePaymentLinkAction}
+      </Button>
+      <Hint>{webMessages.invoiceHostedCardPrivacy}</Hint>
+      {error === "unavailable" ? (
+        <Notice tone="warn">
+          <MailText template={webMessages.invoicePaymentUnavailable} />
+        </Notice>
+      ) : null}
+      {error === "general" ? (
+        <Notice tone="warn">{webMessages.invoicePaymentLinkError}</Notice>
+      ) : null}
+    </div>
+  );
 }
 
 function InvoiceAmounts({
@@ -203,10 +272,14 @@ function DueNotice({
 export function InvoicePayCard({
   invoice,
   detail,
+  apiClient,
+  redirectTo,
   initialStage = false,
 }: {
   invoice: InvoiceListItem;
   detail: InvoiceDetail | undefined;
+  apiClient: InvoiceClient;
+  redirectTo?: ((url: string) => void) | undefined;
   initialStage?: boolean;
 }) {
   return (
@@ -233,6 +306,11 @@ export function InvoicePayCard({
       <InvoicePaymentGuide invoice={invoice} issuer={detail?.issuer} />
       {invoice.preview ? <Hint>{webMessages.invoicePreviewShort}</Hint> : null}
       <div className="ui-actions">
+        <PaymentLinkAction
+          apiClient={apiClient}
+          invoice={invoice}
+          redirectTo={redirectTo}
+        />
         <Link
           className={buttonClass("ghost")}
           to={`/me/invoices/${encodeURIComponent(invoice.id)}`}
@@ -251,6 +329,7 @@ export function MyInvoiceListPage({
   accessNotice,
   showLogout,
   tabbed = false,
+  redirectTo,
 }: {
   apiClient: InvoiceClient;
   returnPath?: string | null | undefined;
@@ -258,6 +337,7 @@ export function MyInvoiceListPage({
   accessNotice?: string | undefined;
   showLogout?: boolean | undefined;
   tabbed?: boolean | undefined;
+  redirectTo?: ((url: string) => void) | undefined;
 }) {
   const { state, retry } = useCustomerInvoices(apiClient);
   const invoices = state.status === "ready" ? state.invoices : [];
@@ -292,6 +372,8 @@ export function MyInvoiceListPage({
               <InvoicePayCard
                 detail={state.details[invoice.id]}
                 invoice={invoice}
+                apiClient={apiClient}
+                redirectTo={redirectTo}
                 key={invoice.id}
               />
             ))
@@ -326,9 +408,11 @@ export function MyInvoiceListPage({
 export function MyInvoiceDetailPage({
   apiClient,
   tabbed = false,
+  redirectTo,
 }: {
   apiClient: InvoiceClient;
   tabbed?: boolean | undefined;
+  redirectTo?: ((url: string) => void) | undefined;
 }) {
   const { id = "" } = useParams();
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
@@ -456,6 +540,11 @@ export function MyInvoiceDetailPage({
                 <InvoicePaymentGuide
                   invoice={invoice}
                   issuer={invoice.issuer}
+                />
+                <PaymentLinkAction
+                  apiClient={apiClient}
+                  invoice={invoice}
+                  redirectTo={redirectTo}
                 />
               </Card>
             ) : null}

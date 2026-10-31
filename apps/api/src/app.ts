@@ -19,6 +19,8 @@ import type { InvoiceModule } from "./modules/invoices/contracts.js";
 import { createInvoiceCustomerRoutes } from "./modules/invoices/routes.js";
 import type { IssuerSettingsModule } from "./modules/issuer-settings/contracts.js";
 import { createAdminIssuerSettingsRoutes } from "./modules/issuer-settings/routes.js";
+import type { PaymentLinkModule } from "./modules/payment-links/contracts.js";
+import { createPaymentLinkRoutes } from "./modules/payment-links/routes.js";
 import type { PlanQuoteModule } from "./modules/plan-quotes/contracts.js";
 import { createPlanQuoteCustomerRoutes } from "./modules/plan-quotes/routes.js";
 import type { ReferralModule } from "./modules/referrals/contracts.js";
@@ -46,6 +48,7 @@ export interface AppDependencies {
   admin: AdminModule;
   issuerSettings?: IssuerSettingsModule;
   invoices: InvoiceModule;
+  paymentLinks?: PaymentLinkModule;
   requests?: RequestModule;
   planQuotes?: PlanQuoteModule;
   referrals?: ReferralModule;
@@ -146,6 +149,16 @@ export function createApp(dependencies: AppDependencies) {
   app.route(
     "/api/v1",
     createInvoiceCustomerRoutes({ invoices: dependencies.invoices }),
+  );
+  app.route(
+    "/api/v1",
+    createPaymentLinkRoutes(
+      dependencies.paymentLinks ?? {
+        create: async () => {
+          throw new ApiError(503, "payment_link_unavailable");
+        },
+      },
+    ),
   );
   if (dependencies.requests)
     app.route("/api/v1", createRequestCustomerRoutes(dependencies.requests));

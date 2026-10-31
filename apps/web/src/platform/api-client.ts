@@ -28,6 +28,7 @@ import {
   type PublicConfig,
   type PublicPartner,
   type PublicPlans,
+  paymentLinkResponseSchema,
   publicConfigSchema,
   publicPartnerSchema,
   publicPlansSchema,
@@ -72,6 +73,8 @@ export class ApiClientError extends Error {
       | "validation_error"
       | "conflict"
       | "service_unavailable"
+      | "payment_link_unavailable"
+      | "payment_link_failed"
       | "invalid_line_token"
       | "session_changed",
   ) {
@@ -234,7 +237,9 @@ export function createApiClient(options: ApiClientOptions) {
         responseCode === "plan_quote_conflict" ||
         responseCode === "plan_quote_expired" ||
         responseCode === "insufficient_credits" ||
-        responseCode === "invalid_line_token"
+        responseCode === "invalid_line_token" ||
+        responseCode === "payment_link_unavailable" ||
+        responseCode === "payment_link_failed"
       ) {
         throw new ApiClientError(responseCode);
       }
@@ -502,6 +507,13 @@ export function createApiClient(options: ApiClientOptions) {
         true,
       ),
     getInvoicePdf,
+    createInvoicePaymentLink(invoiceId: string) {
+      return postJson(
+        `/api/v1/me/invoices/${encodeURIComponent(invoiceId)}/payment-link`,
+        paymentLinkResponseSchema,
+        {},
+      );
+    },
   };
 }
 
