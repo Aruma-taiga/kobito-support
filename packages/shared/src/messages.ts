@@ -504,6 +504,15 @@ export const webMessages = {
     "S-03": "管理者へのお知らせ",
   },
   adminTodayPaymentReviewAction: "確認する",
+  adminPaymentReviewResolveAction: "解決済みにする",
+  adminPaymentReviewOutcomeLabel: "解決結果",
+  adminPaymentReviewHandledManually: "手作業で対応した",
+  adminPaymentReviewNotApplicable: "対応不要",
+  adminPaymentReviewResolveConfirm:
+    "選択した結果で、この入金の要確認を解決済みにしますか？",
+  adminPaymentReviewResolving: "処理中…",
+  adminPaymentReviewResolveError:
+    "解決済みにできませんでした。画面を読み込み直してから、もう一度お試しください。",
   adminTodayPaymentFailureAction: "請求書を開く",
   adminPaymentReviewAmountMismatch: "入金額が請求書と一致しません",
   adminPaymentReviewInvoiceNotFound: "該当する請求書が見つかりません",

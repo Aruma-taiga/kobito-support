@@ -6,6 +6,8 @@ import type {
   AdminNotificationFailureRetryResponse,
   AdminNotificationFailuresQuery,
   AdminNotificationFailuresResponse,
+  AdminPaymentReviewResolveRequest,
+  AdminPaymentReviewResolveResponse,
   AdminPaymentReviewsQuery,
   AdminPaymentReviewsResponse,
   DeclineApplicationRequest,
@@ -469,6 +471,40 @@ export class AdminRepository implements AdminModule {
           [notificationId],
         );
         return { id: notification.id, scheduled: true };
+      },
+    );
+  }
+
+  resolvePaymentReview(
+    principal: Principal,
+    eventId: string,
+    request: AdminPaymentReviewResolveRequest,
+  ): Promise<AdminPaymentReviewResolveResponse> {
+    return withAdminAudit(
+      this.pool,
+      principal,
+      {
+        action: "payment_review.resolved",
+        targetType: "komoju_event",
+        targetId: eventId,
+        detail: { outcome: request.outcome },
+      },
+      async (client) => {
+        const locked = await client.query<{ error: string | null }>(
+          "select error from komoju_events where id=$1 for update",
+          [eventId],
+        );
+        const event = locked.rows[0];
+        if (!event) throw new ApiError(404, "not_found");
+        if (!event.error?.startsWith("review:"))
+          throw new ApiError(409, "conflict");
+        await client.query(
+          `update komoju_events
+              set error=$2, processed_at=coalesce(processed_at,clock_timestamp())
+            where id=$1`,
+          [eventId, `resolved:${request.outcome}`],
+        );
+        return { eventId, resolved: true };
       },
     );
   }

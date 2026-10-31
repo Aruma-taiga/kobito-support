@@ -205,6 +205,89 @@ function setup(path: string, apiClient: AdminApiClient) {
 const text = () => document.body.textContent ?? "";
 
 describe("a02 today's tasks", () => {
+  it("asks how a payment review was handled, confirms once, and prevents a second submission", async () => {
+    const resolve = vi.fn(() => new Promise<void>(() => {}));
+    const client = adminClient({
+      getPaymentReviews: vi.fn(async () => ({
+        events: [
+          {
+            eventId: "evt-review-test",
+            eventType: "payment.captured",
+            invoiceNo: null,
+            receivedAt: "2026-11-13T00:00:00.000Z",
+            reason: "invoice_not_found",
+            notificationAmount: null,
+            invoiceTotal: null,
+            shopName: null,
+          },
+        ],
+        failedInvoices: [],
+        eventCount: 1,
+        failedInvoiceCount: 0,
+      })),
+      resolvePaymentReview: resolve,
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    setup("/admin", client);
+    const action = await screen.findByRole("button", {
+      name: "解決済みにする",
+    });
+    const select = screen.getByLabelText("解決結果");
+    fireEvent.change(select, { target: { value: "not_applicable" } });
+    fireEvent.click(action);
+    fireEvent.click(action);
+    await waitFor(() => expect(resolve).toHaveBeenCalledTimes(1));
+    expect(resolve).toHaveBeenCalledWith("evt-review-test", {
+      outcome: "not_applicable",
+    });
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "処理中…" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("shows a polite message when payment review resolution fails and honors cancel", async () => {
+    const resolve = vi.fn(async () => {
+      throw new AdminApiError("conflict");
+    });
+    const client = adminClient({
+      getPaymentReviews: vi.fn(async () => ({
+        events: [
+          {
+            eventId: "evt-review-fail",
+            eventType: "payment.captured",
+            invoiceNo: null,
+            receivedAt: "2026-11-13T00:00:00.000Z",
+            reason: "other",
+            notificationAmount: null,
+            invoiceTotal: null,
+            shopName: null,
+          },
+        ],
+        failedInvoices: [],
+        eventCount: 1,
+        failedInvoiceCount: 0,
+      })),
+      resolvePaymentReview: resolve,
+    });
+    const confirm = vi
+      .spyOn(window, "confirm")
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    setup("/admin", client);
+    const button = await screen.findByRole("button", {
+      name: "解決済みにする",
+    });
+    fireEvent.click(button);
+    expect(resolve).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    expect(
+      await screen.findByText(webMessages.adminPaymentReviewResolveError),
+    ).toBeTruthy();
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(confirm).toHaveBeenCalledTimes(2);
+  });
+
   it("shows notification failures and asks before scheduling a retry once", async () => {
     const retry = vi.fn(
       () => new Promise<{ id: string; scheduled: true }>(() => {}),

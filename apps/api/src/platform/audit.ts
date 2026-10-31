@@ -18,6 +18,7 @@ const detailKeys = new Set([
   "removalRequested",
   "removablePermissionsRemoved",
   "checklistComplete",
+  "outcome",
 ]);
 
 function safeText(value: string, maxLength: number): boolean {

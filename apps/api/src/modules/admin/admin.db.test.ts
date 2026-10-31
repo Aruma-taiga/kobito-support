@@ -525,11 +525,15 @@ describe("admin application review with PostgreSQL", () => {
       `${testPrefix}-processed`,
       `${testPrefix}-failure`,
     ];
+    const amountReviewId = ids[0];
+    const processedEventId = ids[2];
+    if (!amountReviewId || !processedEventId)
+      throw new Error("Review event fixtures are incomplete");
     eventIds.push(...ids);
     await pool.query(
       `insert into komoju_events(id,type,payload,error,processed_at,received_at)
        values
-       ($1,'payment.captured',$5::jsonb,'review:amount_mismatch',now(),'2099-01-01T00:00:00Z'),
+       ($1,'payment.captured',$5::jsonb,'review:amount_mismatch',null,'2099-01-01T00:00:00Z'),
        ($2,'payment.captured',$6::jsonb,'review:invoice_not_found',now(),'2098-12-31T23:59:00Z'),
        ($3,'payment.captured',$7::jsonb,null,now(),'2099-01-01T00:01:00Z'),
        ($4,'payment.failed',$8::jsonb,'failure:payment.failed',now(),'2099-01-01T00:02:00Z')`,
@@ -611,7 +615,117 @@ describe("admin application review with PostgreSQL", () => {
         },
       );
       expect(invalidLimit.status).toBe(422);
+
+      const resolveRequest = (
+        token: string,
+        eventId: string,
+        outcome: string,
+      ) =>
+        app.request(
+          `/api/v1/admin/payment-reviews/${encodeURIComponent(eventId)}/resolve`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ outcome }),
+          },
+        );
+      expect(
+        (
+          await resolveRequest(
+            noFactorToken,
+            amountReviewId,
+            "handled_manually",
+          )
+        ).status,
+      ).toBe(403);
+      expect(
+        (
+          await resolveRequest(
+            adminToken,
+            `${testPrefix}-missing`,
+            "handled_manually",
+          )
+        ).status,
+      ).toBe(404);
+      expect(
+        (await resolveRequest(adminToken, processedEventId, "handled_manually"))
+          .status,
+      ).toBe(409);
+      const invoiceBefore = await pool.query(
+        "select status from invoices where invoice_no=$1",
+        [paidInvoiceNo],
+      );
+      const resolved = await resolveRequest(
+        adminToken,
+        amountReviewId,
+        "handled_manually",
+      );
+      expect(resolved.status).toBe(200);
+      expect(await resolved.json()).toEqual({
+        eventId: ids[0],
+        resolved: true,
+      });
+      expect(
+        (await resolveRequest(adminToken, amountReviewId, "not_applicable"))
+          .status,
+      ).toBe(409);
+      const eventStates = await pool.query<{
+        id: string;
+        error: string | null;
+        processed_at: Date | null;
+      }>(
+        "select id,error,processed_at from komoju_events where id=any($1::text[])",
+        [ids],
+      );
+      expect(eventStates.rows.find((row) => row.id === ids[0])).toMatchObject({
+        error: "resolved:handled_manually",
+      });
+      expect(
+        eventStates.rows.find((row) => row.id === ids[0])?.processed_at,
+      ).not.toBeNull();
+      expect(eventStates.rows.find((row) => row.id === ids[1])?.error).toBe(
+        "review:invoice_not_found",
+      );
+      const audit = await pool.query<{
+        actor: string;
+        detail: { outcome?: string };
+      }>(
+        "select actor,detail from audit_logs where target_type='komoju_event' and target_id=$1 and action='payment_review.resolved'",
+        [ids[0]],
+      );
+      expect(audit.rows).toHaveLength(1);
+      expect(audit.rows[0]).toMatchObject({
+        actor: adminUid,
+        detail: { outcome: "handled_manually" },
+      });
+      const reviewAfter = adminPaymentReviewsResponseSchema.parse(
+        await (
+          await app.request("/api/v1/admin/payment-reviews?limit=50", {
+            headers: { authorization: `Bearer ${adminToken}` },
+          })
+        ).json(),
+      );
+      expect(reviewAfter.events.map((event) => event.eventId)).not.toContain(
+        ids[0],
+      );
+      expect(reviewAfter.events.map((event) => event.eventId)).toContain(
+        ids[1],
+      );
+      expect(
+        (
+          await pool.query("select status from invoices where invoice_no=$1", [
+            paidInvoiceNo,
+          ])
+        ).rows,
+      ).toEqual(invoiceBefore.rows);
     } finally {
+      await pool.query(
+        "delete from audit_logs where target_type='komoju_event' and target_id=any($1::text[]) and action='payment_review.resolved'",
+        [ids],
+      );
       await pool.query("delete from komoju_events where id=any($1::text[])", [
         ids,
       ]);
