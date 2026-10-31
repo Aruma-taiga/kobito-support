@@ -14,7 +14,7 @@ describe("HttpKomojuClient", () => {
         currency: "JPY",
         return_url: "https://app.example.test/me/invoices/abc",
         payment_types: ["credit_card"],
-        payment_data: { external_order_num: "KS-2026-00001" },
+        payment_data: { external_order_num: "KS-2026-00001-abcdef" },
         default_locale: "ja",
       });
       return Response.json({
@@ -27,7 +27,7 @@ describe("HttpKomojuClient", () => {
       "secret-key",
       fetcher,
     ).createHostedSession({
-      invoiceNo: "KS-2026-00001",
+      externalOrderNum: "KS-2026-00001-abcdef",
       amountYen: 16_500,
       returnUrl: "https://app.example.test/me/invoices/abc",
     });
@@ -45,7 +45,7 @@ describe("HttpKomojuClient", () => {
     );
     await expect(
       client.createHostedSession({
-        invoiceNo: "KS-2026-00001",
+        externalOrderNum: "KS-2026-00001-abcdef",
         amountYen: 5500,
         returnUrl: "https://app.example.test/return",
       }),
@@ -59,7 +59,7 @@ describe("HttpKomojuClient", () => {
     );
     await expect(
       malformed.createHostedSession({
-        invoiceNo: "KS-2026-00001",
+        externalOrderNum: "KS-2026-00001-abcdef",
         amountYen: 5500,
         returnUrl: "https://app.example.test/return",
       }),
@@ -77,7 +77,7 @@ describe("HttpKomojuClient", () => {
     );
     await expect(
       timedOut.createHostedSession({
-        invoiceNo: "KS-2026-00001",
+        externalOrderNum: "KS-2026-00001-abcdef",
         amountYen: 5500,
         returnUrl: "https://app.example.test/return",
       }),

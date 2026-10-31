@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { KomojuClient } from "../../integrations/komoju/client.js";
 import { type CustomerScope, customerScopeFor } from "../../platform/scope.js";
@@ -25,7 +26,7 @@ export class PaymentLinkService implements PaymentLinkModule {
     let session: { sessionId: string; redirectUrl: string };
     try {
       session = await this.komoju.createHostedSession({
-        invoiceNo: invoice.invoiceNo,
+        externalOrderNum: `${invoice.invoiceNo}-${randomBytes(3).toString("hex")}`,
         amountYen: invoice.amountYen,
         returnUrl: new URL(
           `/me/invoices/${encodeURIComponent(invoiceId)}`,

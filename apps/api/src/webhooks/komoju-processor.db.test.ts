@@ -348,6 +348,75 @@ describe("KOMOJU event processing database behavior", () => {
     }
   });
 
+  it("resolves a suffixed reference to its exact invoice and reviews a second payment", async () => {
+    const fixture = await createInvoice();
+    const other = await createInvoice();
+    const firstEventId = newEventId();
+    const secondEventId = newEventId();
+    const eventIds = [firstEventId, secondEventId];
+    try {
+      await repository.receive(
+        capturedEvent(
+          firstEventId,
+          `${fixture.invoiceNo}-a1b2c3`,
+          `pay_first_${randomUUID().replaceAll("-", "")}`,
+        ),
+      );
+      await repository.receive(
+        capturedEvent(
+          secondEventId,
+          `${fixture.invoiceNo}-d4e5f6`,
+          `pay_second_${randomUUID().replaceAll("-", "")}`,
+        ),
+      );
+      const firstResult = await repository.processEvent(firstEventId);
+      const secondResult = await repository.processEvent(secondEventId);
+      expect([firstResult, secondResult]).toEqual(["processed", "review"]);
+      const state = await pool.query<{
+        invoice_no: string;
+        status: string;
+        contract_status: string;
+        payment_count: string;
+        grant_count: string;
+      }>(
+        `select i.invoice_no,i.status,c.status contract_status,
+          (select count(*)::text from payments where invoice_id=i.id) payment_count,
+          (select count(*)::text from credit_entries where invoice_id=i.id and kind='grant') grant_count
+         from invoices i join contracts c on c.id=i.contract_id
+         where i.id=any($1::uuid[]) order by i.invoice_no`,
+        [[fixture.invoiceId, other.invoiceId]],
+      );
+      const settled = state.rows.find(
+        (row) => row.invoice_no === fixture.invoiceNo,
+      );
+      const untouched = state.rows.find(
+        (row) => row.invoice_no === other.invoiceNo,
+      );
+      expect(settled).toEqual({
+        invoice_no: fixture.invoiceNo,
+        status: "paid",
+        contract_status: "active",
+        payment_count: "1",
+        grant_count: "1",
+      });
+      expect(untouched).toEqual({
+        invoice_no: other.invoiceNo,
+        status: "issued",
+        contract_status: "awaiting_payment",
+        payment_count: "0",
+        grant_count: "0",
+      });
+      const second = await pool.query<{ error: string | null }>(
+        "select error from komoju_events where id=$1",
+        [secondEventId],
+      );
+      expect(second.rows[0]?.error).toBe("review:invoice_state_conflict");
+    } finally {
+      await cleanup(fixture, eventIds);
+      await cleanup(other, []);
+    }
+  });
+
   it.each([
     "payment.failed",
     "payment.expired",

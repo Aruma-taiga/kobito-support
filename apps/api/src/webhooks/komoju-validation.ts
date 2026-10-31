@@ -3,8 +3,14 @@ import type { KomojuInboxEvent } from "./komoju-contracts.js";
 const identifier = /^[A-Za-z0-9_-]{1,128}$/;
 const eventType = /^[a-z][a-z0-9_.-]{0,127}$/;
 const statusValue = /^[a-z][a-z0-9_-]{0,63}$/;
-const invoiceNumber =
-  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}[A-Za-z0-9])?-\d{4}-\d{5,10}$/;
+const externalOrderNumber =
+  /^(?<invoice>[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}[A-Za-z0-9])?-\d{4}-\d{5,10})(?:-[a-z0-9]{6})?$/;
+
+export function invoiceNumberFromExternalOrderNum(
+  value: string,
+): string | undefined {
+  return externalOrderNumber.exec(value)?.groups?.invoice;
+}
 
 export function parseKomojuInboxEvent(
   value: unknown,
@@ -69,7 +75,7 @@ export function parseKomojuInboxEvent(
   if (value.data.external_order_num !== undefined) {
     if (
       typeof value.data.external_order_num !== "string" ||
-      !invoiceNumber.test(value.data.external_order_num)
+      !invoiceNumberFromExternalOrderNum(value.data.external_order_num)
     )
       return;
     data.external_order_num = value.data.external_order_num;
