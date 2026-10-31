@@ -172,6 +172,50 @@ function setup(
         total: 1,
       })),
     getCustomerDetail: options.getCustomerDetail ?? vi.fn(async () => detail),
+    getCancellation: vi.fn(async () => ({
+      contractId,
+      status: "active" as const,
+      endsOn: null,
+      currentPeriodEndsOn: "2026-11-30",
+      checklist: {
+        removalRequested: false,
+        removablePermissionsRemoved: false,
+        complete: false,
+      },
+    })),
+    scheduleCancellation: vi.fn(async () => ({
+      contractId,
+      status: "cancel_scheduled" as const,
+      endsOn: "2026-11-30",
+      currentPeriodEndsOn: "2026-11-30",
+      checklist: {
+        removalRequested: false,
+        removablePermissionsRemoved: false,
+        complete: false,
+      },
+    })),
+    revokeCancellation: vi.fn(async () => ({
+      contractId,
+      status: "active" as const,
+      endsOn: null,
+      currentPeriodEndsOn: "2026-11-30",
+      checklist: {
+        removalRequested: false,
+        removablePermissionsRemoved: false,
+        complete: false,
+      },
+    })),
+    updateCancellationChecklist: vi.fn(async () => ({
+      contractId,
+      status: "active" as const,
+      endsOn: null,
+      currentPeriodEndsOn: "2026-11-30",
+      checklist: {
+        removalRequested: false,
+        removablePermissionsRemoved: false,
+        complete: false,
+      },
+    })),
     declineApplication:
       options.declineApplication ??
       vi.fn(async () => ({

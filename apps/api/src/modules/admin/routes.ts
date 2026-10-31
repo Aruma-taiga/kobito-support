@@ -3,6 +3,7 @@ import {
   approveApplicationRequestSchema,
   confirmBankPaymentRequestSchema,
   declineApplicationRequestSchema,
+  updateCancellationChecklistSchema,
 } from "@kobito/shared";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -114,6 +115,52 @@ export function createAdminRoutes(dependencies: {
       context.req.param("id"),
     );
     return context.json(detail);
+  });
+
+  routes.get("/contracts/:id/cancellation", async (context) =>
+    context.json(
+      await dependencies.admin.getCancellation(context.req.param("id")),
+    ),
+  );
+  routes.post("/contracts/:id/cancellation", async (context) =>
+    context.json(
+      await dependencies.admin.scheduleCancellation(
+        context.get("principal"),
+        context.req.param("id"),
+      ),
+    ),
+  );
+  routes.delete("/contracts/:id/cancellation", async (context) =>
+    context.json(
+      await dependencies.admin.revokeCancellation(
+        context.get("principal"),
+        context.req.param("id"),
+      ),
+    ),
+  );
+  routes.put("/contracts/:id/cancellation/checklist", async (context) => {
+    const contentType = context.req
+      .header("content-type")
+      ?.split(";", 1)[0]
+      ?.trim()
+      .toLowerCase();
+    if (contentType !== "application/json")
+      throw new ApiError(400, "invalid_request");
+    let raw: unknown;
+    try {
+      raw = await context.req.json();
+    } catch {
+      throw new ApiError(400, "invalid_request");
+    }
+    const checklist = updateCancellationChecklistSchema.safeParse(raw);
+    if (!checklist.success) throw new ApiError(422, "validation_error");
+    return context.json(
+      await dependencies.admin.updateCancellationChecklist(
+        context.get("principal"),
+        context.req.param("id"),
+        checklist.data,
+      ),
+    );
   });
 
   routes.get("/invoices", async (context) =>

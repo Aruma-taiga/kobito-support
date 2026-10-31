@@ -3,6 +3,7 @@ import type {
   DeclineApplicationRequest,
 } from "@kobito/shared";
 import {
+  adminCancellationSchema,
   adminPaymentReviewsQuerySchema,
   adminPaymentReviewsResponseSchema,
 } from "@kobito/shared";
@@ -21,6 +22,46 @@ export class AdminService implements AdminModule {
     if (!parsed.success) throw new ApiError(422, "validation_error");
     return adminPaymentReviewsResponseSchema.parse(
       await this.repository.listPaymentReviews(parsed.data),
+    );
+  }
+
+  async getCancellation(contractId: string) {
+    if (!uuidSchema.safeParse(contractId).success)
+      throw new ApiError(404, "not_found");
+    return adminCancellationSchema.parse(
+      await this.repository.getCancellation(contractId),
+    );
+  }
+
+  async scheduleCancellation(principal: Principal, contractId: string) {
+    if (!uuidSchema.safeParse(contractId).success)
+      throw new ApiError(404, "not_found");
+    return adminCancellationSchema.parse(
+      await this.repository.scheduleCancellation(principal, contractId),
+    );
+  }
+
+  async revokeCancellation(principal: Principal, contractId: string) {
+    if (!uuidSchema.safeParse(contractId).success)
+      throw new ApiError(404, "not_found");
+    return adminCancellationSchema.parse(
+      await this.repository.revokeCancellation(principal, contractId),
+    );
+  }
+
+  async updateCancellationChecklist(
+    principal: Principal,
+    contractId: string,
+    checklist: import("@kobito/shared").UpdateCancellationChecklist,
+  ) {
+    if (!uuidSchema.safeParse(contractId).success)
+      throw new ApiError(404, "not_found");
+    return adminCancellationSchema.parse(
+      await this.repository.updateCancellationChecklist(
+        principal,
+        contractId,
+        checklist,
+      ),
     );
   }
 

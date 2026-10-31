@@ -141,6 +141,50 @@ function setup(path: string, overrides: Record<string, unknown> = {}) {
       total: 2,
     })),
     getCustomerDetail: vi.fn(async () => detail),
+    getCancellation: vi.fn(async () => ({
+      contractId,
+      status: "active" as const,
+      endsOn: null,
+      currentPeriodEndsOn: "2026-11-30",
+      checklist: {
+        removalRequested: false,
+        removablePermissionsRemoved: false,
+        complete: false,
+      },
+    })),
+    scheduleCancellation: vi.fn(async () => ({
+      contractId,
+      status: "cancel_scheduled" as const,
+      endsOn: "2026-11-30",
+      currentPeriodEndsOn: "2026-11-30",
+      checklist: {
+        removalRequested: false,
+        removablePermissionsRemoved: false,
+        complete: false,
+      },
+    })),
+    revokeCancellation: vi.fn(async () => ({
+      contractId,
+      status: "active" as const,
+      endsOn: null,
+      currentPeriodEndsOn: "2026-11-30",
+      checklist: {
+        removalRequested: false,
+        removablePermissionsRemoved: false,
+        complete: false,
+      },
+    })),
+    updateCancellationChecklist: vi.fn(async () => ({
+      contractId,
+      status: "active" as const,
+      endsOn: null,
+      currentPeriodEndsOn: "2026-11-30",
+      checklist: {
+        removalRequested: false,
+        removablePermissionsRemoved: false,
+        complete: false,
+      },
+    })),
     getInvoiceReadiness: vi.fn(async () => ({
       canIssue: true,
       mode: "live" as const,
@@ -336,6 +380,66 @@ describe("a01 admin login", () => {
 });
 
 describe("a03 customers", () => {
+  it("records cancellation and permissions checklist on an active customer detail", async () => {
+    setup(`/admin/customers/${customerId}`, {
+      getCustomerDetail: vi.fn(async () => ({
+        ...detail,
+        contract: { id: contractId, status: "active" as const },
+      })),
+      getCancellation: vi.fn(async () => ({
+        contractId,
+        status: "active" as const,
+        endsOn: null,
+        currentPeriodEndsOn: "2026-11-30",
+        checklist: {
+          removalRequested: false,
+          removablePermissionsRemoved: false,
+          complete: false,
+        },
+      })),
+      scheduleCancellation: vi.fn(async () => ({
+        contractId,
+        status: "cancel_scheduled" as const,
+        endsOn: "2026-11-30",
+        currentPeriodEndsOn: "2026-11-30",
+        checklist: {
+          removalRequested: false,
+          removablePermissionsRemoved: false,
+          complete: false,
+        },
+      })),
+      updateCancellationChecklist: vi.fn(async () => ({
+        contractId,
+        status: "active" as const,
+        endsOn: null,
+        currentPeriodEndsOn: "2026-11-30",
+        checklist: {
+          removalRequested: true,
+          removablePermissionsRemoved: false,
+          complete: false,
+        },
+      })),
+    });
+    expect(
+      await screen.findByRole("heading", { name: "解約の記録" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "解約予定にする" }),
+    );
+    expect(screen.getByText(/2026-11-30/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "解約予定にする" }));
+    expect(await screen.findByText(/終了日: 2026-11-30/)).toBeTruthy();
+    fireEvent.click(
+      screen.getByLabelText("お客様に作業用権限の削除を依頼した"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "チェックリストを保存" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("解約の記録を更新しました。")).toBeTruthy(),
+    );
+  });
+
   it("lists customers in a table with plan prices split into 税抜 and 税込", async () => {
     setup("/admin/customers");
     expect(

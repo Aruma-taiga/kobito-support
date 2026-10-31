@@ -48,6 +48,8 @@ const dispatchableKinds = [
   "NT-05",
   "NT-06",
   "NT-07",
+  "NT-08",
+  "NT-09",
 ];
 
 export async function runNotificationDispatch(
@@ -97,6 +99,24 @@ export async function runNotificationDispatch(
           result.skipped += 1;
           continue;
         }
+        if (notification.kind === "NT-09") {
+          const contractId = notification.payload.contractId;
+          const contract =
+            typeof contractId === "string"
+              ? await client.query<{ status: string }>(
+                  "select status from contracts where id=$1",
+                  [contractId],
+                )
+              : null;
+          if (contract?.rows[0]?.status !== "ended") {
+            await client.query(
+              "update notifications set scheduled_at=$2 + interval '5 minutes' where id=$1",
+              [notification.id, now],
+            );
+            result.skipped += 1;
+            continue;
+          }
+        }
         const data = await loadNotificationData(client, notification);
         const recipient =
           notification.kind === "S-03"
@@ -121,6 +141,9 @@ export async function runNotificationDispatch(
           ...(data.contact_name ? { customerName: data.contact_name } : {}),
           ...(data.invoice_no ? { invoiceNo: data.invoice_no } : {}),
           ...(data.due_on ? { dueOn: data.due_on } : {}),
+          ...(typeof notification.payload.endsOn === "string"
+            ? { dueOn: notification.payload.endsOn }
+            : {}),
           ...(data.total_incl_tax === null
             ? {}
             : { amountInclTax: data.total_incl_tax }),

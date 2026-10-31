@@ -158,6 +158,34 @@ export const adminCustomerDetailSchema = z
   .strict();
 export type AdminCustomerDetail = z.infer<typeof adminCustomerDetailSchema>;
 
+export const cancellationChecklistSchema = z
+  .object({
+    removalRequested: z.boolean(),
+    removablePermissionsRemoved: z.boolean(),
+    complete: z.boolean(),
+  })
+  .strict();
+export const adminCancellationSchema = z
+  .object({
+    contractId: z.string().uuid(),
+    status: contractStatusSchema,
+    endsOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
+    currentPeriodEndsOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .nullable(),
+    checklist: cancellationChecklistSchema,
+  })
+  .strict();
+export type AdminCancellation = z.infer<typeof adminCancellationSchema>;
+export const updateCancellationChecklistSchema = cancellationChecklistSchema;
+export type UpdateCancellationChecklist = z.infer<
+  typeof updateCancellationChecklistSchema
+>;
+
 export const declineApplicationRequestSchema = z
   .object({
     rejectionNote: z.preprocess(

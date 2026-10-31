@@ -6,6 +6,28 @@ import {
 import { renderNotification } from "./templates.js";
 
 describe("notification templates", () => {
+  it("renders cancellation scheduled and ended notices with customer guidance", () => {
+    const scheduled = renderNotification({
+      kind: "NT-08",
+      serviceName: "サポート",
+      contactEmail: "help@example.invalid",
+      customerName: "お客様",
+      dueOn: "2026-11-30",
+    });
+    expect(scheduled.subject).toContain("解約");
+    expect(scheduled.text).toContain("2026-11-30");
+    expect(scheduled.text).toContain("請求書");
+
+    const ended = renderNotification({
+      kind: "NT-09",
+      serviceName: "サポート",
+      contactEmail: "help@example.invalid",
+      customerName: "お客様",
+    });
+    expect(ended.subject).toContain("終了");
+    expect(ended.text).toContain("終了");
+  });
+
   it("uses configured identity and explains that application receipt is not a contract", () => {
     const mail = renderNotification({
       kind: "NT-01",
