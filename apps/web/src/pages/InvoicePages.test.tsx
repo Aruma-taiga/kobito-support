@@ -165,7 +165,9 @@ describe("invoice pages", () => {
       await screen.findByRole("link", { name: /INV\/2026 001/ }),
     ).toBeTruthy();
     expect(screen.getByText(webMessages.invoicePreviewShort)).toBeTruthy();
-    expect(adminApiClient.getInvoices).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(adminApiClient.getInvoices).toHaveBeenCalledOnce(),
+    );
   });
 
   it("offers a hosted payment action only for issued card invoices", async () => {
@@ -257,7 +259,7 @@ describe("invoice pages", () => {
     });
     fireEvent.click(button);
     fireEvent.click(button);
-    expect(createLink).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(createLink).toHaveBeenCalledTimes(1));
     expect(button.hasAttribute("disabled")).toBe(true);
     resolveLink?.({ redirectUrl: "https://komoju.com/sessions/session" });
     await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
@@ -296,7 +298,9 @@ describe("invoice pages", () => {
         .getByRole("link", { name: webMessages.invoiceOpen })
         .getAttribute("href"),
     ).toBe(`/me/invoices/${invoiceId}`);
-    expect(customerApiClient.getInvoices).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(customerApiClient.getInvoices).toHaveBeenCalledOnce(),
+    );
   });
 
   it("shows the immutable snapshot, tax totals, bank details, and preview warning on the admin detail", async () => {
@@ -313,7 +317,9 @@ describe("invoice pages", () => {
     expect(totals?.textContent).toBe(
       `${webMessages.adminSubtotalExcl}5,000円${webMessages.invoiceTaxLabel}500円${webMessages.adminTotalIncl}5,500円`,
     );
-    expect(adminApiClient.getInvoice).toHaveBeenCalledWith(invoiceId);
+    await waitFor(() =>
+      expect(adminApiClient.getInvoice).toHaveBeenCalledWith(invoiceId),
+    );
   });
 
   it("shows the snapshot, subtotal, tax, total, bank details and preview warning on the customer detail", async () => {
@@ -329,7 +335,9 @@ describe("invoice pages", () => {
     expect(document.body.textContent).toContain("小計（税抜）5,000円");
     expect(document.body.textContent).toContain("消費税（10%）500円");
     expect(document.body.textContent).toContain("合計（税込）5,500円");
-    expect(customerApiClient.getInvoice).toHaveBeenCalledWith(invoiceId);
+    await waitFor(() =>
+      expect(customerApiClient.getInvoice).toHaveBeenCalledWith(invoiceId),
+    );
   });
 
   it("downloads a PDF using a sanitized filename and shows a retryable failure", async () => {
@@ -359,9 +367,11 @@ describe("invoice pages", () => {
     if (!downloadButton) throw new Error("Expected a PDF download button");
     fireEvent.click(downloadButton);
     await waitFor(() => expect(click).toHaveBeenCalledOnce());
-    expect(createObjectURL).toHaveBeenCalledOnce();
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledOnce());
     expect(downloadedFilename).toBe("INV_2026_001.pdf");
-    expect(adminApiClient.getInvoicePdf).toHaveBeenCalledWith(invoiceId);
+    await waitFor(() =>
+      expect(adminApiClient.getInvoicePdf).toHaveBeenCalledWith(invoiceId),
+    );
 
     getInvoicePdf.mockRejectedValueOnce(new Error("private response details"));
     fireEvent.click(
@@ -385,7 +395,7 @@ describe("invoice pages", () => {
       screen.getByRole("button", { name: webMessages.invoiceRetry }),
     );
     expect(await screen.findByText(webMessages.invoiceListEmpty)).toBeTruthy();
-    expect(getInvoices).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(getInvoices).toHaveBeenCalledTimes(2));
   });
 
   it("shows an access error instead of leaving an admin invoice screen loading", async () => {

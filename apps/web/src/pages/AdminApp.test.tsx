@@ -396,12 +396,16 @@ describe("admin MFA and review UI", () => {
 
     await finishMfa();
     expect(await screen.findByText(queueItem.shopName)).toBeTruthy();
-    expect(authClient.completeSecondFactor).toHaveBeenCalledWith(
-      "totp-1",
-      "123456",
+    await waitFor(() =>
+      expect(authClient.completeSecondFactor).toHaveBeenCalledWith(
+        "totp-1",
+        "123456",
+      ),
     );
-    expect(apiClient.getSession).toHaveBeenCalledOnce();
-    expect(apiClient.getApplications).toHaveBeenCalledOnce();
+    await waitFor(() => expect(apiClient.getSession).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(apiClient.getApplications).toHaveBeenCalledOnce(),
+    );
   });
 
   it("waits for the MFA challenge to start before enabling code submission", async () => {
@@ -429,7 +433,9 @@ describe("admin MFA and review UI", () => {
     const finishing = finishMfa();
     await act(async () => resolveChallenge());
     await finishing;
-    expect(completeSecondFactor).toHaveBeenCalledWith("totp-1", "123456");
+    await waitFor(() =>
+      expect(completeSecondFactor).toHaveBeenCalledWith("totp-1", "123456"),
+    );
   });
 
   it("requires input, preview acknowledgement, a review step, and a final confirm", async () => {
@@ -614,9 +620,11 @@ describe("admin MFA and review UI", () => {
     await waitFor(() =>
       expect(apiClient.declineApplication).toHaveBeenCalledOnce(),
     );
-    expect(apiClient.declineApplication).toHaveBeenCalledWith(applicationId, {
-      rejectionNote: "審査基準を満たさないため",
-    });
+    await waitFor(() =>
+      expect(apiClient.declineApplication).toHaveBeenCalledWith(applicationId, {
+        rejectionNote: "審査基準を満たさないため",
+      }),
+    );
     expect(
       await screen.findByText(webMessages.adminDeclineSuccess),
     ).toBeTruthy();
@@ -626,11 +634,13 @@ describe("admin MFA and review UI", () => {
       }),
     );
     expect(await screen.findByText(webMessages.adminQueueEmpty)).toBeTruthy();
-    expect(getApplications).toHaveBeenCalledWith({
-      q: "",
-      page: 1,
-      pageSize: 25,
-    });
+    await waitFor(() =>
+      expect(getApplications).toHaveBeenCalledWith({
+        q: "",
+        page: 1,
+        pageSize: 25,
+      }),
+    );
   });
 
   it("does not approve until confirmed and then shows the issued invoice instead of stale actions", async () => {
@@ -663,7 +673,9 @@ describe("admin MFA and review UI", () => {
     await waitFor(() =>
       expect(apiClient.approveApplication).toHaveBeenCalledOnce(),
     );
-    expect(apiClient.approveApplication).toHaveBeenCalledWith(applicationId);
+    await waitFor(() =>
+      expect(apiClient.approveApplication).toHaveBeenCalledWith(applicationId),
+    );
     expect(
       await screen.findByText(webMessages.adminApprovePreviewSuccess),
     ).toBeTruthy();
@@ -717,7 +729,7 @@ describe("admin MFA and review UI", () => {
     fireEvent.click(confirm);
     expect(confirm.hasAttribute("disabled")).toBe(true);
     fireEvent.click(confirm);
-    expect(approveApplication).toHaveBeenCalledOnce();
+    await waitFor(() => expect(approveApplication).toHaveBeenCalledOnce());
     await act(async () => {
       finishApproval?.({
         applicationId,
@@ -753,7 +765,9 @@ describe("admin MFA and review UI", () => {
     expect((await screen.findByRole("alert")).textContent).toContain(
       webMessages.invoiceUnavailable,
     );
-    expect(apiClient.approveApplication).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(apiClient.approveApplication).toHaveBeenCalledOnce(),
+    );
     expect(screen.queryByText(webMessages.adminApproveSuccess)).toBeNull();
   });
 
@@ -832,7 +846,7 @@ describe("admin MFA and review UI", () => {
       screen.getByRole("button", { name: webMessages.adminQuoteConfirmButton }),
     );
     expect(await screen.findByText(webMessages.adminQuoteSuccess)).toBeTruthy();
-    expect(approveApplication).toHaveBeenCalledOnce();
+    await waitFor(() => expect(approveApplication).toHaveBeenCalledOnce());
     expect(screen.queryByRole("link", { name: invoice.invoiceNo })).toBeNull();
     expect(
       screen.queryByRole("button", { name: webMessages.adminApproveCustom }),
@@ -909,7 +923,7 @@ describe("admin MFA and review UI", () => {
     fireEvent.click(confirm);
     expect(confirm.hasAttribute("disabled")).toBe(true);
     fireEvent.click(confirm);
-    expect(declineApplication).toHaveBeenCalledOnce();
+    await waitFor(() => expect(declineApplication).toHaveBeenCalledOnce());
 
     await act(async () => {
       finishDecline?.({
@@ -922,7 +936,9 @@ describe("admin MFA and review UI", () => {
     expect(
       await screen.findByText(webMessages.adminDeclineSuccess),
     ).toBeTruthy();
-    expect(apiClient.getCustomerDetail).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(apiClient.getCustomerDetail).toHaveBeenCalledOnce(),
+    );
   });
 
   it("opens an application from the queue", async () => {
@@ -936,7 +952,9 @@ describe("admin MFA and review UI", () => {
         name: webMessages.adminDetailTitle,
       }),
     ).toBeTruthy();
-    expect(apiClient.getCustomerDetail).toHaveBeenCalledWith(customerId);
+    await waitFor(() =>
+      expect(apiClient.getCustomerDetail).toHaveBeenCalledWith(customerId),
+    );
   });
 
   it("routes /admin to the protected 今日やること page", async () => {
@@ -950,7 +968,7 @@ describe("admin MFA and review UI", () => {
         name: webMessages.adminTodayTitle,
       }),
     ).toBeTruthy();
-    expect(apiClient.getSession).toHaveBeenCalledOnce();
+    await waitFor(() => expect(apiClient.getSession).toHaveBeenCalledOnce());
   });
 
   it("lets an MFA-authorized admin edit issuer settings and explains readiness and invoice snapshots", async () => {
@@ -1077,7 +1095,9 @@ describe("admin MFA and review UI", () => {
         "",
       ),
     );
-    expect(apiClient.getIssuerSettings).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(apiClient.getIssuerSettings).toHaveBeenCalledTimes(2),
+    );
   });
 
   it("rechecks the server session on a refreshed protected route before loading the queue", async () => {
@@ -1088,8 +1108,10 @@ describe("admin MFA and review UI", () => {
       getSession,
     });
     expect(await screen.findByText(queueItem.shopName)).toBeTruthy();
-    expect(getSession).toHaveBeenCalledOnce();
-    expect(apiClient.getApplications).toHaveBeenCalledOnce();
+    await waitFor(() => expect(getSession).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(apiClient.getApplications).toHaveBeenCalledOnce(),
+    );
   });
 
   it("shows an authorized admin logout control and stays authorized if SDK sign-out fails", async () => {
@@ -1105,7 +1127,7 @@ describe("admin MFA and review UI", () => {
       webMessages.logoutError,
     );
     expect(screen.getByText(queueItem.shopName)).toBeTruthy();
-    expect(signOut).toHaveBeenCalledOnce();
+    await waitFor(() => expect(signOut).toHaveBeenCalledOnce());
   });
 
   it("routes an authorized admin to admin login after successful logout", async () => {
@@ -1120,7 +1142,7 @@ describe("admin MFA and review UI", () => {
     expect(
       await screen.findByRole("heading", { name: webMessages.adminLoginTitle }),
     ).toBeTruthy();
-    expect(authClient.signOut).toHaveBeenCalledOnce();
+    await waitFor(() => expect(authClient.signOut).toHaveBeenCalledOnce());
   });
 
   it("offers request registration from an active customer detail with the selected contract", async () => {

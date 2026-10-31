@@ -344,7 +344,7 @@ describe("application request routes", () => {
     expect(screen.getByText(webMessages.contractCredits)).toBeTruthy();
     expect(screen.getByText("-1 クレジット")).toBeTruthy();
     expect(screen.getByText(webMessages.contractPreview)).toBeTruthy();
-    expect(apiClient.getContract).toHaveBeenCalledOnce();
+    await waitFor(() => expect(apiClient.getContract).toHaveBeenCalledOnce());
   });
 
   it("keeps pending customers away from the contract API on direct navigation", async () => {
@@ -418,7 +418,7 @@ describe("application request routes", () => {
     setup("/me/contract", {}, { getContract });
     expect(await screen.findByText(webMessages.contractNone)).toBeTruthy();
     expect(screen.queryByText(webMessages.contractLoading)).toBeNull();
-    expect(getContract).toHaveBeenCalledOnce();
+    await waitFor(() => expect(getContract).toHaveBeenCalledOnce());
   });
 
   it("shows a contract fetch error and retries without leaving stale content", async () => {
@@ -449,7 +449,7 @@ describe("application request routes", () => {
       screen.getByText(webMessages.contractCurrentBalanceUnavailable),
     ).toBeTruthy();
     expect(screen.queryByText(/0 クレジット/)).toBeNull();
-    expect(getContract).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(getContract).toHaveBeenCalledTimes(2));
   });
 
   it("lets a pending customer sign out from the waiting page without loading profile data", async () => {
@@ -474,7 +474,7 @@ describe("application request routes", () => {
       }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: webMessages.logout }));
-    expect(signOut).toHaveBeenCalledOnce();
+    await waitFor(() => expect(signOut).toHaveBeenCalledOnce());
     expect(
       await screen.findByRole("heading", { name: webMessages.loginTitle }),
     ).toBeTruthy();
@@ -505,7 +505,7 @@ describe("application request routes", () => {
       }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: webMessages.logout }));
-    expect(signOut).toHaveBeenCalledOnce();
+    await waitFor(() => expect(signOut).toHaveBeenCalledOnce());
     expect(
       await screen.findByRole("heading", { name: webMessages.loginTitle }),
     ).toBeTruthy();
@@ -534,7 +534,7 @@ describe("application request routes", () => {
       await screen.findByRole("heading", { name: webMessages.meWelcomeTitle }),
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: webMessages.logout }));
-    expect(signOut).toHaveBeenCalledOnce();
+    await waitFor(() => expect(signOut).toHaveBeenCalledOnce());
     expect(
       await screen.findByRole("heading", { name: webMessages.loginTitle }),
     ).toBeTruthy();
@@ -619,7 +619,7 @@ describe("application request routes", () => {
 
     await waitFor(() => expect(getCustomerAccess).toHaveBeenCalledTimes(2));
     expect(screen.queryByText("喫茶ひだまり")).toBeNull();
-    expect(apiClient.getMe).toHaveBeenCalledOnce();
+    await waitFor(() => expect(apiClient.getMe).toHaveBeenCalledOnce());
     resolveSecondAccess?.(pendingAccess);
     expect(
       await screen.findByRole("heading", {
@@ -627,7 +627,7 @@ describe("application request routes", () => {
         name: webMessages.meWaitingReviewTitle,
       }),
     ).toBeTruthy();
-    expect(apiClient.getMe).toHaveBeenCalledOnce();
+    await waitFor(() => expect(apiClient.getMe).toHaveBeenCalledOnce());
   });
 
   it("rechecks access on customer navigation before loading newly forbidden business data", async () => {
@@ -663,10 +663,12 @@ describe("application request routes", () => {
         name: webMessages.invoiceListTitle,
       }),
     ).toBeTruthy();
-    expect(getCustomerAccess).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(getCustomerAccess).toHaveBeenCalledTimes(3));
     // The home page loaded its own running requests once; the forbidden list page added no call.
-    expect(apiClient.getCustomerRequests).toHaveBeenCalledOnce();
-    expect(apiClient.getMe).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(apiClient.getCustomerRequests).toHaveBeenCalledOnce(),
+    );
+    await waitFor(() => expect(apiClient.getMe).toHaveBeenCalledOnce());
   });
 
   it("routes a customer under review to the waiting page before loading profile data", async () => {
@@ -914,7 +916,7 @@ describe("application request routes", () => {
       await screen.findByRole("heading", { name: webMessages.homeTitle }),
     ).toBeTruthy();
     expect(await screen.findByText("喫茶ひだまり")).toBeTruthy();
-    expect(apiClient.getMe).toHaveBeenCalledOnce();
+    await waitFor(() => expect(apiClient.getMe).toHaveBeenCalledOnce());
     expect(apiClient.getContract).not.toHaveBeenCalled();
     expect(apiClient.getCustomerRequests).not.toHaveBeenCalled();
     expect(apiClient.getInvoices).not.toHaveBeenCalled();
@@ -946,7 +948,7 @@ describe("application request routes", () => {
     expect(
       await screen.findByRole("heading", { name: webMessages.homeTitle }),
     ).toBeTruthy();
-    expect(getCustomerAccess).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(getCustomerAccess).toHaveBeenCalledTimes(2));
   });
 
   it("shows a not-found response for a customer role mismatch without loading customer data", async () => {
@@ -978,8 +980,12 @@ describe("application request routes", () => {
     );
     expect(await screen.findByText("予約フォームの表示を整える")).toBeTruthy();
     // Once for the home summary and once for the request list.
-    expect(apiClient.getCustomerRequests).toHaveBeenCalledTimes(2);
-    expect(apiClient.getCustomerRequest).toHaveBeenCalledWith(requestId);
+    await waitFor(() =>
+      expect(apiClient.getCustomerRequests).toHaveBeenCalledTimes(2),
+    );
+    await waitFor(() =>
+      expect(apiClient.getCustomerRequest).toHaveBeenCalledWith(requestId),
+    );
   });
 
   it("loads admin requests through the root /admin/* route with the authorized session", async () => {
@@ -1052,12 +1058,16 @@ describe("application request routes", () => {
     expect(
       await screen.findByText(webMessages.adminRequestCompletionSuccess),
     ).toBeTruthy();
-    expect(adminApiClient.getSession).toHaveBeenCalledOnce();
-    expect(completeRequest).toHaveBeenCalledWith(requestId, {
-      completedOn: completed.completedOn,
-      actualMinutes: 0,
-      actualCredits: 0,
-    });
+    await waitFor(() =>
+      expect(adminApiClient.getSession).toHaveBeenCalledOnce(),
+    );
+    await waitFor(() =>
+      expect(completeRequest).toHaveBeenCalledWith(requestId, {
+        completedOn: completed.completedOn,
+        actualMinutes: 0,
+        actualCredits: 0,
+      }),
+    );
   });
 
   it("reloads the home contract when returning after estimate approval", async () => {

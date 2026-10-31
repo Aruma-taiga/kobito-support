@@ -218,7 +218,9 @@ describe("request and estimate routes", () => {
     expect(
       screen.getByRole("link", { name: webMessages.adminRequestsNew }),
     ).toBeTruthy();
-    expect(apiClient.getAdminRequests).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(apiClient.getAdminRequests).toHaveBeenCalledOnce(),
+    );
   });
 
   it("requires contract selection and required estimate fields, then sends with an idempotency key", async () => {
@@ -264,7 +266,7 @@ describe("request and estimate routes", () => {
     await screen.findByRole("heading", {
       name: webMessages.adminRequestEstimate,
     });
-    expect(apiClient.createRequest).toHaveBeenCalledOnce();
+    await waitFor(() => expect(apiClient.createRequest).toHaveBeenCalledOnce());
     const estimateSendButton = screen.getByRole("button", {
       name: webMessages.adminEstimateSend,
     });
@@ -320,7 +322,9 @@ describe("request and estimate routes", () => {
     expect(
       screen.getByRole("button", { name: webMessages.adminEstimateRevise }),
     ).toBeTruthy();
-    expect(apiClient.getAdminRequest).toHaveBeenCalledWith(requestId);
+    await waitFor(() =>
+      expect(apiClient.getAdminRequest).toHaveBeenCalledWith(requestId),
+    );
   });
 
   it("sends a revised estimate as a new version while retaining the earlier content", async () => {
@@ -372,11 +376,13 @@ describe("request and estimate routes", () => {
     );
     expect(await screen.findByText("変更後の作業内容")).toBeTruthy();
     expect(screen.getByText("以前の作業内容")).toBeTruthy();
-    expect(apiClient.sendEstimate).toHaveBeenCalledOnce();
-    expect(apiClient.sendEstimate).toHaveBeenCalledWith(
-      requestId,
-      expect.objectContaining({ workItems: ["変更後の作業内容"] }),
-      expect.any(String),
+    await waitFor(() => expect(apiClient.sendEstimate).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(apiClient.sendEstimate).toHaveBeenCalledWith(
+        requestId,
+        expect.objectContaining({ workItems: ["変更後の作業内容"] }),
+        expect.any(String),
+      ),
     );
   });
 
@@ -426,7 +432,7 @@ describe("request and estimate routes", () => {
     expect(
       await screen.findByText(webMessages.adminEstimateSentRefreshError),
     ).toBeTruthy();
-    expect(apiClient.sendEstimate).toHaveBeenCalledOnce();
+    await waitFor(() => expect(apiClient.sendEstimate).toHaveBeenCalledOnce());
     expect(
       screen.queryByRole("button", { name: webMessages.adminEstimateSend }),
     ).toBeNull();
@@ -435,7 +441,7 @@ describe("request and estimate routes", () => {
     expect(
       screen.getByRole("button", { name: webMessages.adminEstimateRevise }),
     ).toBeTruthy();
-    expect(sendEstimate).toHaveBeenCalledOnce();
+    await waitFor(() => expect(sendEstimate).toHaveBeenCalledOnce());
   });
 
   it("does not offer estimate revisions after the customer has approved and work is underway", async () => {
@@ -473,7 +479,9 @@ describe("request and estimate routes", () => {
     expect(
       screen.getByLabelText(webMessages.adminRequestActualCredits),
     ).toBeTruthy();
-    expect(apiClient.getAdminRequest).toHaveBeenCalledWith(requestId);
+    await waitFor(() =>
+      expect(apiClient.getAdminRequest).toHaveBeenCalledWith(requestId),
+    );
   });
 
   it.each([
@@ -546,12 +554,14 @@ describe("request and estimate routes", () => {
       }),
     );
     expect(await screen.findByText(webMessages.adminRequestCompletionSuccess));
-    expect(completeRequest).toHaveBeenCalledOnce();
-    expect(completeRequest).toHaveBeenCalledWith(requestId, {
-      completedOn: "2026-10-27",
-      actualMinutes: 45,
-      actualCredits,
-    });
+    await waitFor(() => expect(completeRequest).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(completeRequest).toHaveBeenCalledWith(requestId, {
+        completedOn: "2026-10-27",
+        actualMinutes: 45,
+        actualCredits,
+      }),
+    );
     expect(
       screen.getByText(webMessages.adminRequestActualMinutes).nextElementSibling
         ?.textContent,
@@ -565,7 +575,9 @@ describe("request and estimate routes", () => {
         screen.getByText(webMessages.adminRequestActualExceedsEstimate),
       ).toBeTruthy();
     }
-    expect(apiClient.getAdminRequest).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(apiClient.getAdminRequest).toHaveBeenCalledOnce(),
+    );
   });
 
   it("cancels completion confirmation without mutation and prevents double submit while busy", async () => {
@@ -707,9 +719,11 @@ describe("request and estimate routes", () => {
     expect(
       await screen.findByText(webMessages.adminRequestCompletionSuccess),
     ).toBeTruthy();
-    expect(completeRequest).toHaveBeenCalledTimes(2);
-    expect(completeRequest.mock.calls[0]).toEqual(
-      completeRequest.mock.calls[1],
+    await waitFor(() => expect(completeRequest).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(completeRequest.mock.calls[0]).toEqual(
+        completeRequest.mock.calls[1],
+      ),
     );
   });
 
@@ -758,7 +772,7 @@ describe("request and estimate routes", () => {
         name: webMessages.adminRequestComplete,
       }),
     ).toBeNull();
-    expect(getAdminRequest).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(getAdminRequest).toHaveBeenCalledTimes(2));
   });
 
   it("shows a completed customer's actual completion details as read-only", async () => {
@@ -865,14 +879,18 @@ describe("request and estimate routes", () => {
     expect(
       await screen.findByText(webMessages.myRequestApprovalSuccess),
     ).toBeTruthy();
-    expect(apiClient.approveEstimate).toHaveBeenCalledOnce();
-    expect(apiClient.approveEstimate).toHaveBeenCalledWith(estimateId);
+    await waitFor(() =>
+      expect(apiClient.approveEstimate).toHaveBeenCalledOnce(),
+    );
+    await waitFor(() =>
+      expect(apiClient.approveEstimate).toHaveBeenCalledWith(estimateId),
+    );
     await screen.findByText(webMessages.myRequestApprovalSuccess);
     expect(
       screen.getByText(webMessages.myRequestAvailableCredits).nextElementSibling
         ?.textContent,
     ).toBe(`1 ${webMessages.requestCreditUnit}`);
-    expect(getCustomerRequest).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(getCustomerRequest).toHaveBeenCalledTimes(2));
   });
 
   it("offers LINE contact when the current credit balance is insufficient", async () => {
@@ -964,6 +982,6 @@ describe("request and estimate routes", () => {
     expect(
       screen.getByRole("button", { name: webMessages.retry }),
     ).toBeTruthy();
-    expect(getCustomerRequest).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(getCustomerRequest).toHaveBeenCalledTimes(2));
   });
 });

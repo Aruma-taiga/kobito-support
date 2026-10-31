@@ -66,7 +66,7 @@ it("lists only shop, state, calendar dates and remaining days after session veri
   expect(screen.getByText("2026年11月1日")).toBeTruthy();
   expect(screen.getByText("0日")).toBeTruthy();
   expect(screen.queryByText("メールアドレス")).toBeNull();
-  expect(get).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
 });
 it("shows an empty state", async () => {
   setup();
