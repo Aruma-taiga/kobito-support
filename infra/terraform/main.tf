@@ -163,6 +163,13 @@ resource "google_cloud_run_v2_service" "api" {
       }
     }
     containers {
+      # Chromium で請求書PDFを生成するため、既定（512MiB）では足りない可能性が高い。実測のうえ調整する。
+      resources {
+        limits = {
+          cpu    = "1"
+          memory = var.pdf_render_memory
+        }
+      }
       image = var.api_image
       ports {
         container_port = 8080
@@ -332,6 +339,13 @@ resource "google_cloud_run_v2_job" "daily" {
         }
       }
       containers {
+        # Chromium で請求書PDFを生成するため、既定（512MiB）では足りない可能性が高い。実測のうえ調整する。
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = var.pdf_render_memory
+          }
+        }
         image   = var.api_image
         command = ["node"]
         args    = ["dist/jobs/daily-billing-script.js"]
@@ -349,6 +363,10 @@ resource "google_cloud_run_v2_job" "daily" {
         env {
           name  = "FIREBASE_PROJECT_ID"
           value = var.gcp_project_id
+        }
+        env {
+          name  = "WEB_ORIGIN"
+          value = "https://app.${var.domain_name}"
         }
         env {
           name = "DATABASE_URL"
@@ -400,6 +418,10 @@ resource "google_cloud_run_v2_job" "notifications" {
         env {
           name  = "FIREBASE_PROJECT_ID"
           value = var.gcp_project_id
+        }
+        env {
+          name  = "WEB_ORIGIN"
+          value = "https://app.${var.domain_name}"
         }
         env {
           name = "DATABASE_URL"
@@ -484,6 +506,10 @@ resource "google_cloud_run_v2_job" "retention" {
           value = var.gcp_project_id
         }
         env {
+          name  = "WEB_ORIGIN"
+          value = "https://app.${var.domain_name}"
+        }
+        env {
           name = "DATABASE_URL"
           value_source {
             secret_key_ref {
@@ -510,17 +536,17 @@ resource "google_project_iam_member" "scheduler_run_jobs" {
 
 resource "google_cloud_scheduler_job" "jobs" {
   for_each = {
-    daily         = "0 6 * * *"
-    notifications = "*/5 * * * *"
-    retention     = "30 6 * * *"
+    daily         = { schedule = "0 6 * * *", paused = var.scheduler_paused }
+    notifications = { schedule = "*/5 * * * *", paused = var.scheduler_paused }
+    retention     = { schedule = "30 6 * * *", paused = var.retention_scheduler_paused }
   }
   project     = var.gcp_project_id
   region      = var.region
   name        = "${var.name_prefix}-${each.key}"
   description = "Starts the ${each.key} Cloud Run Job"
-  schedule    = each.value
+  schedule    = each.value.schedule
   time_zone   = "Asia/Tokyo"
-  paused      = var.scheduler_paused
+  paused      = each.value.paused
   http_target {
     http_method = "POST"
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project_id}/jobs/${var.name_prefix}-${each.key}:run"
