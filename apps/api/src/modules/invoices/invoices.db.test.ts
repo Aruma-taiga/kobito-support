@@ -1,15 +1,18 @@
 import { randomUUID } from "node:crypto";
 import {
   approveApplicationResponseSchema,
+  confirmBankPaymentResponseSchema,
   customerAccessSchema,
   invoiceDetailSchema,
   paymentLinkResponseSchema,
+  periodFor,
   welcomeSeenResponseSchema,
 } from "@kobito/shared";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type AppDependencies, createApp } from "../../app.js";
 import { FakeKomojuClient } from "../../integrations/komoju/fake-client.js";
+import { DailyBillingJob } from "../../jobs/daily-billing.js";
 import type { VerifiedIdentity } from "../../platform/auth.js";
 import type { RuntimeConfig } from "../../platform/config.js";
 import { customerScopeFor } from "../../platform/scope.js";
@@ -844,6 +847,184 @@ describe("initial invoice approval and customer access", () => {
       (await confirm(app, invoiceId, { amount: 5975, paidOn: "2026-01-31" }))
         .status,
     ).toBe(409);
+  });
+
+  it("confirms a monthly bank invoice into its existing period and grants once", async () => {
+    const fixture = await makeApplication({ price: 5000 });
+    const app = makeApp();
+    const initial = await approve(app, fixture.applicationId);
+    const initialInvoiceId = (
+      (await initial.json()) as { invoice: { id: string } }
+    ).invoice.id;
+    const initialPayment = await confirm(app, initialInvoiceId, {
+      amount: 5500,
+      paidOn: "2026-01-31",
+    });
+    expect(initialPayment.status).toBe(200);
+
+    const period = periodFor("2026-01-31", 1);
+    const periodResult = await pool.query<{ id: string }>(
+      `insert into billing_periods (contract_id,seq,starts_on,ends_on,plan_id,price_excl_tax,credits)
+       values ($1,2,$2,$3,$4,5000,1) returning id`,
+      [fixture.contractId, period.startsOn, period.endsOn, planIds.at(-1)],
+    );
+    const periodId = periodResult.rows[0]?.id;
+    if (!periodId) throw new Error("Monthly period fixture was not created");
+    const invoiceNo = await pool.query<{ invoice_no: string }>(
+      "select next_invoice_no(2026,'KS') invoice_no",
+    );
+    const snapshot = await pool.query<{
+      issuer_snapshot: unknown;
+      billing_name: string;
+      billing_address_snapshot: string;
+    }>(
+      "select issuer_snapshot,billing_name,billing_address_snapshot from invoices where id=$1",
+      [initialInvoiceId],
+    );
+    await pool.query(
+      `insert into invoices (invoice_no,contract_id,period_id,kind,status,payment_method,issued_on,due_on,
+       total_excl_tax,tax_amount,total_incl_tax,billing_name,billing_address_snapshot,issuer_snapshot,pdf_path)
+       values ($1,$2,$3,'monthly','issued','bank_transfer','2026-02-28','2026-03-07',5000,500,5500,$4,$5,$6::jsonb,'test-monthly.pdf')`,
+      [
+        invoiceNo.rows[0]?.invoice_no,
+        fixture.contractId,
+        periodId,
+        snapshot.rows[0]?.billing_name,
+        snapshot.rows[0]?.billing_address_snapshot,
+        JSON.stringify(snapshot.rows[0]?.issuer_snapshot),
+      ],
+    );
+    const monthlyInvoice = await pool.query<{ id: string }>(
+      "select id from invoices where invoice_no=$1",
+      [invoiceNo.rows[0]?.invoice_no],
+    );
+    const monthlyInvoiceId = monthlyInvoice.rows[0]?.id;
+    if (!monthlyInvoiceId)
+      throw new Error("Monthly invoice fixture was not created");
+    await pool.query(
+      `insert into invoice_lines (invoice_id,line_kind,description,quantity,unit_price_excl_tax,amount_excl_tax,tax_rate)
+       values ($1,'monthly_fee','申込時プラン 月額利用料',1,5000,5000,0.100)`,
+      [monthlyInvoiceId],
+    );
+    const monthlyApp = makeApp(config, new Date("2026-02-28T03:00:00.000Z"));
+    const confirmation = await confirm(monthlyApp, monthlyInvoiceId, {
+      amount: 5500,
+      paidOn: "2026-02-28",
+    });
+    expect(confirmation.status).toBe(200);
+    expect(
+      confirmBankPaymentResponseSchema.parse(await confirmation.json()),
+    ).toMatchObject({
+      contractId: fixture.contractId,
+      anchorDate: "2026-01-31",
+      period: {
+        id: periodId,
+        seq: 2,
+        startsOn: "2026-02-28",
+        endsOn: "2026-03-30",
+      },
+      replayed: false,
+    });
+    const replay = await confirm(monthlyApp, monthlyInvoiceId, {
+      amount: 5500,
+      paidOn: "2026-02-28",
+    });
+    expect(await replay.json()).toMatchObject({
+      replayed: true,
+      period: { id: periodId, seq: 2 },
+    });
+    const state = await pool.query<{
+      payment_count: string;
+      grant_count: string;
+      periods: string;
+    }>(
+      `select (select count(*)::text from payments where invoice_id=$1) payment_count,
+       (select count(*)::text from credit_entries where period_id=$2 and kind='grant') grant_count,
+       (select count(*)::text from billing_periods where contract_id=$3) periods`,
+      [monthlyInvoiceId, periodId, fixture.contractId],
+    );
+    expect(state.rows[0]).toEqual({
+      payment_count: "1",
+      grant_count: "1",
+      periods: "2",
+    });
+  });
+
+  it("creates the next period and monthly invoice once, expiring only the prior granted balance", async () => {
+    const fixture = await makeApplication({ price: 5000 });
+    const app = makeApp();
+    const issued = await approve(app, fixture.applicationId);
+    const invoiceId = ((await issued.json()) as { invoice: { id: string } })
+      .invoice.id;
+    expect(
+      (await confirm(app, invoiceId, { amount: 5500, paidOn: "2026-01-31" }))
+        .status,
+    ).toBe(200);
+    // This fixture's accepted terms say `light`; give the persisted plan the
+    // same catalog code so the monthly invoice passes the shared DTO schema.
+    await pool.query(
+      "update plans set code='light',valid_from='1900-01-01' where id=$1",
+      [planIds.at(-1)],
+    );
+    const invoices = new InvoiceRepository(
+      pool,
+      config,
+      { render: async () => pdf },
+      () => new Date("2026-02-28T03:00:00.000Z"),
+    );
+    const job = new DailyBillingJob(pool, invoices);
+    const firstRun = await job.runDailyBilling("2026-02-28", {
+      contractIds: [fixture.contractId],
+    });
+    expect(firstRun.createdPeriods).toBeGreaterThanOrEqual(1);
+    expect(firstRun.issuedInvoices).toBeGreaterThanOrEqual(1);
+    expect(firstRun.expiredCredits).toBeGreaterThanOrEqual(1);
+    expect(firstRun.failed).toBe(0);
+    const monthly = await pool.query<{
+      kind: string;
+      total_excl_tax: number;
+      tax_amount: number;
+      total_incl_tax: number;
+      due_on: string;
+      period_seq: number;
+    }>(
+      `select i.kind,i.total_excl_tax,i.tax_amount,i.total_incl_tax,i.due_on::text due_on,p.seq period_seq
+       from invoices i join billing_periods p on p.id=i.period_id where i.contract_id=$1 and i.kind='monthly'`,
+      [fixture.contractId],
+    );
+    expect(monthly.rows).toEqual([
+      {
+        kind: "monthly",
+        total_excl_tax: 5000,
+        tax_amount: 500,
+        total_incl_tax: 5500,
+        due_on: "2026-03-07",
+        period_seq: 2,
+      },
+    ]);
+    const secondRun = await job.runDailyBilling("2026-02-28", {
+      contractIds: [fixture.contractId],
+    });
+    expect(secondRun.createdPeriods).toBe(0);
+    expect(secondRun.issuedInvoices).toBe(0);
+    const ledger = await pool.query<{
+      grants: string;
+      expirations: string;
+      periods: string;
+      monthly_invoices: string;
+    }>(
+      `select (select count(*)::text from credit_entries where contract_id=$1 and kind='grant') grants,
+       (select count(*)::text from credit_entries where contract_id=$1 and kind='expire') expirations,
+       (select count(*)::text from billing_periods where contract_id=$1) periods,
+       (select count(*)::text from invoices where contract_id=$1 and kind='monthly') monthly_invoices`,
+      [fixture.contractId],
+    );
+    expect(ledger.rows[0]).toEqual({
+      grants: "1",
+      expirations: "1",
+      periods: "2",
+      monthly_invoices: "1",
+    });
   });
 
   it("uses the Tokyo confirmation day independently from a leap-day bank date", async () => {

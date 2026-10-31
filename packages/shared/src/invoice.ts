@@ -27,7 +27,7 @@ export const invoiceListItemSchema = z
   .object({
     id: z.uuid(),
     invoiceNo: z.string().min(1).max(64),
-    kind: z.literal("initial"),
+    kind: z.enum(["initial", "monthly", "extra_credit"]),
     status: z.enum(["issued", "paid", "failed", "overdue", "void"]),
     issuedOn: isoDateSchema,
     dueOn: isoDateSchema,

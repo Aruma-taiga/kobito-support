@@ -57,7 +57,7 @@ export const confirmBankPaymentResponseSchema = z
     period: z
       .object({
         id: z.uuid(),
-        seq: z.literal(1),
+        seq: z.number().int().positive(),
         startsOn: calendarDate,
         endsOn: calendarDate,
         priceExclTax: z.number().int().safe().positive(),
