@@ -22,6 +22,7 @@ const detailKeys = new Set([
   "checklistComplete",
   "month",
   "paidCount",
+  "outcome",
 ]);
 
 function safeText(value: string, maxLength: number): boolean {

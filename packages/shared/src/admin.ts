@@ -63,6 +63,20 @@ export type AdminPaymentReviewsResponse = z.infer<
   typeof adminPaymentReviewsResponseSchema
 >;
 
+export const adminPaymentReviewResolveRequestSchema = z
+  .object({ outcome: z.enum(["handled_manually", "not_applicable"]) })
+  .strict();
+export type AdminPaymentReviewResolveRequest = z.infer<
+  typeof adminPaymentReviewResolveRequestSchema
+>;
+export const adminPaymentReviewResolveResponseSchema = z
+  .object({ eventId: z.string().min(1).max(128), resolved: z.literal(true) })
+  .strict();
+export type AdminPaymentReviewResolveResponse = z.infer<
+  typeof adminPaymentReviewResolveResponseSchema
+>;
+export const adminPaymentReviewIdSchema = z.string().min(1).max(128);
+
 export const adminNotificationFailuresQuerySchema = z
   .object({ limit: z.coerce.number().int().min(1).max(100).default(50) })
   .strict();

@@ -19,6 +19,8 @@ import {
   adminIssuerSettingsResponseSchema,
   adminNotificationFailureRetryResponseSchema,
   adminNotificationFailuresResponseSchema,
+  adminPaymentReviewResolveRequestSchema,
+  adminPaymentReviewResolveResponseSchema,
   adminPaymentReviewsResponseSchema,
   adminPlanQuoteSchema,
   adminReferralsQuerySchema,
@@ -436,6 +438,18 @@ export function createAdminApiClient(options: AdminApiClientOptions) {
       return request(
         "/api/v1/admin/payment-reviews",
         adminPaymentReviewsResponseSchema,
+      );
+    },
+    resolvePaymentReview(
+      eventId: string,
+      value: { outcome: "handled_manually" | "not_applicable" },
+    ) {
+      const parsed = adminPaymentReviewResolveRequestSchema.safeParse(value);
+      if (!parsed.success) throw new AdminApiError("validation_error");
+      return request(
+        `/api/v1/admin/payment-reviews/${encodeURIComponent(eventId)}/resolve`,
+        adminPaymentReviewResolveResponseSchema,
+        { method: "POST", body: JSON.stringify(parsed.data) },
       );
     },
     getNotificationFailures(): Promise<AdminNotificationFailuresResponse> {

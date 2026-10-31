@@ -84,6 +84,10 @@ function makeApp(overrides: AppOverrides = {}) {
         eventCount: 0,
         failedInvoiceCount: 0,
       })),
+      resolvePaymentReview: vi.fn(async (_principal, eventId) => ({
+        eventId,
+        resolved: true as const,
+      })),
       listNotificationFailures: vi.fn(async () => ({
         items: [],
         totalCount: 0,
