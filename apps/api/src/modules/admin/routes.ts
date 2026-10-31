@@ -1,5 +1,6 @@
 import {
   adminApplicationQueueQuerySchema,
+  adminPaymentReviewResolveRequestSchema,
   approveApplicationRequestSchema,
   confirmBankPaymentRequestSchema,
   declineApplicationRequestSchema,
@@ -57,6 +58,30 @@ export function createAdminRoutes(dependencies: {
       throw new ApiError(422, "validation_error");
     return context.json(
       await dependencies.admin.listPaymentReviews(Object.fromEntries(params)),
+    );
+  });
+  routes.post("/payment-reviews/:eventId/resolve", async (context) => {
+    const contentType = context.req
+      .header("content-type")
+      ?.split(";", 1)[0]
+      ?.trim()
+      .toLowerCase();
+    if (contentType !== "application/json")
+      throw new ApiError(400, "invalid_request");
+    let raw: unknown;
+    try {
+      raw = await context.req.json();
+    } catch {
+      throw new ApiError(400, "invalid_request");
+    }
+    const request = adminPaymentReviewResolveRequestSchema.safeParse(raw);
+    if (!request.success) throw new ApiError(422, "validation_error");
+    return context.json(
+      await dependencies.admin.resolvePaymentReview(
+        context.get("principal"),
+        context.req.param("eventId"),
+        request.data,
+      ),
     );
   });
   routes.get("/notification-failures", async (context) => {

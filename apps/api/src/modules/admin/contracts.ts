@@ -5,6 +5,8 @@ import type {
   AdminCustomerDetail,
   AdminNotificationFailureRetryResponse,
   AdminNotificationFailuresResponse,
+  AdminPaymentReviewResolveRequest,
+  AdminPaymentReviewResolveResponse,
   AdminPaymentReviewsResponse,
   DeclineApplicationRequest,
   DeclineApplicationResponse,
@@ -22,6 +24,11 @@ export interface AdminModule {
     principal: Principal,
     notificationId: string,
   ): Promise<AdminNotificationFailureRetryResponse>;
+  resolvePaymentReview(
+    principal: Principal,
+    eventId: string,
+    request: AdminPaymentReviewResolveRequest,
+  ): Promise<AdminPaymentReviewResolveResponse>;
   listApplications(
     query: AdminApplicationQueueQuery,
   ): Promise<AdminApplicationQueueResponse>;

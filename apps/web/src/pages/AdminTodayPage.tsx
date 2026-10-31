@@ -21,6 +21,7 @@ import {
   Button,
   buttonClass,
   Card,
+  Field,
   Hint,
   ListItem,
 } from "../ui/index.js";
@@ -87,6 +88,7 @@ interface Row {
   action: string;
   badge?: ReactNode;
   primary?: boolean;
+  customAction?: ReactNode;
 }
 
 function Panel({
@@ -139,14 +141,19 @@ function Panel({
               badge={
                 <span className="ui-actionbar">
                   {row.badge}
-                  <Link
-                    className={buttonClass(row.primary ? "primary" : "ghost", {
-                      size: "sm",
-                    })}
-                    to={row.to}
-                  >
-                    {row.action}
-                  </Link>
+                  {row.customAction ?? (
+                    <Link
+                      className={buttonClass(
+                        row.primary ? "primary" : "ghost",
+                        {
+                          size: "sm",
+                        },
+                      )}
+                      to={row.to}
+                    >
+                      {row.action}
+                    </Link>
+                  )}
                 </span>
               }
             />
@@ -203,6 +210,29 @@ export function AdminTodayPage({ apiClient }: { apiClient: AdminApiClient }) {
     string | null
   >(null);
   const [notificationRetryError, setNotificationRetryError] = useState(false);
+  const [resolvingPaymentReview, setResolvingPaymentReview] = useState<
+    string | null
+  >(null);
+  const [paymentReviewResolveError, setPaymentReviewResolveError] =
+    useState(false);
+  const [paymentReviewOutcomes, setPaymentReviewOutcomes] = useState<
+    Record<string, "handled_manually" | "not_applicable">
+  >({});
+  const resolvePaymentReview = async (id: string) => {
+    if (resolvingPaymentReview) return;
+    const outcome = paymentReviewOutcomes[id] ?? "handled_manually";
+    if (!window.confirm(webMessages.adminPaymentReviewResolveConfirm)) return;
+    setResolvingPaymentReview(id);
+    setPaymentReviewResolveError(false);
+    try {
+      await apiClient.resolvePaymentReview(id, { outcome });
+      retryPaymentReviews();
+    } catch {
+      setPaymentReviewResolveError(true);
+    } finally {
+      setResolvingPaymentReview(null);
+    }
+  };
   const retryNotification = async (id: string) => {
     if (
       retryingNotification ||
@@ -345,6 +375,43 @@ export function AdminTodayPage({ apiClient }: { apiClient: AdminApiClient }) {
               .join("・"),
             to: item.invoiceNo ? "/admin/invoices" : "/admin/invoices",
             action: webMessages.adminTodayPaymentReviewAction,
+            customAction: (
+              <span className="ui-actionbar">
+                <Field label={webMessages.adminPaymentReviewOutcomeLabel}>
+                  <select
+                    value={
+                      paymentReviewOutcomes[item.eventId] ?? "handled_manually"
+                    }
+                    disabled={resolvingPaymentReview !== null}
+                    onChange={(event) =>
+                      setPaymentReviewOutcomes((current) => ({
+                        ...current,
+                        [item.eventId]: event.target.value as
+                          | "handled_manually"
+                          | "not_applicable",
+                      }))
+                    }
+                  >
+                    <option value="handled_manually">
+                      {webMessages.adminPaymentReviewHandledManually}
+                    </option>
+                    <option value="not_applicable">
+                      {webMessages.adminPaymentReviewNotApplicable}
+                    </option>
+                  </select>
+                </Field>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={resolvingPaymentReview !== null}
+                  onClick={() => void resolvePaymentReview(item.eventId)}
+                >
+                  {resolvingPaymentReview === item.eventId
+                    ? webMessages.adminPaymentReviewResolving
+                    : webMessages.adminPaymentReviewResolveAction}
+                </Button>
+              </span>
+            ),
           }),
         )
       : [];
@@ -461,6 +528,9 @@ export function AdminTodayPage({ apiClient }: { apiClient: AdminApiClient }) {
                 : undefined
             }
           />
+          {paymentReviewResolveError ? (
+            <Hint>{webMessages.adminPaymentReviewResolveError}</Hint>
+          ) : null}
           <Panel
             title={webMessages.adminTodayPaymentFailures}
             source={paymentReviews}

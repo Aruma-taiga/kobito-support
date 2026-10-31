@@ -8,6 +8,9 @@ import {
   adminNotificationFailureRetryResponseSchema,
   adminNotificationFailuresQuerySchema,
   adminNotificationFailuresResponseSchema,
+  adminPaymentReviewIdSchema,
+  adminPaymentReviewResolveRequestSchema,
+  adminPaymentReviewResolveResponseSchema,
   adminPaymentReviewsQuerySchema,
   adminPaymentReviewsResponseSchema,
 } from "@kobito/shared";
@@ -34,6 +37,24 @@ export class AdminService implements AdminModule {
     if (!parsed.success) throw new ApiError(422, "validation_error");
     return adminNotificationFailuresResponseSchema.parse(
       await this.repository.listNotificationFailures(parsed.data),
+    );
+  }
+
+  async resolvePaymentReview(
+    principal: Principal,
+    eventId: string,
+    request: unknown,
+  ) {
+    if (!adminPaymentReviewIdSchema.safeParse(eventId).success)
+      throw new ApiError(404, "not_found");
+    const parsed = adminPaymentReviewResolveRequestSchema.safeParse(request);
+    if (!parsed.success) throw new ApiError(422, "validation_error");
+    return adminPaymentReviewResolveResponseSchema.parse(
+      await this.repository.resolvePaymentReview(
+        principal,
+        eventId,
+        parsed.data,
+      ),
     );
   }
 

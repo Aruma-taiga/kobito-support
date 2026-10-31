@@ -1,10 +1,33 @@
 import { describe, expect, it } from "vitest";
 import {
+  adminPaymentReviewResolveRequestSchema,
   adminPaymentReviewsQuerySchema,
   adminPaymentReviewsResponseSchema,
 } from "./admin.js";
 
 describe("admin payment reviews schemas", () => {
+  it("accepts only the two resolution outcomes without free-text fields", () => {
+    expect(
+      adminPaymentReviewResolveRequestSchema.parse({
+        outcome: "handled_manually",
+      }),
+    ).toEqual({ outcome: "handled_manually" });
+    expect(
+      adminPaymentReviewResolveRequestSchema.parse({
+        outcome: "not_applicable",
+      }),
+    ).toEqual({ outcome: "not_applicable" });
+    expect(
+      adminPaymentReviewResolveRequestSchema.safeParse({
+        outcome: "handled_manually",
+        note: "private",
+      }).success,
+    ).toBe(false);
+    expect(
+      adminPaymentReviewResolveRequestSchema.safeParse({ outcome: "other" })
+        .success,
+    ).toBe(false);
+  });
   it("bounds the query limit and validates safe review response rows", () => {
     expect(adminPaymentReviewsQuerySchema.parse({ limit: "5" })).toEqual({
       limit: 5,

@@ -67,6 +67,10 @@ function makeApp(): ReturnType<typeof createApp> {
         eventCount: 0,
         failedInvoiceCount: 0,
       }),
+      resolvePaymentReview: async (_principal, eventId) => ({
+        eventId,
+        resolved: true,
+      }),
       listNotificationFailures: async () => ({ items: [], totalCount: 0 }),
       retryNotificationFailure: async () => ({
         id: "11111111-1111-4111-8111-111111111111",
