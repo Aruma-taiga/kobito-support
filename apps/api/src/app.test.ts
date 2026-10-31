@@ -37,6 +37,7 @@ function makeApp(overrides: AppOverrides = {}) {
       firebaseProjectId: "demo-kobito-support",
       webOrigin: "http://localhost:5173",
       port: 3000,
+      lineEnabled: true,
       invoicePrefix: "KS",
     },
     verifier: { verifyIdToken: vi.fn(async () => userForToken) },
@@ -161,7 +162,10 @@ function makeApp(overrides: AppOverrides = {}) {
         seenAt: "2026-01-01T00:00:00.000Z",
       })),
     },
-    publicSettings: { getServiceName: vi.fn(async () => "コビトサポート") },
+    publicSettings: {
+      getServiceName: vi.fn(async () => "コビトサポート"),
+      getContactEmail: vi.fn(async () => null),
+    },
     komojuInbox: { receive: vi.fn(async () => "accepted" as const) },
     logger: { info: vi.fn(), error: vi.fn() },
   };
@@ -307,6 +311,50 @@ describe("API routes and auth pipeline", () => {
     expect(publicLogin.status).toBe(401);
     expect(await publicLogin.json()).toEqual({
       error: { code: "unauthorized" },
+    });
+  });
+
+  it("registers no LINE routes when LINE_ENABLED is off", async () => {
+    const line = {
+      signIn: vi.fn(),
+      link: vi.fn(),
+      status: vi.fn(),
+    } as unknown as NonNullable<AppDependencies["line"]>;
+    const base = makeApp({ line }).request;
+    expect(base).toBeTypeOf("function");
+    const disabled = makeApp({
+      line,
+      config: {
+        nodeEnv: "test",
+        databaseUrl: "postgres://test",
+        firebaseProjectId: "demo-kobito-support",
+        webOrigin: "http://localhost:5173",
+        port: 3000,
+        lineEnabled: false,
+        invoicePrefix: "KS",
+      },
+    });
+    const response = await disabled.request("/api/v1/auth/line", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: "x" }),
+    });
+    expect(response.status).toBe(404);
+    expect(line.signIn).not.toHaveBeenCalled();
+  });
+
+  it("includes the settings-backed contact email in the public config when configured", async () => {
+    const app = makeApp({
+      publicSettings: {
+        getServiceName: vi.fn(async () => "コビトサポート"),
+        getContactEmail: vi.fn(async () => "hello@contact.example"),
+      },
+    });
+    const response = await app.request("/api/v1/public/config");
+    expect(await response.json()).toEqual({
+      serviceName: "コビトサポート",
+      contactEmail: "hello@contact.example",
+      application: null,
     });
   });
 

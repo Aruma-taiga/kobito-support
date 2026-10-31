@@ -9,6 +9,7 @@ import {
   type AuthUser,
 } from "../auth/session.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
+import { ContactProvider } from "../platform/contact.js";
 import { ContractPage } from "./ContractPage.js";
 
 afterEach(cleanup);
@@ -62,21 +63,23 @@ describe("contract LINE account status", () => {
       getLineLinkStatus,
     } as unknown as ReturnTypeApiClient;
     render(
-      <AuthProvider client={authClient}>
-        <MemoryRouter initialEntries={["/me/contract"]}>
-          <Routes>
-            <Route
-              path="/me/contract"
-              element={
-                <ContractPage
-                  apiClient={apiClient}
-                  lineLiffId="2000000000-AbCdEfGh"
-                />
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>,
+      <ContactProvider value={{ lineEnabled: true, contactEmail: null }}>
+        <AuthProvider client={authClient}>
+          <MemoryRouter initialEntries={["/me/contract"]}>
+            <Routes>
+              <Route
+                path="/me/contract"
+                element={
+                  <ContractPage
+                    apiClient={apiClient}
+                    lineLiffId="2000000000-AbCdEfGh"
+                  />
+                }
+              />
+            </Routes>
+          </MemoryRouter>
+        </AuthProvider>
+      </ContactProvider>,
     );
     await waitFor(() =>
       expect(getLineLinkStatus).toHaveBeenCalledWith("customer-a"),

@@ -20,6 +20,7 @@ import {
 } from "../platform/admin-api-client.js";
 import type { ReturnTypeApiClient } from "../platform/api-client.js";
 import { ApiClientError } from "../platform/api-client.js";
+import { ContactProvider } from "../platform/contact.js";
 import { AdminApp } from "./AdminApp.js";
 import { MyRequestDetailPage, MyRequestsPage } from "./RequestPages.js";
 
@@ -117,7 +118,14 @@ function adminSetup(
   return { apiClient, authClient };
 }
 
-function customerSetup(path: string, overrides: Record<string, unknown> = {}) {
+function customerSetup(
+  path: string,
+  overrides: Record<string, unknown> = {},
+  contact: { lineEnabled: boolean; contactEmail: string | null } = {
+    lineEnabled: true,
+    contactEmail: null,
+  },
+) {
   const user = {
     uid: "customer-test",
     email: "customer@example.jp",
@@ -155,21 +163,23 @@ function customerSetup(path: string, overrides: Record<string, unknown> = {}) {
   } as unknown as ReturnTypeApiClient;
   render(
     <MemoryRouter initialEntries={[path]}>
-      <AuthProvider client={authClient}>
-        <Routes>
-          <Route element={<RequireAuth />}>
-            <Route
-              path="/me/requests"
-              element={<MyRequestsPage apiClient={apiClient} />}
-            />
-            <Route
-              path="/me/requests/:id"
-              element={<MyRequestDetailPage apiClient={apiClient} />}
-            />
-          </Route>
-          <Route path="/login" element={<p>sign-in required</p>} />
-        </Routes>
-      </AuthProvider>
+      <ContactProvider value={contact}>
+        <AuthProvider client={authClient}>
+          <Routes>
+            <Route element={<RequireAuth />}>
+              <Route
+                path="/me/requests"
+                element={<MyRequestsPage apiClient={apiClient} />}
+              />
+              <Route
+                path="/me/requests/:id"
+                element={<MyRequestDetailPage apiClient={apiClient} />}
+              />
+            </Route>
+            <Route path="/login" element={<p>sign-in required</p>} />
+          </Routes>
+        </AuthProvider>
+      </ContactProvider>
     </MemoryRouter>,
   );
   return { apiClient, authClient };
@@ -889,6 +899,32 @@ describe("request and estimate routes", () => {
       screen.queryByRole("button", { name: webMessages.myRequestApprove }),
     ).toBeNull();
     expect(apiClient.approveEstimate).not.toHaveBeenCalled();
+  });
+
+  it("offers email contact instead of LINE when the LINE flag is off", async () => {
+    customerSetup(
+      `/me/requests/${requestId}`,
+      {
+        getCustomerRequest: vi.fn(async () => ({
+          request: customerRequest,
+          latestEstimate: estimate,
+          currentPeriodId: periodId,
+          availableCredits: 0,
+          canApprove: false,
+        })),
+      },
+      { lineEnabled: false, contactEmail: "hello@contact.example" },
+    );
+    expect(
+      await screen.findByText(webMessages.myRequestInsufficientCreditsEmail),
+    ).toBeTruthy();
+    expect(screen.queryByText(webMessages.myRequestContactLine)).toBeNull();
+    expect(
+      screen
+        .getByRole("link", { name: "hello@contact.example" })
+        .getAttribute("href"),
+    ).toBe("mailto:hello@contact.example");
+    expect(document.body.textContent).not.toContain("LINE");
   });
 
   it("shows a refreshable conflict after a stale approval and avoids duplicate approval while busy", async () => {

@@ -92,6 +92,19 @@ describe("loadConfig", () => {
     ).toThrow();
   });
 
+  it("keeps LINE disabled unless LINE_ENABLED is explicitly true", () => {
+    expect(loadConfig(validEnvironment).lineEnabled).toBe(false);
+    expect(
+      loadConfig({ ...validEnvironment, LINE_ENABLED: "false" }).lineEnabled,
+    ).toBe(false);
+    expect(
+      loadConfig({ ...validEnvironment, LINE_ENABLED: "true" }).lineEnabled,
+    ).toBe(true);
+    expect(() =>
+      loadConfig({ ...validEnvironment, LINE_ENABLED: "yes" }),
+    ).toThrow("LINE_ENABLED");
+  });
+
   it("provides operational invoice defaults without hardcoding company identity", () => {
     const config = loadConfig(validEnvironment);
     expect(config.invoicePrefix).toBe("KS");

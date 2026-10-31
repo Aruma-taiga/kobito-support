@@ -49,6 +49,7 @@ export type PublicApplicationConfig = z.infer<
 
 export const publicConfigSchema = z.strictObject({
   serviceName: z.string().trim().min(1).max(120),
+  contactEmail: z.string().trim().email().max(254).optional(),
   application: publicApplicationConfigSchema.nullable().optional(),
 });
 export type PublicConfig = z.infer<typeof publicConfigSchema>;

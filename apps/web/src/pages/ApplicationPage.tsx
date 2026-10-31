@@ -26,6 +26,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import type { AuthClient, AuthUser } from "../auth/session.js";
 import { useAuthSession } from "../auth/session.js";
 import { ApiClientError } from "../platform/api-client.js";
+import { useContact } from "../platform/contact.js";
 
 type ApiClient = {
   getPublicConfig(): Promise<PublicConfig>;
@@ -152,6 +153,7 @@ export function ApplicationPage({
   authClient: AuthClient;
 }) {
   const { state: session } = useAuthSession();
+  const { lineEnabled } = useContact();
   const location = useLocation();
   const navigate = useNavigate();
   const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -798,12 +800,14 @@ export function ApplicationPage({
                   {verifiedPartner.name}
                 </p>
               ) : null}
-              <Field
-                label={webMessages.applicationLineDisplayName}
-                id="application-line-name"
-                value={draft.lineDisplayName}
-                onChange={(value) => update("lineDisplayName", value)}
-              />
+              {lineEnabled ? (
+                <Field
+                  label={webMessages.applicationLineDisplayName}
+                  id="application-line-name"
+                  value={draft.lineDisplayName}
+                  onChange={(value) => update("lineDisplayName", value)}
+                />
+              ) : null}
               <label className="field-label" htmlFor="application-free-text">
                 {webMessages.applicationFreeText}
               </label>
@@ -877,7 +881,7 @@ export function ApplicationPage({
                     <dd>{draft.invoiceRegistrationNo}</dd>
                   </>
                 ) : null}
-                {draft.lineDisplayName.trim() ? (
+                {lineEnabled && draft.lineDisplayName.trim() ? (
                   <>
                     <dt>{webMessages.applicationLineDisplayName}</dt>
                     <dd>{draft.lineDisplayName}</dd>

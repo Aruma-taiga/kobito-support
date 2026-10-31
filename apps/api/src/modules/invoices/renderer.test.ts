@@ -60,4 +60,11 @@ describe("invoice HTML renderer", () => {
       invoiceHtml({ ...sample, taxAmount: sample.taxAmount + 1 }),
     ).toThrow();
   });
+
+  it("never mentions convenience-store payment in the document wording", () => {
+    const html = invoiceHtml(sample);
+    expect(html).not.toContain("コンビニ");
+    expect(html).not.toContain("払込番号");
+    expect(html).not.toContain("支払番号");
+  });
 });

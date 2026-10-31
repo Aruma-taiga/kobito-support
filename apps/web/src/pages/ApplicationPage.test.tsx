@@ -199,6 +199,23 @@ describe("application flow", () => {
     );
   });
 
+  it("offers bank transfer (card pending) and no LINE name field or konbini wording", async () => {
+    setup();
+    await screen.findByRole("heading", { name: "店舗情報" });
+    expect(screen.queryByLabelText(/LINEの表示名/)).toBeNull();
+    await completeShopStep();
+    fireEvent.click(screen.getByRole("radio", { name: /ライト/ }));
+    fireEvent.click(screen.getByRole("button", { name: /次へ/ }));
+    await screen.findByRole("heading", { name: "お支払い方法" });
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(2);
+    expect(
+      radios.filter((radio) => !radio.hasAttribute("disabled")),
+    ).toHaveLength(1);
+    expect(document.body.textContent).not.toContain("コンビニ");
+    expect(document.body.textContent).not.toContain("LINE");
+  });
+
   it("does not show a success receipt when someone opens the done URL directly", async () => {
     setup({ initialPath: "/apply/done" });
     expect(

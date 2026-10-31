@@ -61,13 +61,17 @@ const app = createApp({
   publicSettings: new PublicSettingsRepository(pool),
   logger: consoleLogger,
   komojuInbox: new KomojuInboxRepository(pool),
-  line: new LineService(
-    new PostgresLineRepository(pool),
-    config.lineLoginChannelId
-      ? new LineIdTokenVerifier(config.lineLoginChannelId)
-      : undefined,
-    createFirebaseCustomTokenIssuer(config),
-  ),
+  ...(config.lineEnabled
+    ? {
+        line: new LineService(
+          new PostgresLineRepository(pool),
+          config.lineLoginChannelId
+            ? new LineIdTokenVerifier(config.lineLoginChannelId)
+            : undefined,
+          createFirebaseCustomTokenIssuer(config),
+        ),
+      }
+    : {}),
 });
 
 const server = serve({

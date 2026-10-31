@@ -117,7 +117,10 @@ function makeApp(): ReturnType<typeof createApp> {
       }),
       markWelcomeSeen: async () => ({ seenAt: "2026-01-01T00:00:00.000Z" }),
     },
-    publicSettings: { getServiceName: async () => "test" },
+    publicSettings: {
+      getServiceName: async () => "test",
+      getContactEmail: async () => null,
+    },
     logger: { info: () => {}, error: () => {} },
     komojuInbox: { receive: async () => "accepted" },
   };

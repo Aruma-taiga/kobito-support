@@ -69,6 +69,7 @@ const config: WebConfig = {
   firebaseAppId: "1:123456789:web:abcdef",
   apiBaseUrl: "http://127.0.0.1:3000",
   authEmulatorUrl: "http://127.0.0.1:9099",
+  lineEnabled: false,
 };
 const productionConfig: WebConfig = {
   firebaseApiKey: config.firebaseApiKey,
@@ -76,6 +77,7 @@ const productionConfig: WebConfig = {
   firebaseProjectId: config.firebaseProjectId,
   firebaseAppId: config.firebaseAppId,
   apiBaseUrl: config.apiBaseUrl,
+  lineEnabled: false,
 };
 
 function makeResolver(hint: { uid: string; factorId: string }) {

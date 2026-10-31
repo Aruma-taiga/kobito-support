@@ -94,6 +94,7 @@ const channelId =
 
 const config: RuntimeConfig = {
   nodeEnv: "development",
+  lineEnabled: true,
   databaseUrl,
   firebaseProjectId: projectId,
   webOrigin: "http://localhost",
@@ -193,7 +194,10 @@ try {
       }),
       markWelcomeSeen: async () => ({ seenAt: new Date().toISOString() }),
     },
-    publicSettings: { getServiceName: async () => "LINE smoke" },
+    publicSettings: {
+      getServiceName: async () => "LINE smoke",
+      getContactEmail: async () => null,
+    },
     logger: { info: () => {}, error: () => {} },
     komojuInbox: { receive: async () => "accepted" },
     line,
