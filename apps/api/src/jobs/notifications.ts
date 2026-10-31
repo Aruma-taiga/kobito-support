@@ -22,6 +22,7 @@ interface NotificationDataRow {
   due_on: string | null;
   total_incl_tax: number | null;
   payment_method: string | null;
+  credits: number | null;
 }
 
 export interface NotificationDispatchOptions {
@@ -37,7 +38,17 @@ export interface NotificationDispatchResult {
   skipped: number;
 }
 
-const dispatchableKinds = ["NT-01", "S-03", "NT-02", "NT-02b", "NT-05"];
+const dispatchableKinds = [
+  "NT-01",
+  "S-03",
+  "NT-02",
+  "NT-02b",
+  "NT-03",
+  "NT-04",
+  "NT-05",
+  "NT-06",
+  "NT-07",
+];
 
 export async function runNotificationDispatch(
   now: Date,
@@ -98,7 +109,7 @@ export async function runNotificationDispatch(
           throw new Error("settings_unavailable");
         const details = bankDetails(data.bank_account);
         if (
-          notification.kind === "NT-02" &&
+          ["NT-02", "NT-03"].includes(notification.kind) &&
           data.payment_method === "bank_transfer" &&
           !details
         )
@@ -116,7 +127,12 @@ export async function runNotificationDispatch(
           ...(data.payment_method
             ? { paymentMethod: data.payment_method }
             : {}),
-          ...(notification.kind === "NT-02" && details
+          ...("status" in notification.payload &&
+          typeof notification.payload.status === "string"
+            ? { status: notification.payload.status }
+            : {}),
+          ...(data.credits === null ? {} : { credits: data.credits }),
+          ...(["NT-02", "NT-03"].includes(notification.kind) && details
             ? { bankDetails: details }
             : {}),
         });
@@ -164,13 +180,15 @@ async function loadNotificationData(client: PoolClient, row: NotificationRow) {
             (select value from settings where key='contact_email') as contact_email,
             (select value from settings where key='bank_account') as bank_account,
             i.invoice_no,i.due_on::text as due_on,
-            i.total_incl_tax,i.payment_method
+            i.total_incl_tax,i.payment_method,p.credits
        from (select 1) seed
        left join customers c on c.id=$1
-       left join invoices i on i.id=nullif($2,'')::uuid`,
+       left join invoices i on i.id=nullif($2,'')::uuid
+       left join billing_periods p on p.id=nullif($3,'')::uuid`,
     [
       row.customer_id,
       typeof row.payload.invoiceId === "string" ? row.payload.invoiceId : null,
+      typeof row.payload.periodId === "string" ? row.payload.periodId : null,
     ],
   );
   const data = result.rows[0];

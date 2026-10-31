@@ -626,6 +626,11 @@ describe("request estimate API integration", () => {
       [customer.customerId],
     );
     expect(notifications.rows[0]?.count).toBe(2);
+    const channels = await pool.query<{ channel: string; count: number }>(
+      "select channel,count(*)::int count from notifications where customer_id=$1 and kind in ('NT-06','NT-07') group by channel",
+      [customer.customerId],
+    );
+    expect(channels.rows).toEqual([{ channel: "email", count: 3 }]);
     const statusNotifications = await pool.query<{ count: number }>(
       "select count(*)::int count from notifications where kind='NT-07' and customer_id=$1",
       [customer.customerId],
@@ -1075,9 +1080,10 @@ describe("request estimate API integration", () => {
     expect(completedNotices.rows[0]?.count).toBe(1);
     const noticeSnapshots = await pool.query<{
       dedupe_key: string;
+      channel: string;
       payload: { requestId: string; status: string };
     }>(
-      "select dedupe_key,payload from notifications where dedupe_key=any($1::text[]) order by dedupe_key",
+      "select dedupe_key,channel,payload from notifications where dedupe_key=any($1::text[]) order by dedupe_key",
       [
         [
           `NT-07:${fixture.requestId}:approved`,
@@ -1088,10 +1094,12 @@ describe("request estimate API integration", () => {
     expect(noticeSnapshots.rows).toEqual([
       {
         dedupe_key: `NT-07:${fixture.requestId}:approved`,
+        channel: "email",
         payload: { requestId: fixture.requestId, status: "in_progress" },
       },
       {
         dedupe_key: `NT-07:${fixture.requestId}:completed`,
+        channel: "email",
         payload: { requestId: fixture.requestId, status: "done" },
       },
     ]);

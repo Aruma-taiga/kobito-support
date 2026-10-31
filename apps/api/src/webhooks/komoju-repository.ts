@@ -367,6 +367,19 @@ export class KomojuInboxRepository
          values ($1,$2,'grant',$3,$4,'KOMOJU決済確認') on conflict (period_id) where kind='grant' do nothing`,
         [invoice.contract_id, periodId, credits, invoice.id],
       );
+      if (invoice.kind === "monthly") {
+        await schedule(client, {
+          customerId: invoice.customer_id,
+          kind: "NT-04",
+          dedupeKey: `NT-04:${periodId}:email`,
+          scheduledAt: this.clock(),
+          payload: {
+            contractId: invoice.contract_id,
+            periodId,
+            invoiceId: invoice.id,
+          },
+        });
+      }
       await markEvent(client, eventId, null);
       await client.query("commit");
       return "processed";

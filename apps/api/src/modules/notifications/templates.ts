@@ -10,6 +10,8 @@ export interface NotificationTemplateData {
   dueOn?: string;
   amountInclTax?: number;
   bankDetails?: string;
+  credits?: number;
+  status?: string;
 }
 
 export interface RenderedMail {
@@ -47,6 +49,34 @@ export function renderNotification(
       return {
         subject: "ご入金を確認しました",
         text: `${greeting}初月分のご入金を確認しました。これにより契約が成立しました。今後のお手続きはマイページからご確認いただけます。${footer}`,
+      };
+    case "NT-03": {
+      const payment =
+        data.paymentMethod === "card"
+          ? "カードでのお支払いは、マイページからお手続きください。"
+          : `銀行振込にてお支払いください。${data.bankDetails ? `\n振込先: ${data.bankDetails}` : ""}`;
+      return {
+        subject: "月額分の請求書を発行しました",
+        text: `${greeting}月額分の請求書を発行しました。請求書はマイページでご確認いただけます。\n${data.paymentMethod === "bank_transfer" && data.dueOn ? `お支払期日: ${data.dueOn}\n` : ""}${data.amountInclTax === undefined ? "" : `請求金額: ${data.amountInclTax.toLocaleString("ja-JP")}円（税込）\n`}${payment}${footer}`,
+      };
+    }
+    case "NT-04":
+      return {
+        subject: "クレジットをご利用いただけます",
+        text: `${greeting}月額分のご入金を確認し、クレジットをご利用いただけるようになりました。${data.credits === undefined ? "" : `今回ご利用いただけるクレジットは${data.credits}個です。`}マイページで残数と利用期限をご確認ください。${footer}`,
+      };
+    case "NT-06":
+      return {
+        subject: "お見積りをお送りしました",
+        text: `${greeting}お見積りをお送りしました。内容をご確認のうえ、マイページからご回答ください。${footer}`,
+      };
+    case "NT-07":
+      return {
+        subject:
+          data.status === "done"
+            ? "ご依頼が完了しました"
+            : "ご依頼を開始しました",
+        text: `${greeting}${data.status === "done" ? "ご依頼が完了しました。" : "ご依頼の作業を開始しました。"}詳しい状況はマイページでご確認いただけます。${footer}`,
       };
     case "NT-05":
       return {

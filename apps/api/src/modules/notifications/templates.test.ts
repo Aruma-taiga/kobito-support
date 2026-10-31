@@ -51,6 +51,61 @@ describe("notification templates", () => {
     expect(mail.text).toContain("振込先: テスト銀行");
   });
 
+  it("renders monthly invoice, credit availability, estimate, and request updates without internal details", () => {
+    const base = {
+      serviceName: "設定サービス",
+      contactEmail: "contact@example.test",
+      customerName: "お客様",
+    };
+    const invoice = renderNotification({
+      ...base,
+      kind: "NT-03",
+      dueOn: "2026-11-08",
+      amountInclTax: 11000,
+      paymentMethod: "card",
+      invoiceNo: "PRIVATE-INVOICE",
+    });
+    expect(invoice.subject).toContain("請求書");
+    expect(invoice.text).not.toContain("2026-11-08");
+    expect(invoice.text).toContain("11,000円（税込）");
+    expect(invoice.text).toContain("マイページ");
+    expect(invoice.text).not.toContain("PRIVATE-INVOICE");
+    const transferInvoice = renderNotification({
+      ...base,
+      kind: "NT-03",
+      dueOn: "2026-11-08",
+      amountInclTax: 11000,
+      paymentMethod: "bank_transfer",
+      bankDetails: "設定済み振込先",
+    });
+    expect(transferInvoice.text).toContain("2026-11-08");
+
+    const credit = renderNotification({ ...base, kind: "NT-04" });
+    expect(credit.subject).toContain("クレジット");
+    expect(credit.text).toContain("マイページ");
+
+    for (const kind of ["NT-06", "NT-07"]) {
+      const mail = renderNotification({ ...base, kind });
+      expect(mail.text).toContain("マイページ");
+      expect(mail.text).not.toMatch(/requestId|estimateVersion|作業内容/);
+    }
+    const started = renderNotification({
+      ...base,
+      kind: "NT-07",
+      status: "in_progress",
+    });
+    const completed = renderNotification({
+      ...base,
+      kind: "NT-07",
+      status: "done",
+    });
+    expect(started.text).toContain("作業を開始しました");
+    expect(completed.text).toContain("ご依頼が完了しました");
+    expect(invoice.text + credit.text).not.toMatch(
+      /カード番号|セキュリティコード|有効期限|トークン/,
+    );
+  });
+
   it("keeps the fake sender inspectable and the log sender free of message content and full addresses", async () => {
     const fake = new FakeMailSender();
     const mail = renderNotification({

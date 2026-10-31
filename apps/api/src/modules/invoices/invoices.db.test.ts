@@ -873,6 +873,15 @@ describe("initial invoice approval and customer access", () => {
       paidOn: "2026-01-31",
     });
     expect(initialPayment.status).toBe(200);
+    const initialPeriod = await pool.query<{ id: string }>(
+      "select id from billing_periods where contract_id=$1 and seq=1",
+      [fixture.contractId],
+    );
+    expect(
+      await pool.query("select 1 from notifications where dedupe_key=$1", [
+        `NT-04:${initialPeriod.rows[0]?.id}:email`,
+      ]),
+    ).toMatchObject({ rows: [] });
 
     const period = periodFor("2026-01-31", 1);
     const periodResult = await pool.query<{ id: string }>(
@@ -949,16 +958,24 @@ describe("initial invoice approval and customer access", () => {
       payment_count: string;
       grant_count: string;
       periods: string;
+      notice_count: string;
     }>(
       `select (select count(*)::text from payments where invoice_id=$1) payment_count,
        (select count(*)::text from credit_entries where period_id=$2 and kind='grant') grant_count,
-       (select count(*)::text from billing_periods where contract_id=$3) periods`,
-      [monthlyInvoiceId, periodId, fixture.contractId],
+       (select count(*)::text from billing_periods where contract_id=$3) periods,
+       (select count(*)::text from notifications where dedupe_key=$4 and channel='email') notice_count`,
+      [
+        monthlyInvoiceId,
+        periodId,
+        fixture.contractId,
+        `NT-04:${periodId}:email`,
+      ],
     );
     expect(state.rows[0]).toEqual({
       payment_count: "1",
       grant_count: "1",
       periods: "2",
+      notice_count: "1",
     });
   });
 
@@ -993,6 +1010,7 @@ describe("initial invoice approval and customer access", () => {
     expect(firstRun.expiredCredits).toBeGreaterThanOrEqual(1);
     expect(firstRun.failed).toBe(0);
     const monthly = await pool.query<{
+      id: string;
       kind: string;
       total_excl_tax: number;
       tax_amount: number;
@@ -1000,12 +1018,13 @@ describe("initial invoice approval and customer access", () => {
       due_on: string;
       period_seq: number;
     }>(
-      `select i.kind,i.total_excl_tax,i.tax_amount,i.total_incl_tax,i.due_on::text due_on,p.seq period_seq
+      `select i.id,i.kind,i.total_excl_tax,i.tax_amount,i.total_incl_tax,i.due_on::text due_on,p.seq period_seq
        from invoices i join billing_periods p on p.id=i.period_id where i.contract_id=$1 and i.kind='monthly'`,
       [fixture.contractId],
     );
     expect(monthly.rows).toEqual([
       {
+        id: expect.any(String),
         kind: "monthly",
         total_excl_tax: 5000,
         tax_amount: 500,
@@ -1019,6 +1038,11 @@ describe("initial invoice approval and customer access", () => {
     });
     expect(secondRun.createdPeriods).toBe(0);
     expect(secondRun.issuedInvoices).toBe(0);
+    const monthlyNoticeCount = await pool.query<{ count: string }>(
+      "select count(*)::text count from notifications where dedupe_key=$1 and channel='email'",
+      [`NT-03:invoice:${monthly.rows[0]?.id}:customer`],
+    );
+    expect(monthlyNoticeCount.rows[0]?.count).toBe("1");
     const ledger = await pool.query<{
       grants: string;
       expirations: string;
@@ -1338,14 +1362,14 @@ describe("initial invoice approval and customer access", () => {
       `select (select count(*)::text from payments where invoice_id=$1) payments,
        (select count(*)::text from billing_periods where contract_id=$2) periods,
        (select count(*)::text from credit_entries where invoice_id=$1 and kind='grant') grants,
-       (select count(*)::text from notifications where payload->>'invoiceId'=$1::text and kind in ('NT-02b','NT-04')) notices`,
+       (select count(*)::text from notifications where payload->>'invoiceId'=$1::text and kind='NT-02b') notices`,
       [invoiceId, fixture.contractId],
     );
     expect(state.rows[0]).toEqual({
       payments: "1",
       periods: "1",
       grants: "1",
-      notices: "2",
+      notices: "1",
     });
   });
 
@@ -1409,7 +1433,7 @@ describe("initial invoice approval and customer access", () => {
       replayed: false,
     });
     const state = await pool.query<{ notices: string; payments: string }>(
-      `select (select count(*)::text from notifications where payload->>'invoiceId'=$1::text and kind in ('NT-02b','NT-04')) notices,
+      `select (select count(*)::text from notifications where payload->>'invoiceId'=$1::text and kind='NT-02b') notices,
        (select count(*)::text from payments where invoice_id=$2::uuid) payments`,
       [invoiceId, invoiceId],
     );
@@ -1452,7 +1476,7 @@ describe("initial invoice approval and customer access", () => {
        (select count(*)::text from payments where invoice_id=i.id) payments,
        (select count(*)::text from billing_periods where contract_id=c.id) periods,
        (select count(*)::text from credit_entries where invoice_id=i.id) credits,
-       (select count(*)::text from notifications where payload->>'invoiceId'=i.id::text and kind in ('NT-02b','NT-04')) notices
+       (select count(*)::text from notifications where payload->>'invoiceId'=i.id::text and kind='NT-02b') notices
        from invoices i join contracts c on c.id=i.contract_id where i.id=$1`,
       [invoiceId],
     );

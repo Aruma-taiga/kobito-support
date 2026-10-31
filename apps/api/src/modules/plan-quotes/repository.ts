@@ -18,6 +18,7 @@ import { withTransaction } from "../../platform/db/transaction.js";
 import type { CustomerScope } from "../../platform/scope.js";
 import { ApiError, type Principal } from "../../platform/types.js";
 import type { InitialInvoiceInput } from "../invoices/repository.js";
+import { schedule } from "../notifications/service.js";
 import type { PlanQuoteModule } from "./contracts.js";
 
 /** 初月の請求書の発行は請求書モジュールの処理を使う（税の計算・採番・PDFを重複させない）。 */
@@ -207,6 +208,13 @@ export class PlanQuoteRepository implements PlanQuoteModule {
           "update contracts set status = 'awaiting_quote_approval' where id = $1",
           [locked.id],
         );
+        await schedule(client, {
+          customerId,
+          kind: "NT-06",
+          dedupeKey: `NT-06:plan-quote:${quoteId}:email`,
+          scheduledAt: sentAt,
+          payload: { planQuoteId: quoteId },
+        });
         const row = inserted.rows[0];
         if (!row) throw new Error("Plan quote insert returned no row");
         return {

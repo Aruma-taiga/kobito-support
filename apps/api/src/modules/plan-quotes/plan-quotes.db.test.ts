@@ -377,6 +377,23 @@ describe("admin plan quote API", () => {
       [body.quote.id],
     );
     expect(audit.rows[0]?.actor).toBe(adminUid);
+    const notices = await pool.query<{
+      kind: string;
+      channel: string;
+      dedupe_key: string;
+      payload: Record<string, unknown>;
+    }>(
+      "select kind,channel,dedupe_key,payload from notifications where customer_id=$1 and kind='NT-06'",
+      [customerId],
+    );
+    expect(notices.rows).toEqual([
+      {
+        kind: "NT-06",
+        channel: "email",
+        dedupe_key: `NT-06:plan-quote:${body.quote.id}:email`,
+        payload: { planQuoteId: body.quote.id },
+      },
+    ]);
   });
 
   it("rejects invalid input and stale or impossible sends without writing", async () => {

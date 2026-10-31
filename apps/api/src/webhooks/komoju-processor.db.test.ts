@@ -96,6 +96,7 @@ interface Fixture {
   planId: string;
   applicationId: string;
   contractId: string;
+  periodId: string | null;
   invoiceId: string;
   invoiceNo: string;
 }
@@ -194,6 +195,7 @@ async function createInvoice(
     planId,
     applicationId,
     contractId,
+    periodId,
     invoiceId,
     invoiceNo,
   };
@@ -423,6 +425,11 @@ describe("KOMOJU event processing database behavior", () => {
         ],
       );
       expect(contractNotice.rows[0]?.count).toBe(1);
+      const initialCreditNotice = await pool.query<{ count: number }>(
+        "select count(*)::int count from notifications where customer_id=$1 and kind='NT-04'",
+        [fixture.customerId],
+      );
+      expect(initialCreditNotice.rows[0]?.count).toBe(0);
       expect(untouched).toEqual({
         invoice_no: other.invoiceNo,
         status: "issued",
@@ -606,6 +613,7 @@ describe("KOMOJU event processing database behavior", () => {
 
   it("serializes simultaneous deliveries for one invoice and only grants a monthly period once", async () => {
     const fixture = await createInvoice("active");
+    if (!fixture.periodId) throw new Error("Monthly period fixture is missing");
     const eventIds = [0, 1].map(() => newEventId());
     try {
       await Promise.all(
@@ -622,16 +630,19 @@ describe("KOMOJU event processing database behavior", () => {
         payments: string;
         grants: string;
         status: string;
+        notices: string;
       }>(
         `select i.status,(select count(*)::text from payments where invoice_id=i.id) payments,
-          (select count(*)::text from credit_entries where invoice_id=i.id and kind='grant') grants
+          (select count(*)::text from credit_entries where invoice_id=i.id and kind='grant') grants,
+          (select count(*)::text from notifications where dedupe_key=$2 and channel='email') notices
          from invoices i where i.id=$1`,
-        [fixture.invoiceId],
+        [fixture.invoiceId, `NT-04:${fixture.periodId}:email`],
       );
       expect(state.rows[0]).toEqual({
         status: "paid",
         payments: "1",
         grants: "1",
+        notices: "1",
       });
     } finally {
       await cleanup(fixture, eventIds);
