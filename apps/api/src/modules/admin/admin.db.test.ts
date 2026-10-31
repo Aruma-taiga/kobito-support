@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
+  adminCancellationSchema,
   adminPaymentReviewsResponseSchema,
   retentionDueDate,
   retentionListSchema,
@@ -252,6 +253,20 @@ afterAll(async () => {
       [applicationIds],
     );
   }
+  if (contractIds.length) {
+    await pool.query(
+      "delete from notifications where dedupe_key = any($1::text[])",
+      [contractIds.flatMap((id) => [`NT-08:${id}`, `NT-09:${id}`])],
+    );
+    await pool.query(
+      "delete from audit_logs where target_type='contract' and target_id = any($1::text[])",
+      [contractIds],
+    );
+    await pool.query(
+      "delete from billing_periods where contract_id=any($1::uuid[])",
+      [contractIds],
+    );
+  }
   if (eventIds.length)
     await pool.query("delete from komoju_events where id=any($1::text[])", [
       eventIds,
@@ -288,6 +303,84 @@ afterAll(async () => {
 });
 
 describe("admin application review with PostgreSQL", () => {
+  it("schedules cancellation once from the current period end, records the checklist, and revokes the pending end notice", async () => {
+    const fixture = await makeReviewCase({ status: "active" });
+    const today = toTokyoDate(new Date());
+    await pool.query("update contracts set anchor_date=$2::date where id=$1", [
+      fixture.contractId,
+      today,
+    ]);
+    await pool.query(
+      `insert into billing_periods(contract_id,seq,starts_on,ends_on,plan_id,price_excl_tax,credits)
+       select id,1,$2::date,($2::date + interval '1 month - 1 day')::date,plan_id,5000,1 from contracts where id=$1`,
+      [fixture.contractId, today],
+    );
+    const app = makeApp();
+    const endpoint = `/api/v1/admin/contracts/${fixture.contractId}/cancellation`;
+    const post = () =>
+      app.request(endpoint, {
+        method: "POST",
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+    const scheduled = await post();
+    expect(scheduled.status).toBe(200);
+    const body = adminCancellationSchema.parse(await scheduled.json());
+    expect(body).toMatchObject({
+      contractId: fixture.contractId,
+      status: "cancel_scheduled",
+      endsOn: body.currentPeriodEndsOn,
+    });
+    expect((await post()).status).toBe(200);
+    const notices = await pool.query<{ kind: string; count: string }>(
+      "select kind,count(*)::text count from notifications where customer_id=$1 and kind in ('NT-08','NT-09') group by kind order by kind",
+      [fixture.customerId],
+    );
+    expect(notices.rows).toEqual([
+      { kind: "NT-08", count: "1" },
+      { kind: "NT-09", count: "1" },
+    ]);
+    const denied = await app.request(endpoint, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${noFactorToken}` },
+    });
+    expect(denied.status).toBe(403);
+    const checklist = await app.request(`${endpoint}/checklist`, {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${adminToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        removalRequested: true,
+        removablePermissionsRemoved: true,
+        complete: true,
+      }),
+    });
+    expect(
+      adminCancellationSchema.parse(await checklist.json()).checklist.complete,
+    ).toBe(true);
+    const revoked = await app.request(endpoint, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    expect(adminCancellationSchema.parse(await revoked.json())).toMatchObject({
+      status: "active",
+      endsOn: null,
+    });
+    const endNotice = await pool.query<{ attempts: number }>(
+      "select attempts from notifications where dedupe_key=$1",
+      [`NT-09:${fixture.contractId}`],
+    );
+    expect(endNotice.rows[0]?.attempts).toBe(3);
+
+    const invalid = await makeReviewCase({ status: "under_review" });
+    const conflict = await app.request(
+      `/api/v1/admin/contracts/${invalid.contractId}/cancellation`,
+      { method: "POST", headers: { authorization: `Bearer ${adminToken}` } },
+    );
+    expect(conflict.status).toBe(409);
+  });
+
   it("requires the verified second factor for retention and returns no contact fields", async () => {
     const app = makeApp();
     const denied = await app.request("/api/v1/admin/retention", {

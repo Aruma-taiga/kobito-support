@@ -1,4 +1,5 @@
 import {
+  type AdminCancellation,
   type ContractStatus,
   contractStatuses,
   type InvoiceListItem,
@@ -740,6 +741,169 @@ export function AdminCustomerPage({
           </Card>
         </div>
       </AdminColumns>
+      {data.contract.status === "active" ||
+      data.contract.status === "cancel_scheduled" ||
+      data.contract.status === "ended" ? (
+        <CancellationPanel
+          apiClient={apiClient}
+          contractId={data.contract.id}
+        />
+      ) : null}
     </>
+  );
+}
+
+function CancellationPanel({
+  apiClient,
+  contractId,
+}: {
+  apiClient: AdminApiClient;
+  contractId: string;
+}) {
+  const [record, setRecord] = useState<AdminCancellation | null>(null);
+  const [checklist, setChecklist] = useState({
+    removalRequested: false,
+    removablePermissionsRemoved: false,
+    complete: false,
+  });
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void apiClient
+      .getCancellation(contractId)
+      .then((value) => {
+        if (active) {
+          setRecord(value);
+          setChecklist(value.checklist);
+        }
+      })
+      .catch(() => {
+        if (active) setError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiClient, contractId]);
+  async function update(operation: () => Promise<AdminCancellation>) {
+    setError(false);
+    setSaved(false);
+    try {
+      const value = await operation();
+      setRecord(value);
+      setChecklist(value.checklist);
+      setConfirming(false);
+      setSaved(true);
+    } catch {
+      setError(true);
+    }
+  }
+  return (
+    <Card title={webMessages.adminCancellationTitle}>
+      {error ? (
+        <Notice tone="warn">{webMessages.adminCancellationError}</Notice>
+      ) : null}
+      {saved ? (
+        <Notice live>{webMessages.adminCancellationSuccess}</Notice>
+      ) : null}
+      {record ? (
+        <p>
+          {webMessages.adminStatusLabel}: {contractStatusLabel(record.status)}
+          {record.endsOn
+            ? ` ／ ${webMessages.adminCancellationEndDateLabel}: ${record.endsOn}`
+            : ""}
+        </p>
+      ) : null}
+      {record?.status === "active" ? (
+        confirming ? (
+          <section>
+            <p>
+              {webMessages.adminCancellationScheduleConfirm.replace(
+                "{date}",
+                record.currentPeriodEndsOn ?? "",
+              )}
+            </p>
+            <ActionBar>
+              <Button
+                size="sm"
+                disabled={!record.currentPeriodEndsOn}
+                onClick={() =>
+                  void update(() => apiClient.scheduleCancellation(contractId))
+                }
+              >
+                {webMessages.adminCancellationSchedule}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setConfirming(false)}
+              >
+                {webMessages.adminApproveCancel}
+              </Button>
+            </ActionBar>
+          </section>
+        ) : (
+          <Button
+            size="sm"
+            disabled={!record.currentPeriodEndsOn}
+            onClick={() => setConfirming(true)}
+          >
+            {webMessages.adminCancellationSchedule}
+          </Button>
+        )
+      ) : null}
+      {record?.status === "cancel_scheduled" ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            void update(() => apiClient.revokeCancellation(contractId))
+          }
+        >
+          {webMessages.adminCancellationRevoke}
+        </Button>
+      ) : null}
+      {record ? (
+        <section>
+          <h4>{webMessages.adminCancellationChecklist}</h4>
+          {(
+            [
+              [
+                "removalRequested",
+                webMessages.adminCancellationRemovalRequested,
+              ],
+              [
+                "removablePermissionsRemoved",
+                webMessages.adminCancellationPermissionsRemoved,
+              ],
+              ["complete", webMessages.adminCancellationChecklistComplete],
+            ] as const
+          ).map(([key, label]) => (
+            <label key={key}>
+              <input
+                type="checkbox"
+                checked={checklist[key]}
+                onChange={(event) => {
+                  const checked = event.currentTarget.checked;
+                  setChecklist((current) => ({ ...current, [key]: checked }));
+                }}
+              />{" "}
+              {label}
+            </label>
+          ))}
+          <Button
+            size="sm"
+            onClick={() =>
+              void update(() =>
+                apiClient.updateCancellationChecklist(contractId, checklist),
+              )
+            }
+          >
+            {webMessages.adminCancellationSave}
+          </Button>
+        </section>
+      ) : null}
+    </Card>
   );
 }

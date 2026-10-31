@@ -1,11 +1,13 @@
 import type {
   AdminApplicationQueueQuery,
   AdminApplicationQueueResponse,
+  AdminCancellation,
   AdminCustomerDetail,
   AdminPaymentReviewsQuery,
   AdminPaymentReviewsResponse,
   DeclineApplicationRequest,
   DeclineApplicationResponse,
+  UpdateCancellationChecklist,
 } from "@kobito/shared";
 import {
   adminPaymentReviewsResponseSchema,
@@ -87,6 +89,200 @@ function nullableNonnegativeInteger(value: unknown): value is number | null {
 
 export class AdminRepository implements AdminModule {
   constructor(private readonly pool: Pool) {}
+
+  async getCancellation(contractId: string): Promise<AdminCancellation> {
+    const row = await this.readCancellation(this.pool, contractId);
+    return row;
+  }
+
+  scheduleCancellation(
+    principal: Principal,
+    contractId: string,
+  ): Promise<AdminCancellation> {
+    return withAdminAudit(
+      this.pool,
+      principal,
+      {
+        action: "contract.cancellation_scheduled",
+        targetType: "contract",
+        targetId: contractId,
+        detail: { fromStatus: "active", toStatus: "cancel_scheduled" },
+      },
+      async (client) => {
+        const locked = await client.query<{
+          id: string;
+          customer_id: string;
+          status: string;
+          ends_on: string | null;
+        }>(
+          "select id,customer_id,status,ends_on::text ends_on from contracts where id=$1 for update",
+          [contractId],
+        );
+        const contract = locked.rows[0];
+        if (!contract) throw new ApiError(404, "not_found");
+        if (contract.status === "cancel_scheduled")
+          return this.readCancellation(client, contractId);
+        if (contract.status !== "active") throw new ApiError(409, "conflict");
+        const today = await client.query<{ day: string }>(
+          "select to_char(clock_timestamp() at time zone 'Asia/Tokyo','YYYY-MM-DD') as day",
+        );
+        const period = await client.query<{ ends_on: string }>(
+          "select ends_on::text ends_on from billing_periods where contract_id=$1 and starts_on <= $2::date and ends_on >= $2::date order by seq desc limit 1",
+          [contractId, today.rows[0]?.day],
+        );
+        if (!period.rows[0]) throw new ApiError(409, "conflict");
+        const endsOn = period.rows[0].ends_on;
+        await client.query(
+          "update contracts set status='cancel_scheduled',cancel_requested_at=clock_timestamp(),ends_on=$2::date where id=$1",
+          [contractId, endsOn],
+        );
+        await client.query(
+          `insert into notifications(customer_id,kind,channel,dedupe_key,scheduled_at,payload)
+         values($1,'NT-08','email',$2,transaction_timestamp(),$3::jsonb)
+         on conflict (dedupe_key) do nothing`,
+          [
+            contract.customer_id,
+            `NT-08:${contractId}`,
+            JSON.stringify({ endsOn }),
+          ],
+        );
+        const endNoticeAt = await client.query<{ at: Date }>(
+          "select ((($1::date + 1)::timestamp + interval '8 hours') at time zone 'Asia/Tokyo') at",
+          [endsOn],
+        );
+        await client.query(
+          `insert into notifications(customer_id,kind,channel,dedupe_key,scheduled_at,payload)
+         values($1,'NT-09','email',$2,$3,$4::jsonb) on conflict (dedupe_key) do nothing`,
+          [
+            contract.customer_id,
+            `NT-09:${contractId}`,
+            endNoticeAt.rows[0]?.at,
+            JSON.stringify({ endsOn, contractId }),
+          ],
+        );
+        return this.readCancellation(client, contractId);
+      },
+    );
+  }
+
+  revokeCancellation(
+    principal: Principal,
+    contractId: string,
+  ): Promise<AdminCancellation> {
+    return withAdminAudit(
+      this.pool,
+      principal,
+      {
+        action: "contract.cancellation_revoked",
+        targetType: "contract",
+        targetId: contractId,
+        detail: { fromStatus: "cancel_scheduled", toStatus: "active" },
+      },
+      async (client) => {
+        const locked = await client.query<{
+          status: string;
+          ends_on: string | null;
+        }>(
+          "select status,ends_on::text ends_on from contracts where id=$1 for update",
+          [contractId],
+        );
+        const contract = locked.rows[0];
+        if (!contract) throw new ApiError(404, "not_found");
+        if (contract.status !== "cancel_scheduled")
+          throw new ApiError(409, "conflict");
+        const today = await client.query<{ day: string }>(
+          "select to_char(clock_timestamp() at time zone 'Asia/Tokyo','YYYY-MM-DD') as day",
+        );
+        if (
+          contract.ends_on &&
+          today.rows[0] &&
+          today.rows[0].day > contract.ends_on
+        )
+          throw new ApiError(409, "conflict");
+        await client.query(
+          "update contracts set status='active',cancel_requested_at=null,ends_on=null where id=$1",
+          [contractId],
+        );
+        await client.query(
+          "update notifications set attempts=3,last_error='cancelled' where dedupe_key=$1 and kind='NT-09' and sent_at is null",
+          [`NT-09:${contractId}`],
+        );
+        return this.readCancellation(client, contractId);
+      },
+    );
+  }
+
+  updateCancellationChecklist(
+    principal: Principal,
+    contractId: string,
+    checklist: UpdateCancellationChecklist,
+  ): Promise<AdminCancellation> {
+    return withAdminAudit(
+      this.pool,
+      principal,
+      {
+        action: "contract.cancellation_checklist_updated",
+        targetType: "contract",
+        targetId: contractId,
+        detail: {
+          removalRequested: String(checklist.removalRequested),
+          removablePermissionsRemoved: String(
+            checklist.removablePermissionsRemoved,
+          ),
+          checklistComplete: String(checklist.complete),
+        },
+      },
+      async (client) => {
+        const exists = await client.query(
+          "select id from contracts where id=$1",
+          [contractId],
+        );
+        if (!exists.rowCount) throw new ApiError(404, "not_found");
+        return {
+          ...(await this.readCancellation(client, contractId)),
+          checklist,
+        };
+      },
+    );
+  }
+
+  private async readCancellation(
+    client: Pool | PoolClient,
+    contractId: string,
+  ): Promise<AdminCancellation> {
+    const result = await client.query<{
+      id: string;
+      status: AdminCancellation["status"];
+      ends_on: string | null;
+      current_period_ends_on: string | null;
+    }>(
+      `select c.id,c.status,c.ends_on::text ends_on,
+       (select bp.ends_on::text from billing_periods bp where bp.contract_id=c.id and bp.starts_on <= to_char(transaction_timestamp() at time zone 'Asia/Tokyo','YYYY-MM-DD')::date and bp.ends_on >= to_char(transaction_timestamp() at time zone 'Asia/Tokyo','YYYY-MM-DD')::date order by bp.seq desc limit 1) current_period_ends_on
+       from contracts c where c.id=$1`,
+      [contractId],
+    );
+    const row = result.rows[0];
+    if (!row) throw new ApiError(404, "not_found");
+    const audit = await client.query<{
+      detail: Record<string, unknown> | null;
+    }>(
+      "select detail from audit_logs where target_type='contract' and target_id=$1 and action='contract.cancellation_checklist_updated' order by at desc,id desc limit 1",
+      [contractId],
+    );
+    const detail = audit.rows[0]?.detail ?? {};
+    return {
+      contractId: row.id,
+      status: row.status,
+      endsOn: row.ends_on,
+      currentPeriodEndsOn: row.current_period_ends_on,
+      checklist: {
+        removalRequested: detail.removalRequested === "true",
+        removablePermissionsRemoved:
+          detail.removablePermissionsRemoved === "true",
+        complete: detail.checklistComplete === "true",
+      },
+    };
+  }
 
   async listPaymentReviews(
     query: AdminPaymentReviewsQuery,

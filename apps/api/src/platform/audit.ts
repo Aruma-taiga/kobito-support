@@ -14,6 +14,10 @@ const detailKeys = new Set([
   "fromStatus",
   "toStatus",
   "resourceId",
+  "endsOn",
+  "removalRequested",
+  "removablePermissionsRemoved",
+  "checklistComplete",
 ]);
 
 function safeText(value: string, maxLength: number): boolean {

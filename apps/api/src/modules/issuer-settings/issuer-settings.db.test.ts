@@ -76,6 +76,18 @@ function makeApp(): ReturnType<typeof createApp> {
       getCustomerDetail: async () => {
         throw new Error("not used");
       },
+      getCancellation: async () => {
+        throw new Error("not used");
+      },
+      scheduleCancellation: async () => {
+        throw new Error("not used");
+      },
+      revokeCancellation: async () => {
+        throw new Error("not used");
+      },
+      updateCancellationChecklist: async () => {
+        throw new Error("not used");
+      },
       declineApplication: async () => {
         throw new Error("not used");
       },
