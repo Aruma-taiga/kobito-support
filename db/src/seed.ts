@@ -4,26 +4,26 @@ const plans = [
   {
     code: "light",
     name: "ライト",
-    price: 5500,
+    price: 5000,
     credits: 1,
     custom: false,
-    validFrom: "2026-10-31",
+    validFrom: "2026-10-25",
   },
   {
     code: "standard",
     name: "スタンダード",
-    price: 11_000,
+    price: 10_000,
     credits: 3,
     custom: false,
-    validFrom: "2026-10-31",
+    validFrom: "2026-10-25",
   },
   {
     code: "premium",
     name: "プレミアム",
-    price: 16_500,
+    price: 15_000,
     credits: 5,
     custom: false,
-    validFrom: "2026-10-31",
+    validFrom: "2026-10-25",
   },
   {
     code: "custom",
@@ -51,6 +51,7 @@ const settingDefaults: ReadonlyArray<readonly [string, unknown]> = [
       account_holder: "",
     },
   ],
+  ["contact_email", "info@cingulata.jp"],
   ["konbini_fee_yen", null],
 ];
 
@@ -60,7 +61,7 @@ export async function seedDatabase(pool: Pool): Promise<void> {
     await client.query("begin");
     for (const plan of plans) {
       await client.query(
-        `insert into plans (code, name, price_incl_tax, credits, is_custom, valid_from)
+        `insert into plans (code, name, price_excl_tax, credits, is_custom, valid_from)
          values ($1, $2, $3, $4, $5, $6)
          on conflict (code, valid_from) do nothing`,
         [

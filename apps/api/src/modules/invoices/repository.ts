@@ -59,6 +59,7 @@ interface BankInvoiceRow {
   issued_on: string;
   due_on: string | null;
   total_incl_tax: number;
+  total_excl_tax: number;
   issuer_snapshot: unknown;
   shop_name: string;
   billing_name: string;
@@ -156,7 +157,7 @@ export class InvoiceRepository implements InvoiceModule {
          from invoices i join contracts c on c.id=i.contract_id join customers cst on cst.id=c.customer_id
         left join lateral (
           select jsonb_agg(jsonb_build_object('description',line.description,'quantity',line.quantity,
-            'unit_price_incl_tax',line.unit_price_incl_tax,'amount_incl_tax',line.amount_incl_tax,'tax_rate',line.tax_rate)
+            'unit_price_excl_tax',line.unit_price_excl_tax,'amount_excl_tax',line.amount_excl_tax,'tax_rate',line.tax_rate)
             order by line.id) as lines from invoice_lines line where line.invoice_id=i.id
         ) l on true
         where i.kind='initial' and i.payment_method='bank_transfer' and i.status in ('issued','overdue')
@@ -229,7 +230,7 @@ export class InvoiceRepository implements InvoiceModule {
     const result = await client.query<BankInvoiceRow>(
       `select i.id, i.invoice_no, i.contract_id, c.customer_id, c.status as contract_status,
               c.anchor_date::text as anchor_date, i.status as invoice_status, i.payment_method, i.kind,
-              i.issued_on::text as issued_on, i.due_on::text as due_on, i.total_incl_tax,
+              i.issued_on::text as issued_on, i.due_on::text as due_on, i.total_incl_tax, i.total_excl_tax,
               i.issuer_snapshot, customer.shop_name, customer.billing_name, customer.email, customer.line_user_id
          from invoices i join contracts c on c.id=i.contract_id join customers customer on customer.id=c.customer_id
         where i.id=$1 for update of i`,
@@ -268,10 +269,10 @@ export class InvoiceRepository implements InvoiceModule {
         seq: number;
         starts_on: string;
         ends_on: string;
-        price_incl_tax: number;
+        price_excl_tax: number;
         credits: number;
       }>(
-        "select id,seq,starts_on::text as starts_on,ends_on::text as ends_on,price_incl_tax,credits from billing_periods where contract_id=$1 and seq=1",
+        "select id,seq,starts_on::text as starts_on,ends_on::text as ends_on,price_excl_tax,credits from billing_periods where contract_id=$1 and seq=1",
         [contractId],
       );
       const period = periodResult.rows[0];
@@ -298,7 +299,7 @@ export class InvoiceRepository implements InvoiceModule {
           seq: 1,
           startsOn: period.starts_on,
           endsOn: period.ends_on,
-          priceInclTax: period.price_incl_tax,
+          priceExclTax: period.price_excl_tax,
           credits: period.credits,
         },
         preview,
@@ -332,7 +333,7 @@ export class InvoiceRepository implements InvoiceModule {
         : undefined;
     const planName =
       typeof accepted.planName === "string" ? accepted.planName.trim() : "";
-    const price = accepted.monthlyPriceInclTax;
+    const price = accepted.monthlyPriceExclTax;
     const credits = accepted.credits;
     const planCode = accepted.planCode;
     if (
@@ -341,7 +342,7 @@ export class InvoiceRepository implements InvoiceModule {
       typeof planCode !== "string" ||
       !planCodes.includes(planCode as (typeof planCodes)[number]) ||
       !Number.isSafeInteger(price) ||
-      price !== invoice.total_incl_tax ||
+      price !== invoice.total_excl_tax ||
       !Number.isSafeInteger(credits) ||
       (credits as number) <= 0
     )
@@ -350,7 +351,7 @@ export class InvoiceRepository implements InvoiceModule {
     const periodId = randomUUID();
     const paymentId = randomUUID();
     await client.query(
-      `insert into billing_periods (id,contract_id,seq,starts_on,ends_on,plan_id,price_incl_tax,credits)
+      `insert into billing_periods (id,contract_id,seq,starts_on,ends_on,plan_id,price_excl_tax,credits)
        values ($1,$2,1,$3,$4,$5,$6,$7)`,
       [
         periodId,
@@ -412,7 +413,7 @@ export class InvoiceRepository implements InvoiceModule {
       paidOn: request.paidOn,
       contractId,
       anchorDate: today,
-      period: { id: periodId, seq: 1, ...period, priceInclTax: price, credits },
+      period: { id: periodId, seq: 1, ...period, priceExclTax: price, credits },
       preview,
       replayed: false,
     });
@@ -431,13 +432,13 @@ export class InvoiceRepository implements InvoiceModule {
       seq: number | null;
       starts_on: string | null;
       ends_on: string | null;
-      price_incl_tax: number | null;
+      price_excl_tax: number | null;
       credits: number | null;
       balance: string | null;
     }>(
       `select c.id,c.status,c.anchor_date::text as anchor_date, coalesce((i.issuer_snapshot->>'preview')::boolean,false) as preview,
               i.issuer_snapshot->'acceptedPlan' as accepted_plan, bp.id as period_id,bp.seq,bp.starts_on::text as starts_on,
-              bp.ends_on::text as ends_on,bp.price_incl_tax,bp.credits,coalesce(cb.balance,0)::text as balance
+              bp.ends_on::text as ends_on,bp.price_excl_tax,bp.credits,coalesce(cb.balance,0)::text as balance
          from contracts c
          left join lateral (select invoice.* from invoices invoice where invoice.contract_id=c.id and invoice.kind='initial' order by invoice.created_at desc limit 1) i on true
          left join lateral (select period.* from billing_periods period where period.contract_id=c.id and c.status in ('active','cancel_scheduled') and period.starts_on <= $2::date and period.ends_on >= $2::date order by period.seq desc limit 1) bp on true
@@ -450,11 +451,11 @@ export class InvoiceRepository implements InvoiceModule {
     const accepted = safeObject(row.accepted_plan);
     const plan =
       typeof accepted.planName === "string" &&
-      Number.isSafeInteger(accepted.monthlyPriceInclTax) &&
+      Number.isSafeInteger(accepted.monthlyPriceExclTax) &&
       Number.isSafeInteger(accepted.credits)
         ? {
             name: accepted.planName,
-            priceInclTax: accepted.monthlyPriceInclTax as number,
+            priceExclTax: accepted.monthlyPriceExclTax as number,
             credits: accepted.credits as number,
           }
         : null;
@@ -463,14 +464,14 @@ export class InvoiceRepository implements InvoiceModule {
       row.seq &&
       row.starts_on &&
       row.ends_on &&
-      row.price_incl_tax !== null &&
+      row.price_excl_tax !== null &&
       row.credits !== null
         ? {
             id: row.period_id,
             seq: row.seq,
             startsOn: row.starts_on,
             endsOn: row.ends_on,
-            priceInclTax: row.price_incl_tax,
+            priceExclTax: row.price_excl_tax,
             credits: row.credits,
             balance: safePgInteger(row.balance ?? "0"),
           }
@@ -596,7 +597,7 @@ export class InvoiceRepository implements InvoiceModule {
     )
       throw new ApiError(409, "application_conflict");
     if (terms.planCode === "custom") {
-      if (terms.priceInclTax !== null || terms.credits !== null)
+      if (terms.priceExclTax !== null || terms.credits !== null)
         throw new ApiError(409, "application_conflict");
       await client.query(
         `update applications set reviewed_at = now(), review_result = 'approved' where id = $1`,
@@ -614,16 +615,16 @@ export class InvoiceRepository implements InvoiceModule {
         replayed: false,
       };
     }
-    if (terms.priceInclTax === null)
+    if (terms.priceExclTax === null)
       throw new ApiError(409, "application_conflict");
-    const gross = terms.priceInclTax;
+    const monthlyExcl = terms.priceExclTax;
     const planName = terms.planName;
     const planId = terms.planId;
     const planCode = terms.planCode;
     const credits = terms.credits;
     if (
-      !Number.isSafeInteger(gross) ||
-      (gross as number) <= 0 ||
+      !Number.isSafeInteger(monthlyExcl) ||
+      (monthlyExcl as number) <= 0 ||
       typeof planName !== "string" ||
       !planName.trim() ||
       typeof planId !== "string" ||
@@ -644,7 +645,7 @@ export class InvoiceRepository implements InvoiceModule {
 
     const issuedOn = todayInTokyo(this.clock());
     const dueOn = addCalendarDays(issuedOn, 7);
-    const total = invoiceTotals([gross as number]);
+    const total = invoiceTotals([monthlyExcl as number]);
     const invoiceId = randomUUID();
     const year = Number(issuedOn.slice(0, 4));
     const prefix = currentSettings.prefix;
@@ -673,8 +674,8 @@ export class InvoiceRepository implements InvoiceModule {
       status: "issued",
       issuedOn,
       dueOn,
-      totalInclTax: total.grossYen,
-      totalExclTax: total.netYen,
+      totalInclTax: total.inclYen,
+      totalExclTax: total.exclYen,
       taxAmount: total.taxYen,
       paymentMethod: "bank_transfer",
       preview,
@@ -684,7 +685,7 @@ export class InvoiceRepository implements InvoiceModule {
         planId,
         planCode,
         planName: planName.trim(),
-        monthlyPriceInclTax: gross,
+        monthlyPriceExclTax: monthlyExcl,
         credits,
       },
       issuer,
@@ -692,8 +693,8 @@ export class InvoiceRepository implements InvoiceModule {
         {
           description: `${planName.trim()} 初月利用料`,
           quantity: 1,
-          unitPriceInclTax: gross,
-          amountInclTax: gross,
+          unitPriceExclTax: monthlyExcl,
+          amountExclTax: monthlyExcl,
           taxRate: 0.1,
         },
       ],
@@ -723,8 +724,8 @@ export class InvoiceRepository implements InvoiceModule {
         row.contract_id,
         issuedOn,
         dueOn,
-        total.grossYen,
-        total.netYen,
+        total.inclYen,
+        total.exclYen,
         total.taxYen,
         row.billing_name,
         row.billing_address,
@@ -733,9 +734,9 @@ export class InvoiceRepository implements InvoiceModule {
       ],
     );
     await client.query(
-      `insert into invoice_lines (invoice_id, line_kind, description, quantity, unit_price_incl_tax, amount_incl_tax, tax_rate)
+      `insert into invoice_lines (invoice_id, line_kind, description, quantity, unit_price_excl_tax, amount_excl_tax, tax_rate)
        values ($1,'monthly_fee',$2,1,$3,$3,0.100)`,
-      [invoiceId, firstLine.description, gross],
+      [invoiceId, firstLine.description, monthlyExcl],
     );
     await client.query(
       "insert into invoice_documents (invoice_id, mime_type, sha256, content) values ($1,'application/pdf',$2,$3)",
@@ -1008,8 +1009,8 @@ export class InvoiceRepository implements InvoiceModule {
       lines: lines.map((line) => ({
         description: line.description,
         quantity: line.quantity,
-        unitPriceInclTax: line.unit_price_incl_tax,
-        amountInclTax: line.amount_incl_tax,
+        unitPriceExclTax: line.unit_price_excl_tax,
+        amountExclTax: line.amount_excl_tax,
         taxRate: Number(line.tax_rate),
       })),
     });
@@ -1026,7 +1027,7 @@ const detailQuery = `select i.id, i.invoice_no, i.status, i.payment_method,
   from invoices i join contracts c on c.id = i.contract_id join customers cst on cst.id = c.customer_id
   left join lateral (
     select jsonb_agg(jsonb_build_object('description', line.description, 'quantity', line.quantity,
-      'unit_price_incl_tax', line.unit_price_incl_tax, 'amount_incl_tax', line.amount_incl_tax,
+      'unit_price_excl_tax', line.unit_price_excl_tax, 'amount_excl_tax', line.amount_excl_tax,
       'tax_rate', line.tax_rate) order by line.id) as lines
       from invoice_lines line where line.invoice_id = i.id
   ) l on true`;

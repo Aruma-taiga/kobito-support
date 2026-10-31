@@ -39,7 +39,7 @@ export const adminApplicationQueueItemSchema = z
     email: z.string().email(),
     submittedAt: z.iso.datetime(),
     planName: z.string(),
-    priceInclTax: z.number().int().nonnegative().nullable(),
+    priceExclTax: z.number().int().nonnegative().nullable(),
     credits: z.number().int().nonnegative().nullable(),
     paymentMethod: paymentMethodSchema,
     status: contractStatusSchema,

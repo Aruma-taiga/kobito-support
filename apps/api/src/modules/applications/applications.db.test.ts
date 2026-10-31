@@ -158,25 +158,25 @@ async function currentDisplayVersion(app: ReturnType<typeof makeApp>) {
     expect.arrayContaining([
       expect.objectContaining({
         code: "light",
-        priceInclTax: 5500,
+        priceExclTax: 5000,
         credits: 1,
         isCustom: false,
       }),
       expect.objectContaining({
         code: "standard",
-        priceInclTax: 11000,
+        priceExclTax: 10000,
         credits: 3,
         isCustom: false,
       }),
       expect.objectContaining({
         code: "premium",
-        priceInclTax: 16500,
+        priceExclTax: 15000,
         credits: 5,
         isCustom: false,
       }),
       expect.objectContaining({
         code: "custom",
-        priceInclTax: null,
+        priceExclTax: null,
         credits: null,
         isCustom: true,
       }),
@@ -339,10 +339,10 @@ describe("public application submission with PostgreSQL", () => {
     expect(rows.rows[0]?.marketing_opt_in).toBe(false);
     expect(rows.rows[0]?.password_column).toBeNull();
     expect(rows.rows[0]?.shown_terms).toMatchObject({
-      priceInclTax: 5500,
+      priceExclTax: 5000,
       credits: 1,
       initialDueDays: 7,
-      extraCreditGrossYen: 4400,
+      extraCreditExclYen: 4000,
       monthlyPrepaid: true,
       periodBasis: "contract_anchor",
       rollover: false,
@@ -721,12 +721,12 @@ describe("public application submission with PostgreSQL", () => {
     applicant.payload.displayVersion = await currentDisplayVersion(app);
     const originalPlan = await pool.query<{
       id: string;
-      price_incl_tax: number;
+      price_excl_tax: number;
     }>(
-      "select id, price_incl_tax from plans where code = 'light' and valid_from = date '2026-10-31'",
+      "select id, price_excl_tax from plans where code = 'light' and valid_from = date '2026-10-25'",
     );
     try {
-      await pool.query("update plans set price_incl_tax = 5100 where id = $1", [
+      await pool.query("update plans set price_excl_tax = 5100 where id = $1", [
         originalPlan.rows[0]?.id,
       ]);
       const response = await submit(app, applicant);
@@ -736,8 +736,8 @@ describe("public application submission with PostgreSQL", () => {
         application_count: "0",
       });
     } finally {
-      await pool.query("update plans set price_incl_tax = $1 where id = $2", [
-        originalPlan.rows[0]?.price_incl_tax,
+      await pool.query("update plans set price_excl_tax = $1 where id = $2", [
+        originalPlan.rows[0]?.price_excl_tax,
         originalPlan.rows[0]?.id,
       ]);
     }
@@ -749,16 +749,16 @@ describe("public application submission with PostgreSQL", () => {
     applicant.payload.displayVersion = await currentDisplayVersion(app);
     const originalPlan = await pool.query<{
       id: string;
-      price_incl_tax: number;
+      price_excl_tax: number;
     }>(
-      "select id, price_incl_tax from plans where code = 'light' and valid_from = date '2026-10-31'",
+      "select id, price_excl_tax from plans where code = 'light' and valid_from = date '2026-10-25'",
     );
     try {
       const first = await submit(app, applicant);
       expect(first.status).toBe(201);
       const originalReceipt = await first.json();
 
-      await pool.query("update plans set price_incl_tax = 5200 where id = $1", [
+      await pool.query("update plans set price_excl_tax = 5200 where id = $1", [
         originalPlan.rows[0]?.id,
       ]);
       const replay = await submit(app, applicant);
@@ -776,8 +776,8 @@ describe("public application submission with PostgreSQL", () => {
         error: { code: "offer_changed" },
       });
     } finally {
-      await pool.query("update plans set price_incl_tax = $1 where id = $2", [
-        originalPlan.rows[0]?.price_incl_tax,
+      await pool.query("update plans set price_excl_tax = $1 where id = $2", [
+        originalPlan.rows[0]?.price_excl_tax,
         originalPlan.rows[0]?.id,
       ]);
     }

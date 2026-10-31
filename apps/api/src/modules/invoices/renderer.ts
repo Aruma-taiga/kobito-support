@@ -40,7 +40,7 @@ export function invoiceHtml(invoice: InvoiceDetail): string {
     .map(
       (line) => `<tr>
     <td>${escapeHtml(line.description)}</td><td class="number">${line.quantity}</td>
-    <td class="number">${yen(line.unitPriceInclTax)}</td><td class="number">${yen(line.amountInclTax)}</td>
+    <td class="number">${yen(line.unitPriceExclTax)}</td><td class="number">${yen(line.amountExclTax)}</td>
   </tr>`,
     )
     .join("");
@@ -73,9 +73,9 @@ export function invoiceHtml(invoice: InvoiceDetail): string {
       <div class="meta">請求書番号：${escapeHtml(invoice.invoiceNo)}<br>発行日：${invoice.issuedOn}<br>お支払期限：${invoice.dueOn}</div></div>
     <p>下記のとおりご請求申し上げます。</p>
     <div class="grand">ご請求金額　${yen(invoice.totalInclTax)}（税込）</div>
-    <p>対象プラン：${escapeHtml(invoice.acceptedPlan.planName)}　月額${yen(invoice.acceptedPlan.monthlyPriceInclTax)}　${invoice.acceptedPlan.credits}クレジット</p>
-    <table><thead><tr><th>内容</th><th class="number">数量</th><th class="number">単価（税込）</th><th class="number">金額（税込）</th></tr></thead><tbody>${lines}</tbody></table>
-    <div class="totals">税抜金額：${yen(invoice.totalExclTax)}<br>消費税（10%）：${yen(invoice.taxAmount)}<br><strong>合計（税込）：${yen(invoice.totalInclTax)}</strong></div>
+    <p>対象プラン：${escapeHtml(invoice.acceptedPlan.planName)}　月額${yen(invoice.acceptedPlan.monthlyPriceExclTax)}（税抜）　${invoice.acceptedPlan.credits}クレジット</p>
+    <table><thead><tr><th>内容</th><th class="number">数量</th><th class="number">単価（税抜）</th><th class="number">金額（税抜）</th></tr></thead><tbody>${lines}</tbody></table>
+    <div class="totals">小計（税抜）：${yen(invoice.totalExclTax)}<br>消費税（10%）：${yen(invoice.taxAmount)}<br><strong>ご請求金額（税込）：${yen(invoice.totalInclTax)}</strong></div>
     <div class="columns"><section class="panel"><h2>請求先</h2>${escapeHtml(invoice.billingName)}<br>${escapeHtml(invoice.billingAddress)}</section>
       <section class="panel"><h2>発行者</h2>${escapeHtml(issuer.companyName)}<br>${escapeHtml(issuer.companyAddress)}<br>登録番号：${escapeHtml(issuer.invoiceRegistrationNo ?? "未設定")}<br>${escapeHtml(issuer.serviceName)}</section></div>
     <div class="payment"><h2>銀行振込</h2>銀行：${escapeHtml(bank[0] ?? "未設定")}　支店：${escapeHtml(bank[1] ?? "未設定")}<br>口座種別：${escapeHtml(bank[2] ?? "未設定")}　口座番号：${escapeHtml(bank[3] ?? "未設定")}<br>振込手数料はお客様にてご負担ください。</div>

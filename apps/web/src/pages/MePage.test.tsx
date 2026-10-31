@@ -156,13 +156,13 @@ describe("customer contract summary", () => {
           status: "active",
           anchorDate: "2026-10-26",
           preview: false,
-          plan: { name: "ライト", priceInclTax: 5500, credits: 1 },
+          plan: { name: "ライト", priceExclTax: 5000, credits: 1 },
           currentPeriod: {
             id: "33333333-3333-4333-8333-333333333333",
             seq: 1,
             startsOn: "2026-10-26",
             endsOn: "2026-11-25",
-            priceInclTax: 5500,
+            priceExclTax: 5000,
             credits: 1,
             balance: 1,
           },
@@ -183,7 +183,9 @@ describe("customer contract summary", () => {
       </AuthProvider>,
     );
     expect(
-      await screen.findByText(/ライト・5,500円（税込）・1クレジット/),
+      await screen.findByText(
+        /ライト・月額5,000円（税抜）（税込5,500円）・1クレジット/,
+      ),
     ).toBeTruthy();
     expect(screen.getByText("2026-10-26〜2026-11-25")).toBeTruthy();
     expect(fetcher).toHaveBeenCalledWith(

@@ -18,7 +18,7 @@ interface QueueRow {
   email: string;
   submitted_at: Date;
   plan_name: string;
-  price_incl_tax: number | null;
+  price_excl_tax: number | null;
   credits: number | null;
   payment_method: "card" | "konbini" | "bank_transfer";
   status: AdminApplicationQueueResponse["items"][number]["status"];
@@ -29,7 +29,7 @@ const latestApplicationsCte = `
   with latest_applications as (
     select distinct on (a.customer_id)
            a.customer_id, c.id as contract_id, a.id as application_id,
-           a.submitted_at, p.name as plan_name, p.price_incl_tax, p.credits,
+           a.submitted_at, p.name as plan_name, p.price_excl_tax, p.credits,
            a.shown_terms,
            c.status, c.payment_method, customer.shop_name, customer.contact_name,
            customer.email
@@ -95,7 +95,7 @@ export class AdminRepository implements AdminModule {
     const result = await this.pool.query<QueueRow>(
       `${latestApplicationsCte}
        select customer_id, shop_name, contact_name, email, submitted_at,
-              plan_name, price_incl_tax, credits, payment_method, status,
+              plan_name, price_excl_tax, credits, payment_method, status,
               shown_terms
          from filtered_applications
         order by submitted_at desc, customer_id
@@ -115,10 +115,10 @@ export class AdminRepository implements AdminModule {
           row.plan_name,
           (value): value is string => typeof value === "string",
         ),
-        priceInclTax: applicationSnapshotValue(
+        priceExclTax: applicationSnapshotValue(
           objectSnapshot(row.shown_terms),
-          "priceInclTax",
-          row.price_incl_tax,
+          "priceExclTax",
+          row.price_excl_tax,
           nullableNonnegativeInteger,
         ),
         credits: applicationSnapshotValue(

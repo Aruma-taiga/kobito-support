@@ -227,7 +227,7 @@ describe("LINE LIFF entry", () => {
     const { apiClient } = setup({ user: null, lineLoggedIn: false });
 
     await screen.findByRole("button", { name: "LINEでログイン" });
-    expect(liff.init).toHaveBeenCalledOnce();
+    await waitFor(() => expect(liff.init).toHaveBeenCalledOnce());
     expect(apiClient.signInWithLine).not.toHaveBeenCalled();
     expect(liff.login).not.toHaveBeenCalled();
   });

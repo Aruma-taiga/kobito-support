@@ -3,9 +3,9 @@ import {
   type ApplicationReceipt,
   type ApplicationSubmission,
   applicationPolicyConditions,
+  invoiceTotals,
   type PublicPartner,
   type PublicPlan,
-  splitTax,
 } from "@kobito/shared";
 import type { Pool, PoolClient } from "pg";
 import type { RuntimeConfig } from "../../platform/config.js";
@@ -20,7 +20,7 @@ interface PlanRow {
   id: string;
   code: PublicPlan["code"];
   name: string;
-  price_incl_tax: number | null;
+  price_excl_tax: number | null;
   credits: number | null;
   is_custom: boolean;
 }
@@ -346,7 +346,7 @@ export class ApplicationsRepository implements ApplicationsRepositoryPort {
   ): Promise<PublicApplicationCatalog> {
     const planRows = await client.query<PlanRow>(
       `select distinct on (code)
-              id, code, name, price_incl_tax, credits, is_custom
+              id, code, name, price_excl_tax, credits, is_custom
          from plans
         where valid_from <= (now() at time zone 'Asia/Tokyo')::date
           and (valid_to is null or valid_to >= (now() at time zone 'Asia/Tokyo')::date)
@@ -359,7 +359,7 @@ export class ApplicationsRepository implements ApplicationsRepositoryPort {
       id: plan.id,
       code: plan.code,
       name: plan.name,
-      priceInclTax: plan.price_incl_tax,
+      priceExclTax: plan.price_excl_tax,
       credits: plan.credits,
       isCustom: plan.is_custom,
     }));
@@ -466,22 +466,23 @@ function createShownTerms(
   submission: ApplicationSubmission,
   partner?: PublicPartner,
 ): Record<string, unknown> {
-  const price = plan.priceInclTax === null ? null : splitTax(plan.priceInclTax);
+  const price =
+    plan.priceExclTax === null ? null : invoiceTotals([plan.priceExclTax]);
   return {
     displayVersion: catalog.displayVersion,
     planId: plan.id,
     planCode: plan.code,
     planName: plan.name,
-    priceInclTax: plan.priceInclTax,
+    priceExclTax: plan.priceExclTax,
     credits: plan.credits,
     taxYen: price?.taxYen ?? null,
-    netYen: price?.netYen ?? null,
+    priceInclTax: price?.inclYen ?? null,
     paymentMethod: submission.paymentMethod,
     terms: catalog.application?.terms ?? null,
     privacy: catalog.application?.privacy ?? null,
     disclosure: catalog.application?.disclosure ?? null,
     initialDueDays: applicationPolicyConditions.initialDueDays,
-    extraCreditGrossYen: applicationPolicyConditions.extraCreditGrossYen,
+    extraCreditExclYen: applicationPolicyConditions.extraCreditExclYen,
     monthlyPrepaid: applicationPolicyConditions.monthlyPrepaid,
     periodBasis: applicationPolicyConditions.periodBasis,
     rollover: applicationPolicyConditions.rollover,

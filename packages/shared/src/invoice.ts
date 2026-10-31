@@ -50,7 +50,7 @@ export const invoiceDetailSchema = invoiceListItemSchema
         planId: z.uuid(),
         planCode: z.string().min(1).max(50),
         planName: z.string().min(1).max(200),
-        monthlyPriceInclTax: z.number().int().safe().positive(),
+        monthlyPriceExclTax: z.number().int().safe().positive(),
         credits: z.number().int().safe().positive(),
       })
       .strict(),
@@ -77,8 +77,8 @@ export const invoiceDetailSchema = invoiceListItemSchema
           .object({
             description: z.string().min(1).max(500),
             quantity: z.number().int().safe().positive(),
-            unitPriceInclTax: z.number().int().safe().positive(),
-            amountInclTax: z.number().int().safe().positive(),
+            unitPriceExclTax: z.number().int().safe().positive(),
+            amountExclTax: z.number().int().safe().positive(),
             taxRate: z.literal(0.1),
           })
           .strict(),
@@ -88,17 +88,17 @@ export const invoiceDetailSchema = invoiceListItemSchema
   .strict()
   .superRefine((invoice, context) => {
     const totals = invoiceTotals(
-      invoice.lines.map((line) => line.amountInclTax),
+      invoice.lines.map((line) => line.amountExclTax),
     );
-    if (totals.grossYen !== invoice.totalInclTax) {
+    if (totals.inclYen !== invoice.totalInclTax) {
       context.addIssue({
         code: "custom",
         path: ["totalInclTax"],
-        message: "Invoice gross total must equal its lines",
+        message: "Invoice tax-inclusive total must equal subtotal plus tax",
       });
     }
     if (
-      totals.netYen !== invoice.totalExclTax ||
+      totals.exclYen !== invoice.totalExclTax ||
       totals.taxYen !== invoice.taxAmount
     ) {
       context.addIssue({
@@ -107,10 +107,10 @@ export const invoiceDetailSchema = invoiceListItemSchema
         message: "Invoice tax split must match the shared 10% calculation",
       });
     }
-    if (invoice.acceptedPlan.monthlyPriceInclTax !== invoice.totalInclTax) {
+    if (invoice.acceptedPlan.monthlyPriceExclTax !== invoice.totalExclTax) {
       context.addIssue({
         code: "custom",
-        path: ["acceptedPlan", "monthlyPriceInclTax"],
+        path: ["acceptedPlan", "monthlyPriceExclTax"],
         message: "Initial invoice must match the accepted plan price",
       });
     }

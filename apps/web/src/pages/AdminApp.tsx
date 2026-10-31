@@ -1,6 +1,7 @@
 import {
   contractStatusLabels,
   type InvoiceListItem,
+  inclYenFor,
   webMessages,
 } from "@kobito/shared";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -48,15 +49,16 @@ function formatPaymentMethod(method: string): string {
 
 function formatPlanSummary(
   name: string,
-  priceInclTax: number | null,
+  priceExclTax: number | null,
   credits: number | null,
 ): string {
-  if (priceInclTax === null || credits === null) {
+  if (priceExclTax === null || credits === null) {
     return `${name}：${webMessages.applicationCustomQuoteAfterReview}`;
   }
   return webMessages.adminQueuePlanSummaryFixed
     .replace("{name}", name)
-    .replace("{price}", priceInclTax.toLocaleString("ja-JP"))
+    .replace("{price}", priceExclTax.toLocaleString("ja-JP"))
+    .replace("{inclPrice}", inclYenFor(priceExclTax).toLocaleString("ja-JP"))
     .replace("{credits}", String(credits));
 }
 
@@ -443,7 +445,7 @@ function AdminQueuePage({ apiClient }: { apiClient: AdminApiClient }) {
                   <dd>
                     {formatPlanSummary(
                       item.planName,
-                      item.priceInclTax,
+                      item.priceExclTax,
                       item.credits,
                     )}
                   </dd>
@@ -659,10 +661,10 @@ function AdminCustomerPage({ apiClient }: { apiClient: AdminApiClient }) {
   const shownTerms = data.application.shownTerms;
   const planName =
     typeof shownTerms.planName === "string" ? shownTerms.planName : "";
-  const rawPrice = shownTerms.priceInclTax;
+  const rawPrice = shownTerms.priceExclTax;
   const price =
-    typeof shownTerms.priceInclTax === "number"
-      ? shownTerms.priceInclTax
+    typeof shownTerms.priceExclTax === "number"
+      ? shownTerms.priceExclTax
       : null;
   const credits =
     typeof shownTerms.credits === "number" ? shownTerms.credits : null;
