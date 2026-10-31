@@ -16,7 +16,7 @@ export class ReferralService implements ReferralModule {
     if (principal.role !== "admin") throw new ApiError(404, "not_found");
     if (!principal.secondFactor) throw new ApiError(403, "forbidden");
     const parsed = adminReferralsQuerySchema.safeParse(query);
-    if (!parsed.success) throw new ApiError(400, "invalid_request");
+    if (!parsed.success) throw new ApiError(422, "validation_error");
     const month =
       parsed.data.month ?? toTokyoDate(this.clock()).slice(0, "YYYY-MM".length);
     return buildReferralReport(month, await this.repository.listRewards(month));

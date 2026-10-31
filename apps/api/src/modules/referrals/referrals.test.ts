@@ -34,11 +34,11 @@ describe("ReferralService", () => {
     "2026-13",
     "x",
     "2026-1",
-  ])("rejects month %s with 400", async (m) => {
+  ])("rejects month %s with 422", async (m) => {
     const { repository, service } = make();
     await expect(service.getAdmin(admin, { month: m })).rejects.toMatchObject({
-      status: 400,
-      code: "invalid_request",
+      status: 422,
+      code: "validation_error",
     });
     expect(repository.listRewards).not.toHaveBeenCalled();
   });
