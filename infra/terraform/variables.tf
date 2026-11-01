@@ -39,10 +39,6 @@ variable "migrate_image" {
   description = "docker build --target migrate で作成した DB 初期化用イメージ"
   type        = string
 }
-variable "database_password_secret_version" {
-  description = "事前登録した DB パスワード Secret のバージョン番号"
-  type        = string
-}
 variable "scheduler_paused" {
   description = "daily（請求）と notifications（通知）の Scheduler を停止しておく。外部連携の確認完了まで true。匿名化（retention）は retention_scheduler_paused で別に制御する"
   type        = bool
