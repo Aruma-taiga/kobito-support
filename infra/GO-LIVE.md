@@ -18,7 +18,7 @@
 | 4 | （解消済み・#58）**seed は本番でも必須。** `plans`（料金プラン）は seed 以外で入らない。`settings` の初期キーも seed が作る。上の `migrate` Job が、マイグレーションに続けて seed を実行する | 修正済み。上記の PostgreSQL 16 で、プラン（税抜 5,000 / 10,000 / 15,000 円と個別見積り）と設定の既定値が入り、顧客・請求書・ユーザーは 0 件であることを確認。seed は既存の設定を上書きしない | 4.5・4.6 |
 | 5 | 発行者情報（会社名・住所・登録番号・振込先）の**実際の取得元は `settings` テーブル**。環境変数 `INVOICE_REGISTRATION_NO` / `BANK_*` / `COMPANY_NAME` / `SERVICE_NAME` は `config.ts` が読み込むが、請求書の発行処理は使っていない（`invoices/repository.ts` は `settings` だけを読む）。Terraform の `company_name` / `service_name` 変数も請求書には効かない | `.env.example` / Terraform とコードの食い違い | 2章 |
 | 6 | 請求書を本番で発行できる条件は、`settings` に **全項目**（サービス名・会社名・住所・`T`+13桁の登録番号・接頭辞・振込先5項目）が入っていること。1つでも欠けると発行不可（`issuer_not_configured`） | コードで確認 | 2章 |
-| 7 | （解消済み・#59）本番の管理者アカウントを作る手段と TOTP の登録画面がなかった。**`pnpm --filter @kobito/api admin:bootstrap -- --email=<メール>`（Firebase ユーザーの作成と `user_accounts` への `admin` 行の追加、パスワード設定リンクの出力）と、Web の `/admin/enroll`（TOTP 登録画面）を追加した** | 修正済み。**Firebase の実環境での TOTP 登録とログインは未確認**（Identity Platform の MFA（TOTP）の有効化が前提） | 3.3・4.7 |
+| 7 | （解消済み・#59）本番の管理者アカウントを作る手段と TOTP の登録画面がなかった。**`pnpm --filter @kobito/api admin:bootstrap -- --email=<メール>`（Firebase ユーザーの作成と `user_accounts` への `admin` 行の追加、**メールアドレスの確認済みへの更新**（MFA の登録に必要）、パスワード設定リンクの出力）と、Web の `/admin/enroll`（TOTP 登録画面）を追加した** | 修正済み。**Firebase の実環境での TOTP 登録とログインは未確認**（Identity Platform の MFA（TOTP）の有効化が前提） | 3.3・4.7 |
 | 8 | （解消済み）`scheduler_paused` が 3 つの Scheduler 全部に効いていた。**`retention_scheduler_paused`（既定 `true`）を追加し、`scheduler_paused` は `daily`・`notifications` のみに効くようにした。** 匿名化は dry-run 確認と承認が済むまで別に止めておける | 修正済み | 8章 |
 | 9 | 顧客のパスワード再設定は `sendPasswordResetEmail(auth, email)` を**追加設定なし**で呼ぶだけ。遷移先 URL の指定（ActionCodeSettings）はない。アプリ側に再設定用の画面（`oobCode` の処理）もないため、Firebase 既定の再設定ページが使われる見込み（Firebase の一般仕様に基づく推定。実環境は未確認）。**管理者ログインには再設定機能がない** | コード確認 | 3章 |
 | 10 | `contact_email`（S-03 の当社あて通知の宛先、通知メールのフッターのお問い合わせ先）は seed が既定値を入れ、**管理画面の発行者設定では編集できない**（編集できる 6 キーに含まれない）。変更は SQL で行う。既定値のドメインは設計書で綴り確認待ちのもの | コード確認 | 2章 |
@@ -278,6 +278,8 @@ seed（`db/src/seed.ts`）は 4.5 の `migrate` Job が、マイグレーショ�
 #59 で追加された `admin:bootstrap` と `/admin/enroll` を使う。**順序：4.5（マイグレーション）と Web の配信（4.2 README 5）が済み、Identity Platform の MFA（TOTP）が有効（3.3）になってから行う。** 全体では「Terraform の適用 → イメージのビルドと push → `migrate` の実行 → `admin:bootstrap` → TOTP の登録 → Scheduler の解除（8章）」の順になる。
 
 #### (a) 管理者アカウントの作成（手元で実行）
+
+`admin:bootstrap` は、Firebase ユーザーのメールアドレスを**確認済み**にする（Auth Emulator での試行で、確認前の MFA の登録は `UNVERIFIED_EMAIL` で拒否されたため。本番の Firebase でも同様と想定。実環境では未確認）。既存のユーザーに再実行しても、確認済みになる。
 
 `admin:bootstrap` は Firebase Admin SDK と DB の両方に接続するため、手元の端末に次を用意する。
 

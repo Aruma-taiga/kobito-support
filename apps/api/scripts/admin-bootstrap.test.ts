@@ -12,6 +12,7 @@ function setup(overrides: Partial<AdminBootstrapDependencies> = {}) {
       });
     }),
     createUser: vi.fn(async () => ({ uid: "uid-new", disabled: false })),
+    markEmailVerified: vi.fn(async () => undefined),
     generatePasswordResetLink: vi.fn(
       async () => "https://secret.example/reset",
     ),
@@ -37,6 +38,8 @@ describe("bootstrapAdmin", () => {
       email: "root@example.jp",
       password: "throwaway-password",
     });
+    // MFA（TOTP）の登録は、メールアドレスの確認が済んでいないと拒否されるため、確認済みにする。
+    expect(firebase.markEmailVerified).toHaveBeenCalledWith("uid-new");
     expect(db.ensureAdminAccount).toHaveBeenCalledWith("uid-new");
     expect(write).toHaveBeenCalledTimes(1);
     expect(write.mock.calls[0]?.[0]).toContain("https://secret.example/reset");
@@ -56,6 +59,50 @@ describe("bootstrapAdmin", () => {
       "root@example.jp",
     );
     expect(dependencies.firebase.createUser).not.toHaveBeenCalled();
+  });
+
+  it("marks the email verified for an existing user too, so TOTP enrollment is not rejected", async () => {
+    const base = setup();
+    const markEmailVerified = vi.fn(async () => undefined);
+    const { dependencies } = setup({
+      firebase: {
+        ...base.dependencies.firebase,
+        getUserByEmail: vi.fn(async () => ({ uid: "uid-1", disabled: false })),
+        markEmailVerified,
+      },
+    });
+    await bootstrapAdmin("root@example.jp", dependencies);
+    expect(markEmailVerified).toHaveBeenCalledWith("uid-1");
+  });
+
+  it("does not mark a disabled user or an existing customer's account as verified", async () => {
+    const markEmailVerified = vi.fn(async () => undefined);
+    const base = setup();
+    await expect(
+      bootstrapAdmin(
+        "root@example.jp",
+        setup({
+          firebase: {
+            ...base.dependencies.firebase,
+            getUserByEmail: vi.fn(async () => ({
+              uid: "uid-1",
+              disabled: true,
+            })),
+            markEmailVerified,
+          },
+        }).dependencies,
+      ),
+    ).rejects.toThrow(/disabled/i);
+    await expect(
+      bootstrapAdmin(
+        "root@example.jp",
+        setup({
+          firebase: { ...base.dependencies.firebase, markEmailVerified },
+          db: { ensureAdminAccount: vi.fn(async () => "customer" as const) },
+        }).dependencies,
+      ),
+    ).rejects.toThrow(/customer/i);
+    expect(markEmailVerified).not.toHaveBeenCalled();
   });
 
   it("refuses disabled users and customer account rows", async () => {
