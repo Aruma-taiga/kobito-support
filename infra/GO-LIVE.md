@@ -8,14 +8,14 @@
 
 ## Supabase を DB に使う場合の変更点（2026-11 決定。この節が下の Cloud SQL の記述より優先）
 
-オーナーの決定で、DB は Cloud SQL ではなく **Supabase（PostgreSQL）** を使う。Terraform から Cloud SQL・DB パスワードの Secret・`sqladmin` API・Cloud SQL 接続・Cloud SQL のアラートを削除した（変数 `database_password_secret_version` も削除）。下の章にある Cloud SQL / Auth Proxy / `database-password` / PITR の記述は、この節で読み替える。**以下の Supabase の仕様は記憶に基づく。実際の画面・公式文書で確認すること（未確認）。**
+オーナーの決定で、DB は Cloud SQL ではなく **Supabase（PostgreSQL）** を使う。Terraform から Cloud SQL・DB パスワードの Secret・`sqladmin` API・Cloud SQL 接続・Cloud SQL のアラートを削除した（変数 `database_password_secret_version` も削除）。**4 章以降は Supabase 前提に書き直した。**1〜3 章の表（要点 2・3 など）に Cloud SQL の語が残る箇所は、履歴として残した古い記述で、4 章以降が正。**以下の Supabase の仕様は記憶に基づく。実際の画面・公式文書で確認すること（未確認）。**
 
 - **`DATABASE_URL`**（Secret `<prefix>-database-url`）：Supabase の接続文字列を人が登録する。`sslmode=require` を付ける（`pg` が URL から TLS を有効にする）。パスワードは URL エンコード。
 - **接続の種類**：Cloud Run の外向き通信は IPv4。Supabase の直接接続（`db.<ref>.supabase.co`）は既定で IPv6 のみのため、**Supavisor のセッションモード（ポート 5432、ユーザー名 `postgres.<プロジェクトref>`）を使う**のが無難。トランザクションモード（6543）でも、アプリはトランザクション内の `pg_advisory_xact_lock` だけを使うため動く見込みだが、**マイグレーション（`db/src/migrator.ts`）はセッション単位の `pg_advisory_lock` を使うので、`migrate` Job にはセッションモードか直接接続を使う**。未検証。
 - **リージョン**：プロジェクトは東京（`ap-northeast-1`）で作る。
 - **RLS（重要）**：Supabase は `public` スキーマのテーブルを Data API（PostgREST、anon キー）から見せる。**本アプリは API 経由でのみ DB に接続するので、Data API は無効にするか、全テーブルで RLS を有効にして公開ポリシーを作らない。** 顧客の個人情報があるため、`anon` / `authenticated` ロールに何も許可されていないことを、本番前に確認する。確認前は匿名キーを Web に渡さない（Web は Supabase を直接使わない）。
-- **バックアップ・復元**：無料プランはプロジェクトが休止し、バックアップ保持も限定的なので本番には Pro 以上を推奨。時点復元（PITR）は有料の追加機能。復元訓練は未実施。
-- **マイグレーションと管理者の作成**：`migrate` Job は Supabase に対して実行する。`admin:bootstrap` は Auth Proxy ではなく、手元から Supabase の接続文字列で直接実行する（接続元の制限を Supabase 側で設定している場合は許可する）。
+- **バックアップ・復元**：無料プランはプロジェクトが休止し、バックアップ保持も限定的なので本番には Pro 以上を推奨。時点復元（PITR）は有料の追加機能。復元訓練は未実施（9.2）。
+- **マイグレーションと管理者の作成**：`migrate` Job は Supabase に対して実行する（4.5）。`admin:bootstrap` は、手元から Supabase の接続文字列で直接実行する（4.7。Auth Proxy は使わない）。
 - **設計書との差**：`docs/system-design-v1.md` は Cloud SQL 前提。設計書は編集していないので、オーナーが反映を判断する。
 
 ## 0. 先に知っておくべき要点（読んで初めて分かったこと）
@@ -169,7 +169,7 @@ Firebase コンソール（Authentication → Templates → パスワードの�
 | `pdf_storage_gcs_enabled` | `false` | GCS 保存の実環境確認の後。**下の注意を参照** |
 | `api_image` | プレースホルダ | イメージをビルドして登録した後に実際のタグを渡す |
 | `migrate_image` | **既定値なし（必須）** | `--target migrate` でビルドして登録したイメージのタグ。`migrate` Job が使う（4.4・4.5） |
-| `database_password_secret_version` | `"1"` | DB パスワードの Secret にバージョンを入れた後 |
+| （削除）`database_password_secret_version` | — | Supabase 利用により不要。`DATABASE_URL` の Secret だけを使う |
 | `cloudflare_api_token` | 空 | 環境変数で渡す（ファイルに書かない） |
 
 `pdf_storage_gcs_enabled` の注意：`PDF_STORAGE` が `gcs` でない場合、PDF は PostgreSQL に保存される。API の README は「本番では Cloud Storage のアダプターが必要」としている一方、コードは `postgres` 保存でも拒否しない（`createPdfStore` は `gcs` 以外なら Postgres に保存する）。**設計は Cloud Storage 前提なので、本番で請求書を発行する前に `pdf_storage_gcs_enabled = true` にして実環境で確認する**のが設計と合う。ただし GCS の実動作は未検証（10.1）。
@@ -179,13 +179,13 @@ Firebase コンソール（Authentication → Templates → パスワードの�
 `README` の 6 段階を、実際のコマンドの単位に分けます。**段階適用（`-target`）の使い方は README に書かれていない補足で、未検証です。** 循環（Cloud Run がイメージと Secret の版を必要とし、それを置く先は Terraform が作る、など）があるため必要になる見込みです。
 
 - [ ] **README 1**：GCP/Cloudflare、請求、権限、Identity Platform、Secret Manager の前提を整える（2・3章）。`gcloud auth application-default login` などで適用者の権限を用意する（権限の範囲は未確認）。
-- [ ] **README 2**：DB パスワードの Secret を用意し、Cloud SQL と DB/User を作る。
-  1. [D/O] API 有効化・Secret の枠だけを作る（例：`terraform apply -target=google_project_service.enabled -target=google_secret_manager_secret.database_password -target=google_artifact_registry_repository.api`）。
-  2. [O] DB パスワードの値を Secret `<prefix>-database-password` にバージョンとして登録する（4.3 のコマンド）。そのバージョン番号を `database_password_secret_version` に入れる（`data` が版を読むため、版がないと `plan` 自体が失敗する）。
-  3. [D/O] `terraform apply -target=google_sql_database_instance.main -target=google_sql_database.app -target=google_sql_user.app`。Cloud SQL は削除保護あり、`db-f1-micro`、自動バックアップと PITR 有効。
-  4. [O] Terraform の state に DB パスワードが含まれうる。**GCS backend を有効化する前に state の保管先を厳格に保護**し、アクセス権を限定する（`versions.tf` の GCS backend はコメントアウトされている）。
+- [ ] **README 2**：データベース（Supabase）を用意する。Terraform は DB を作らない。
+  1. [D/O] API 有効化・Secret の枠・Artifact Registry だけを作る（例：`terraform apply -target=google_project_service.enabled -target=google_secret_manager_secret.app -target=google_artifact_registry_repository.api`）。
+  2. [O] Supabase のプロジェクトを**東京リージョン**で作り、DB のパスワードを設定する。**Data API（PostgREST）の公開を無効にするか、RLS を確認する**（冒頭の節）。
+  3. [O] 接続文字列（セッションモードのプーラー、`sslmode=require`）を作り、Secret `<prefix>-database-url` に登録する（4.3）。
+  4. [O] Terraform の state には DB の接続情報は入らない（`DATABASE_URL` は Secret の枠のみ）。それでも state の保管先（GCS backend を有効化する場合）はアクセス権を限定する（`versions.tf` の GCS backend はコメントアウトされている）。
 - [ ] **README 3**：Artifact Registry に API イメージと migrate イメージをビルド・登録し、`api_image` と `migrate_image` に渡す（4.4）。`migrate_image` は**既定値のない必須変数**（`variables.tf`）で、`api_image` と違いプレースホルダがない。段階適用の `plan` / `apply` でも値を求められるため、前の段階ではダミーのタグを渡す（動作は未検証）。
-- [ ] **マイグレーションと seed（4.5・4.6）**：`migrate` Job を作り、`gcloud run jobs execute <prefix>-migrate --wait` で実行する。DB パスワードと `DATABASE_URL` の Secret、Cloud SQL が先にできている必要がある。
+- [ ] **マイグレーションと seed（4.5・4.6）**：`migrate` Job を作り、`gcloud run jobs execute <prefix>-migrate --wait` で実行する。`DATABASE_URL` の Secret（4.3）が先に登録済みで、Supabase に接続できる必要がある。
 - [ ] **README 4**：アプリ Secret の必要な版を登録（4.3）してから Cloud Run API を起動し、ヘルスチェック・認証・Webhook の疎通を確認する。
   - Cloud Run は版のない Secret を参照すると起動に失敗する。このため `DATABASE_URL` は必須。`KOMOJU_*` と `RESEND_API_KEY` / `MAIL_FROM` は、それぞれの有効化変数が false の間は Cloud Run に渡らない。
   - [ ] `GET <API の URL>/healthz` が `{"status":"ok"}` を返す。
@@ -195,7 +195,7 @@ Firebase コンソール（Authentication → Templates → パスワードの�
   - Web のビルドには `VITE_FIREBASE_API_KEY`、`VITE_FIREBASE_AUTH_DOMAIN`、`VITE_FIREBASE_PROJECT_ID`、`VITE_FIREBASE_APP_ID`、`VITE_API_BASE_URL`（`https://api.<ドメイン>`。パスなし、`https` 必須）が**ビルド時に**必要。`VITE_LINE_ENABLED` は `false` のままにする（LINE は本番未接続）。
   - 配信方式は未決（要点 12）。Terraform の Pages プロジェクトは Git 連携先がプレースホルダで、デプロイ無効（誤デプロイ防止）。Pages にするならプレースホルダを実際のアカウント/リポジトリに直して有効化、Workers 静的アセットにするなら `apps/web/wrangler.toml`（`name = "kobito-support-web"`、`directory = "./dist"`）を使い、Terraform の Pages は使わない。[O/D] が決める。
   - API の CORS は `WEB_ORIGIN`（`https://app.<ドメイン>`）の 1 つだけを許可する。画面のドメインがこれと一致していることを確認する。
-- [ ] **管理者の作成と TOTP の登録（4.7）**：Web が `app.<ドメイン>` で配信され、マイグレーション済み（4.5）で、Identity Platform の MFA（TOTP）が有効（3.3）になった後に行う。`admin:bootstrap` は手元から Cloud SQL Auth Proxy 経由で DB に接続する。
+- [ ] **管理者の作成と TOTP の登録（4.7）**：Web が配信され、マイグレーション済み（4.5）で、Identity Platform の MFA（TOTP）が有効（3.3）になった後に行う。`admin:bootstrap` は手元から Supabase に直接接続する。
 - [ ] **README 6**：メール送信、決済、バックアップ復元、各 Job の dry run 相当の手順を検証する（5〜8章）。最後に `scheduler_paused = false` にする（`retention` は `retention_scheduler_paused` で別に制御し、8.3 の確認まで `true` のまま）。
 
 ### 4.3 シークレットの登録
@@ -204,8 +204,7 @@ Terraform が Secret の**枠**を作る。値・バージョンは人が入れ�
 
 | Secret 名 | 中身 | 登録の時期 | Cloud Run に渡る条件 |
 |---|---|---|---|
-| `<prefix>-database-password` | Cloud SQL ユーザー `kobito_app` のパスワード | 4.2 の README 2 | Terraform が SQL ユーザーに設定 |
-| `<prefix>-database-url` | `DATABASE_URL`（下記の形式） | Cloud SQL 作成後、Cloud Run の前 | 常時（API と全 Job） |
+| `<prefix>-database-url` | `DATABASE_URL`（Supabase の接続文字列。下記） | Supabase の用意後、Cloud Run の前 | 常時（API と全 Job） |
 | `<prefix>-komoju-secret-key` | KOMOJU の API キー | 5章の後 | `komoju_enabled = true` のとき（API のみ） |
 | `<prefix>-komoju-webhook-secret` | KOMOJU の Webhook 署名用の秘密値 | 5章の後 | `komoju_enabled = true` のとき（API のみ） |
 | `<prefix>-resend-api-key` | Resend の API キー | Resend のドメイン検証の後 | `mail_enabled = true` のとき（API と notifications Job） |
@@ -226,13 +225,15 @@ unset SECRET_VALUE
 - Secret の版を追加しても、**実行中の Cloud Run のインスタンスには反映されない**（Terraform は `version = "latest"` を参照する。起動時に解決される一般的な動作）。キーを差し替えたら新しいリビジョンを出す（再デプロイ）。反映の確認は 6 章の通し確認で行う（未確認）。
 - 差し替え前の版は、動作確認が済むまで無効化・破棄しない。
 
-**`DATABASE_URL` の形式**：
+**`DATABASE_URL` の形式**（Supabase）：
 
 - `config.ts` は `postgres://` または `postgresql://` で始まり、URL として有効な文字列を要求する。
-- 空ホスト形式（`postgresql://kobito_app:…@/kobito_support?host=/cloudsql/…`）は `config.ts` の `.url()` に拒否される（`loadConfig` で `Invalid environment configuration: DATABASE_URL` になることを確認）。
-- 次の形は `loadConfig` を通り、`pg` が `host=/cloudsql/…` をソケットのディレクトリとして解釈する（`new pg.Client({connectionString})` の `connectionParameters.host` で確認。`%40` や `%2F` を含むパスワードも復号された。接続そのものは Cloud SQL で未検証）：
-  `postgresql://kobito_app:<URLエンコードしたパスワード>@localhost/kobito_support?host=/cloudsql/<プロジェクトID>:<リージョン>:<インスタンス名>`
-- 接続名は `terraform output database_connection_name`。データベース名は `kobito_support`、ユーザーは `kobito_app`（`main.tf`）。パスワードの記号は URL エンコードする。
+- Supabase の画面（Connect）にある接続文字列のうち、**セッションモードのプーラー**（`postgres.<プロジェクトref>` ユーザー、ポート 5432）を使う。形：`postgresql://postgres.<ref>:<URLエンコードしたパスワード>@<プーラーのホスト>:5432/postgres?sslmode=require`。パスワードの記号は URL エンコードする。
+- 直接接続（`db.<ref>.supabase.co`）は既定で IPv6 のみで、Cloud Run（IPv4）からは届かない見込み。IPv4 アドオンを使う場合のみ直接接続を選べる（未確認）。
+- トランザクションモード（6543）は、`migrate` Job では使わない（マイグレーションはセッション単位のロック `pg_advisory_lock` を使うため）。API と Job で使えるかは未検証。迷ったら全てセッションモードにそろえる。
+- `sslmode=require` は `pg` が URL から解釈して TLS を有効にする（Supabase への実接続は未検証）。サーバー証明書の検証まで必要かは別途判断（未確認）。
+- 接続数：Cloud Run は最大 3 インスタンス（`max_instance_count`）× `pg` プールの既定（最大 10 接続）に加え、Job が同時に動く。Supabase のプラン別の接続上限を超えないか確認する（未確認）。
+- 旧形式（`@localhost/…?host=/cloudsql/…`）は使わない。
 
 ### 4.4 API イメージのビルドと登録 [D/O]
 
@@ -246,14 +247,15 @@ unset SECRET_VALUE
 
 ### 4.5 DB のマイグレーションと seed（`migrate` Job）[D/O]
 
-本番では、手元から DB を直接操作せず、Terraform が作る Cloud Run Job `<prefix>-migrate`（手動実行のみ。Scheduler はない）で行う（#58）。この Job は migrate イメージ（4.4）を使い、`DATABASE_URL` Secret と Cloud SQL 接続（`/cloudsql` のマウント）を受け取り、**マイグレーション（`pnpm --filter @kobito/db migrate`）→ seed（`pnpm --filter @kobito/db seed`）の順**に実行する。どちらかが失敗すれば Job は失敗する。
+本番では、手元から DB を直接操作せず、Terraform が作る Cloud Run Job `<prefix>-migrate`（手動実行のみ。Scheduler はない）で行う（#58）。この Job は migrate イメージ（4.4）を使い、`DATABASE_URL` Secret を受け取り、**マイグレーション（`pnpm --filter @kobito/db migrate`）→ seed（`pnpm --filter @kobito/db seed`）の順**に実行する。どちらかが失敗すれば Job は失敗する。
 
 事前に必要なもの：
 
-- [ ] DB パスワードの Secret（4.2 README 2）と、`DATABASE_URL` Secret の版（4.3。接続名を使うソケット形式）が登録済みである。Job は `version = "latest"` で参照する。
-- [ ] **DB ユーザー `kobito_app` に、`public` スキーマへテーブルを作る権限があること。** `infra/terraform/README.md` は「必要に応じて DB 管理者として `GRANT USAGE, CREATE ON SCHEMA public TO kobito_app;` を実行する」としている（PostgreSQL 15 以降は `public` への作成権限が既定で付かない見込み。DB 管理者としてどう接続するか（管理者ユーザーのパスワードの設定を含む）は手順がなく、**未確認**）。この権限が無いとマイグレーションは失敗する。001 は `create extension if not exists pgcrypto` も実行する。`kobito_app` にこの作成権限が足りるかは**未確認**。
+- [ ] `DATABASE_URL` Secret の版（4.3。Supabase のセッションモード）が登録済みである。Job は `version = "latest"` で参照する。
+- [ ] **接続ユーザーに、`public` スキーマへテーブルを作る権限があること。** Supabase の `postgres.<ref>` ユーザーは通常、`public` の所有者に近い権限を持つ（未確認）。足りない場合は失敗するので、ログで確認する。001 は `create extension if not exists pgcrypto` も実行する（Supabase では拡張が使える見込みだが未確認）。
 - [ ] `migrate_image` を登録済みのタグにして Terraform を適用し、Job `<prefix>-migrate` ができている。Secret の版が無い状態では Job を作れない可能性がある（未確認）。このため、適用は Secret 登録の後に行う。
-- [ ] マイグレーションの実行前に Cloud SQL のバックアップを取る（9.2 の復元手順を参照）。
+- [ ] マイグレーションの実行前に Supabase のバックアップを確認する（Pro のバックアップ、または手動のダンプ。9.2）。
+- [ ] 本番の DB に最初に入る前に、Data API の公開が無効、または全テーブルが RLS 有効で公開ポリシーなしであることを確認する（冒頭の節）。マイグレーション後は、`anon` / `authenticated` ロールに権限が付いていないことを Supabase の Advisors（セキュリティ）で確認する。
 
 実行：
 
@@ -269,7 +271,7 @@ gcloud run jobs execute <prefix>-migrate --region=<リージョン> --project=<�
 確認できていること・できていないこと：
 
 - 確認済み：このイメージを本物の PostgreSQL 16 に対して実行し、1 回目は 8 本適用、プランと設定の既定値が入り、顧客・請求書・ユーザーは 0 件。2 回目は 0 本で冪等。
-- **未確認：Cloud Run Jobs 上での実行、Cloud SQL への実接続、`gcloud run jobs execute` のコマンドの書式**（`infra/terraform/README.md` も「実環境では未検証」としている）。
+- **未確認：Cloud Run Jobs 上での実行、Supabase への実接続、`gcloud run jobs execute` のコマンドの書式**（`infra/terraform/README.md` も「実環境では未検証」としている）。
 
 ### 4.6 初期データ（seed）[D/O]
 
@@ -301,11 +303,11 @@ seed（`db/src/seed.ts`）は 4.5 の `migrate` Job が、マイグレーショ�
 - [ ] **`FIREBASE_AUTH_EMULATOR_HOST` を設定しない。** 設定されていると、エミュレータ向けの誤操作を防ぐために**スクリプトが実行を拒否する**。スクリプトはリポジトリルートの `.env` も読むので（既存の環境変数は上書きしない）、ローカル開発用の `.env` にエミュレータ向けの設定があると拒否される。本番用の作業は、ローカル用の設定を持たない環境で行う。
 - [ ] リポジトリで `pnpm install --frozen-lockfile` を済ませる。
 
-DB への接続（**Cloud SQL Auth Proxy 経由**）：Cloud SQL は公共 IPv4 が有効だが承認済みネットワークは設定していない（`main.tf`）ため、直接接続できない。
+DB への接続（**Supabase に直接接続**）：Cloud SQL の Auth Proxy は使わない。手元の端末から Supabase のプーラー（セッションモード）に `sslmode=require` で接続する。Supabase 側で接続元 IP を制限している場合は、作業する端末を許可する（未確認）。
 
-- [ ] Cloud SQL Auth Proxy を起動する（`cloud-sql-proxy <接続名> --port 5432`。接続名は `terraform output database_connection_name`。コマンドは未検証）。
-- [ ] `DATABASE_URL` は、Proxy 経由の形にする：`postgresql://kobito_app:<URLエンコードしたパスワード>@127.0.0.1:5432/kobito_support`。**4.3 の Cloud Run 用（`@localhost/…?host=/cloudsql/…`）とは別の値**で、手元のシェルだけで使う。パスワードは 4.3 と同じく対話入力で読み込み、コマンド行に直書きしない・履歴に残さない。
-- [ ] Proxy 経由の接続を使う権限（`roles/cloudsql.client`）が実行者にあること（未確認）。
+- [ ] 接続文字列は 4.3 と同じ Supabase のセッションモードのもの。ただし**手元のシェルだけで使い、パスワードは対話入力（`read -rs`）で読み込む**。コマンド行に直書きしない・履歴に残さない。
+- [ ] `DATABASE_URL` は手元の環境変数として設定する（`export DATABASE_URL=...`。値を画面やログに出さない）。
+- [ ] 手元の端末が Supabase に接続できること（IPv4 のプーラーを使う。未確認）。
 
 実行：
 
@@ -484,13 +486,13 @@ gcloud run jobs execute <prefix>-retention --region=<リージョン> --project=
 ### 9.1 当日のチェックリスト
 
 - [ ] 前日までに：2〜8 章が完了している。発行者情報が管理画面で「発行可能」。管理者がログインできる。
-- [ ] Cloud SQL のバックアップが直近のものがあり、PITR が有効（Terraform の設定）。**復元訓練は未実施**（Terraform README）。
+- [ ] Supabase のバックアップが直近のものがあり（Pro 以上の日次バックアップ。PITR を使うなら追加機能を有効化）、**復元訓練は未実施**。
 - [ ] 本番のキーに差し替え済み（`KOMOJU_SECRET_KEY`、`KOMOJU_WEBHOOK_SECRET`）。KOMOJU の本番 Webhook を登録済み。
 - [ ] `komoju_enabled = true`、`mail_enabled = true` で適用済み。
 - [ ] `/healthz`、ログイン、申込み画面、管理画面が応答する。
 - [ ] 切替直後は、少額のテスト申込み（自分）で 1 件通す（6 章の本番版）。
 - [ ] Cloud Run のログに 5xx、`Invalid environment configuration`、PDF 生成エラーがない。
-- [ ] 監視アラート（Cloud Run の 5xx、Cloud SQL の接続数）は通知チャンネルが未設定。**通知先（メール等）を設定する**（Terraform README：通知チャンネルは別途設定が必要）。
+- [ ] 監視アラート（Cloud Run の 5xx）は通知チャンネルが未設定。**通知先（メール等）を設定する**。DB（Supabase）の監視は Supabase の画面で行う（Terraform のアラートは Cloud Run のみ）。
 - [ ] 当日は Scheduler の初回実行を見届けられる時間帯に行う。
 
 ### 9.2 戻し方
@@ -502,7 +504,7 @@ gcloud run jobs execute <prefix>-retention --region=<リージョン> --project=
 | メールを止めたい | `mail_enabled = false` で適用 | `notifications` Job は予定を残して送らない（予定は残り、再開後に送られる。古い通知が一斉に送られる点に注意） |
 | アプリを前の版に戻す | Cloud Run の以前のリビジョンへトラフィックを戻す（`gcloud run services update-traffic <prefix>-api --to-revisions=<リビジョン>=100`、未検証）。Terraform の `api_image` も前のタグに戻す | マイグレーションを適用済みの場合、古いコードと新しいスキーマの互換性を確認する（マイグレーションに「戻し」は用意されていない） |
 | Job を前の版に戻す | `api_image` を戻して適用（Job は同じイメージを使う） | — |
-| データを戻す | Cloud SQL のバックアップからの復元、または PITR（7 日間の WAL を保持、バックアップは 7 世代）。**新しいインスタンスへの復元が基本**（既存のものを上書きしない） | 復元後に `DATABASE_URL` / 接続名を切り替える必要がある。手順は未訓練。**事前に復元訓練を行うこと**（未実施） |
+| データを戻す | Supabase のバックアップからの復元（日次バックアップ。PITR は追加機能）。**新しいプロジェクトへの復元が基本**（既存のものを上書きしない） | 復元後に `DATABASE_URL` を切り替える必要がある。手順は未訓練。**事前に復元訓練を行うこと**（未実施） |
 | 匿名化を取り消したい | **できない** | `retention` の本番実行は dry-run 確認後に限る |
 
 ### 9.3 障害時の見る場所
@@ -510,7 +512,7 @@ gcloud run jobs execute <prefix>-retention --region=<リージョン> --project=
 | 症状 | 見る場所 |
 |---|---|
 | 画面が出ない/ログインできない | Cloudflare の配信状況、ブラウザの開発者ツール（CORS: `WEB_ORIGIN` と画面のドメインの一致、`VITE_API_BASE_URL`）、Firebase の承認済みドメイン |
-| API が 5xx | Cloud Run のログ（`<prefix>-api`）、Cloud SQL の接続数/CPU、監視アラート |
+| API が 5xx | Cloud Run のログ（`<prefix>-api`）、Supabase の接続数/CPU（Supabase の画面）、監視アラート |
 | 起動直後に落ちる | Cloud Run のリビジョンのログで `Invalid environment configuration: <変数名>`（値は出ない）。Secret の版が無い場合は起動に失敗する |
 | 入金が反映されない | 管理画面「今日やること」の**支払いの要確認**（Webhook の受信箱で処理できなかったイベント）と**失敗した請求**。KOMOJU 管理画面の Webhook 配信履歴 |
 | メールが届かない | 管理画面「今日やること」の**通知の送信失敗**（理由：`mail_http_4xx` / `mail_http_5xx` / `mail_network_error` など）と再送、Resend の管理画面、`notifications` Job の実行履歴 |
@@ -521,11 +523,13 @@ gcloud run jobs execute <prefix>-retention --region=<リージョン> --project=
 
 ---
 
-### Cloud SQL のネットワーク（セキュリティ診断の結果）
+### データベースのネットワーク（Supabase）
 
-Terraform の診断（trivy config）で、Cloud SQL について次の指摘がありました。
-- TLS を必須にしていない → **対応済み**（`ssl_mode = "ENCRYPTED_ONLY"`。Cloud SQL コネクタと Auth Proxy は、これを満たす）。
-- 公開 IP が付いている（GCP-0017）→ **現状は受容**。承認済みネットワーク（`authorized_networks`）は設定せず、Cloud Run は Cloud SQL コネクタ（IAM 認証つき）で接続するため、公開 IP への直接の接続は受けません。非公開 IP にするには VPC（Direct VPC egress またはコネクタ）の追加が必要で、構成が大きく変わるため、本番の初期は見送り、運用が安定してから検討します。
+- Supabase は公開エンドポイントで、接続は TLS（`sslmode=require`）とパスワードで守られる。Cloud Run 側の固定 IP はないため、接続元 IP の制限は難しい（未確認）。
+- **Data API（PostgREST）の公開**が最大の注意点。本アプリは API 経由でのみ DB に接続するので、Data API を無効にするか、全テーブルで RLS を有効にして公開ポリシーを作らない（冒頭の節）。
+- DB のパスワードは強いものにし、`DATABASE_URL` は Secret Manager のみに置く。
+
+---
 
 ## 10. 既知の未実装・未確認の一覧
 
@@ -543,10 +547,10 @@ Terraform の診断（trivy config）で、Cloud SQL について次の指摘が
 | 返金・取消の運用 | 運用方針が未決。アプリに返金機能はない |
 | Terraform | `fmt` / `validate` / `plan` / `apply` を未実施。provider の属性は未検証 |
 | Docker イメージ内での Job 起動 | 未確認（`dist/jobs/*-script.js`） |
-| Cloud SQL の復元訓練 | 未実施。監視の通知チャンネルも未設定 |
+| Supabase の復元訓練 | 未実施。監視の通知チャンネルも未設定 |
 | 管理者の本番 TOTP | 登録画面（`/admin/enroll`）と `admin:bootstrap` は #59 で実装済み。**Firebase の実環境での TOTP 登録とログインは未確認**（Identity Platform の MFA（TOTP）の有効化が前提。3.3・4.7） |
-| `migrate` Job の本番実行 | イメージは本物の PostgreSQL 16 で確認済み（8 本適用、2 回目は 0 本）。**Cloud Run Jobs 上での実行と Cloud SQL への実接続は未確認**（4.5）。`kobito_app` の `public` スキーマへの権限付与（DB 管理者としての接続方法）と、`pgcrypto` の作成権限も未確認 |
-| `gcloud` コマンドの書式 | この手順書の `gcloud run jobs execute`、`--args` による dry-run、`gcloud scheduler jobs pause`、`cloud-sql-proxy` などの書式は未検証 |
+| `migrate` Job の本番実行 | イメージは本物の PostgreSQL 16 で確認済み（8 本適用、2 回目は 0 本）。**Cloud Run Jobs 上での実行と Supabase への実接続は未確認**（4.5）。接続ユーザーの `public` への作成権限と、`pgcrypto` の作成権限も未確認 |
+| `gcloud` コマンドの書式 | この手順書の `gcloud run jobs execute`、`--args` による dry-run、`gcloud scheduler jobs pause`、などの書式は未検証 |
 | LINE | 連携ログイン・LIFF のコードはあるが、本番チャネル・LIFF・通知送信は未接続。`LINE_ENABLED` / `VITE_LINE_ENABLED` は `false` のままにする（Terraform は LINE の変数を一切渡さない） |
 | パスワード再設定メール | 実際のメールの受信、テンプレート、遷移は未確認 |
 | `api.<ドメイン>` の接続 | Cloud Run のドメインマッピングが Terraform に無い（4.2） |
@@ -570,7 +574,7 @@ Terraform の診断（trivy config）で、Cloud SQL について次の指摘が
 | 毎月の自動課金（定期課金） | **採用しない。** カードは、請求書ごとの単発の支払いリンク（毎月、お客様がマイページから支払う） | KOMOJU テストモードの実測で、定期課金は作成の瞬間に初回が課金され、定期課金が生む支払いの通知には請求番号が入らない（請求書への結びつけが別になる）。月末（29〜31日）の課金日と失敗後の再試行も未確認。単発リンクは、実環境で通し確認済み。採用する場合は、契約に定期課金のIDを持たせ、`subscription.captured` で請求書に結びつける実装と、29〜31日の再試験が必要 |
 | KOMOJU の加盟店アカウント | **当サービス専用を推奨**（別のサービス `mogiru` と共用しない） | ホスト画面に別名（`mogiru`）が表示される。共用だと、他のサービスの支払いの通知が当方の Webhook に届く（当方は、請求番号が合わない通知を 200 で受けて無視する安全策を入れた：#61）。共用のまま使う場合は、Webhook の絞り込みと、加盟店名の変更を必ず行う |
 | 請求書PDFの取消表示 | 取消済みの請求書のPDFは、取得時に「取消」の表示を重ねて生成（元のPDFは保存したまま）：#55 | 実装済み |
-| Cloud SQL の公開 IP | 現状は受容（TLS 必須、承認済みネットワークなし、IAM 認証つきコネクタ）：#66 | 非公開 IP は VPC の追加が必要で、運用が安定してから検討 |
+| Supabase の公開エンドポイント | TLS＋パスワード。Data API は無効または RLS で閉じる（冒頭の節） | Supabase 側のネットワーク制限の利用は運用が安定してから検討 |
 | 報酬の消費税 | パートナーが課税事業者である前提の暫定計算（報酬×10%の切り捨て） | 免税事業者・個人の扱いと、パートナーからの請求書の受け取りの要否は未決（設計書でも未決） |
 
 ### 10.2 機能の未実装・未決
