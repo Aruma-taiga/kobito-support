@@ -15,6 +15,8 @@ export interface BootstrapFirebase {
     email: string;
     password: string;
   }): Promise<{ uid: string; disabled: boolean }>;
+  /** メールアドレスを確認済みにする。MFA（TOTP）の登録は、確認済みでないと拒否されるため。 */
+  markEmailVerified(uid: string): Promise<void>;
   generatePasswordResetLink(email: string): Promise<string>;
 }
 
@@ -55,6 +57,8 @@ export async function bootstrapAdmin(
   if (accountType === "customer") {
     throw new Error("Existing customer account cannot be changed to admin");
   }
+  // 管理者の行が確定してから、メールを確認済みにする（無効なユーザー・顧客のアカウントには行わない）。
+  await dependencies.firebase.markEmailVerified(user.uid);
   const link = await dependencies.firebase.generatePasswordResetLink(email);
   dependencies.write(
     `管理者アカウントを準備しました。パスワード設定リンク（このリンクは秘密です。チャットやログに貼らないでください）: ${link}`,
@@ -129,6 +133,9 @@ async function main(): Promise<void> {
         firebase: {
           getUserByEmail: (value) => auth.getUserByEmail(value),
           createUser: (input) => auth.createUser(input),
+          markEmailVerified: async (uid) => {
+            await auth.updateUser(uid, { emailVerified: true });
+          },
           generatePasswordResetLink: (value) =>
             auth.generatePasswordResetLink(value),
         },
