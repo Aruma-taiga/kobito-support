@@ -57,7 +57,7 @@
 
 - [ ] **GCP プロジェクトを作り、請求先を関連付ける。** Cloud SQL・Cloud Run・Scheduler・Identity Platform の利用条件と予算アラートを確認する（`infra/terraform/README.md`）。
 - [ ] **Cloudflare のアカウントと Zone を用意し、API トークンを発行する。** Pages と DNS に必要な範囲だけにする。値は `terraform.tfvars` に書かず、環境変数（`TF_VAR_cloudflare_api_token`）等で渡す。
-- [ ] **ドメインの正式な綴りを確認する。** 設計書・seed には `cingulata.jp` が出てくるが、確認待ちの扱い（Terraform README も「決め打ちしていない」）。確定するまで `terraform.tfvars` の `domain_name` と `mail_from_domain` を埋めない。画面は `app.<ドメイン>`、API は `api.<ドメイン>`（Terraform の `WEB_ORIGIN` と `VITE_API_BASE_URL` がこの前提）。
+- [ ] **ドメインの正式な綴りを確認する。** 設計書・seed には `cingulata.jp` が出てくるが、確認待ちの扱い（Terraform README も「決め打ちしていない」）。確定するまで `terraform.tfvars` の `domain_name` と `mail_from_domain` を埋めない。画面は既定で `app.<ドメイン>`、API は `api.<ドメイン>`。別の名前にするときは `terraform.tfvars` の `web_hostname` / `api_hostname`（完全なホスト名）で上書きする（例：`dev-kobito-support.cingulata.jp` / `dev-kobito-support-api.cingulata.jp`）。`WEB_ORIGIN` と `VITE_API_BASE_URL` はこの値から作られる。Cloudflare の無料の証明書は 1 段階のサブドメイン（`*.cingulata.jp`）のみ対象なので、ハイフンでつなぐ。以降の章の `app.<ドメイン>` / `api.<ドメイン>` は、この上書きがあればその名前に読み替える。
 - [ ] **KOMOJU の加盟店の本番審査を通す。** カードの取り扱いには審査があり日数がかかる（`implementation-plan-v1.md`）。
 - [ ] **KOMOJU の加盟店名（ホスト画面に表示される名称）を当社の名称に変更する。** W1 の確認で、テスト環境のホスト画面には別名が表示されていた（`docs/implementation-status.md`）。本番審査後、本番の設定でも表示名を確認する。
 - [ ] **Resend のアカウントを作り、送信ドメインを追加する。** 表示された SPF・DKIM を DNS に設定し、Resend 側で「検証済み」になるまで待つ（`integrations/mail/README.md`）。Terraform では `resend_spf_value` / `resend_dkim_name` / `resend_dkim_value` / `mail_from_domain` として渡し、Cloudflare の DNS に TXT レコードを作る。

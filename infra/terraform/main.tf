@@ -199,7 +199,7 @@ resource "google_cloud_run_v2_service" "api" {
       }
       env {
         name  = "WEB_ORIGIN"
-        value = "https://app.${var.domain_name}"
+        value = "https://${local.web_hostname}"
       }
       env {
         name  = "INVOICE_PREFIX"
@@ -370,7 +370,7 @@ resource "google_cloud_run_v2_job" "daily" {
         }
         env {
           name  = "WEB_ORIGIN"
-          value = "https://app.${var.domain_name}"
+          value = "https://${local.web_hostname}"
         }
         env {
           name = "DATABASE_URL"
@@ -425,7 +425,7 @@ resource "google_cloud_run_v2_job" "notifications" {
         }
         env {
           name  = "WEB_ORIGIN"
-          value = "https://app.${var.domain_name}"
+          value = "https://${local.web_hostname}"
         }
         env {
           name = "DATABASE_URL"
@@ -511,7 +511,7 @@ resource "google_cloud_run_v2_job" "retention" {
         }
         env {
           name  = "WEB_ORIGIN"
-          value = "https://app.${var.domain_name}"
+          value = "https://${local.web_hostname}"
         }
         env {
           name = "DATABASE_URL"
@@ -667,7 +667,7 @@ resource "cloudflare_pages_project" "web" {
         VITE_FIREBASE_AUTH_DOMAIN = var.web_firebase_auth_domain
         VITE_FIREBASE_PROJECT_ID  = var.web_firebase_project_id
         VITE_FIREBASE_APP_ID      = var.web_firebase_app_id
-        VITE_API_BASE_URL         = "https://api.${var.domain_name}"
+        VITE_API_BASE_URL         = "https://${local.api_hostname}"
       }
     }
   }
@@ -676,12 +676,12 @@ resource "cloudflare_pages_project" "web" {
 resource "cloudflare_pages_domain" "app" {
   account_id   = var.cloudflare_account_id
   project_name = cloudflare_pages_project.web.name
-  domain       = "app.${var.domain_name}"
+  domain       = local.web_hostname
 }
 
 resource "cloudflare_record" "api" {
   zone_id = var.cloudflare_zone_id
-  name    = "api"
+  name    = local.api_hostname
   type    = "CNAME"
   content = split("/", trimprefix(google_cloud_run_v2_service.api.uri, "https://"))[0]
   proxied = false
@@ -702,4 +702,9 @@ resource "cloudflare_record" "resend_dkim" {
   type    = "TXT"
   content = var.resend_dkim_value
   ttl     = 1
+}
+
+locals {
+  web_hostname = var.web_hostname != "" ? var.web_hostname : "app.${var.domain_name}"
+  api_hostname = var.api_hostname != "" ? var.api_hostname : "api.${var.domain_name}"
 }
