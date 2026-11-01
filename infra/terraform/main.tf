@@ -7,7 +7,6 @@ locals {
     "identitytoolkit.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
-    "sqladmin.googleapis.com",
     "storage.googleapis.com",
     "cloudscheduler.googleapis.com",
     "monitoring.googleapis.com"
@@ -57,25 +56,10 @@ resource "google_service_account" "scheduler" {
   display_name = "Kobito Support Scheduler"
 }
 
-resource "google_project_iam_member" "run_cloudsql" {
-  project = var.gcp_project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.run.email}"
-}
-
 resource "google_secret_manager_secret" "app" {
   for_each  = local.app_secrets
   project   = var.gcp_project_id
   secret_id = "${var.name_prefix}-${lower(replace(each.key, "_", "-"))}"
-  replication {
-    auto {}
-  }
-  labels = local.labels
-}
-
-resource "google_secret_manager_secret" "database_password" {
-  project   = var.gcp_project_id
-  secret_id = "${var.name_prefix}-database-password"
   replication {
     auto {}
   }
@@ -90,64 +74,6 @@ resource "google_secret_manager_secret_iam_member" "run_read" {
   member    = "serviceAccount:${google_service_account.run.email}"
 }
 
-resource "google_secret_manager_secret_iam_member" "run_db_password" {
-  project   = var.gcp_project_id
-  secret_id = google_secret_manager_secret.database_password.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.run.email}"
-}
-
-data "google_secret_manager_secret_version" "database_password" {
-  project    = var.gcp_project_id
-  secret     = google_secret_manager_secret.database_password.secret_id
-  version    = var.database_password_secret_version
-  depends_on = [google_secret_manager_secret.database_password]
-}
-
-resource "google_sql_database_instance" "main" {
-  project             = var.gcp_project_id
-  name                = "${var.name_prefix}-postgres"
-  region              = var.region
-  database_version    = "POSTGRES_16"
-  deletion_protection = true
-  settings {
-    tier              = "db-f1-micro"
-    availability_type = "ZONAL"
-    disk_autoresize   = true
-    backup_configuration {
-      enabled                        = true
-      point_in_time_recovery_enabled = true
-      transaction_log_retention_days = 7
-      backup_retention_settings {
-        retained_backups = 7
-        retention_unit   = "COUNT"
-      }
-    }
-    ip_configuration {
-      # Cloud Run は Cloud SQL コネクタ（IAM 認証つき）で接続し、承認済みネットワーク（authorized_networks）は設定しない。
-      # 公開 IP は付くが、直接の接続は受けない。非公開 IP（VPC）への移行は、将来の検討事項（infra/GO-LIVE.md）。
-      ipv4_enabled = true
-      # すべての接続で TLS（暗号化）を必須にする。Cloud SQL コネクタ／Auth Proxy は、これを満たす。
-      ssl_mode = "ENCRYPTED_ONLY"
-    }
-    user_labels = local.labels
-  }
-  depends_on = [google_project_service.enabled]
-}
-
-resource "google_sql_database" "app" {
-  project  = var.gcp_project_id
-  name     = "kobito_support"
-  instance = google_sql_database_instance.main.name
-}
-
-resource "google_sql_user" "app" {
-  project  = var.gcp_project_id
-  name     = "kobito_app"
-  instance = google_sql_database_instance.main.name
-  password = data.google_secret_manager_secret_version.database_password.secret_data
-}
-
 resource "google_cloud_run_v2_service" "api" {
   project             = var.gcp_project_id
   name                = "${var.name_prefix}-api"
@@ -159,12 +85,6 @@ resource "google_cloud_run_v2_service" "api" {
     scaling {
       min_instance_count = 0
       max_instance_count = 3
-    }
-    volumes {
-      name = "cloudsql"
-      cloud_sql_instance {
-        instances = [google_sql_database_instance.main.connection_name]
-      }
     }
     containers {
       # Chromium で請求書PDFを生成するため、既定（512MiB）では足りない可能性が高い。実測のうえ調整する。
@@ -277,10 +197,6 @@ resource "google_cloud_run_v2_service" "api" {
           value = "resend"
         }
       }
-      volume_mounts {
-        name       = "cloudsql"
-        mount_path = "/cloudsql"
-      }
     }
   }
   depends_on = [google_project_service.enabled, google_storage_bucket_iam_member.run_pdf_objects]
@@ -336,12 +252,6 @@ resource "google_cloud_run_v2_job" "daily" {
   template {
     template {
       service_account = google_service_account.run.email
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [google_sql_database_instance.main.connection_name]
-        }
-      }
       containers {
         # Chromium で請求書PDFを生成するため、既定（512MiB）では足りない可能性が高い。実測のうえ調整する。
         resources {
@@ -381,10 +291,6 @@ resource "google_cloud_run_v2_job" "daily" {
             }
           }
         }
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
       }
     }
   }
@@ -398,12 +304,6 @@ resource "google_cloud_run_v2_job" "notifications" {
   template {
     template {
       service_account = google_service_account.run.email
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [google_sql_database_instance.main.connection_name]
-        }
-      }
       containers {
         image   = var.api_image
         command = ["node"]
@@ -467,10 +367,6 @@ resource "google_cloud_run_v2_job" "notifications" {
             }
           }
         }
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
       }
     }
   }
@@ -484,12 +380,6 @@ resource "google_cloud_run_v2_job" "retention" {
   template {
     template {
       service_account = google_service_account.run.email
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [google_sql_database_instance.main.connection_name]
-        }
-      }
       containers {
         image   = var.api_image
         command = ["node"]
@@ -522,10 +412,6 @@ resource "google_cloud_run_v2_job" "retention" {
             }
           }
         }
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
-        }
       }
     }
   }
@@ -539,12 +425,6 @@ resource "google_cloud_run_v2_job" "migrate" {
   template {
     template {
       service_account = google_service_account.run.email
-      volumes {
-        name = "cloudsql"
-        cloud_sql_instance {
-          instances = [google_sql_database_instance.main.connection_name]
-        }
-      }
       containers {
         image = var.migrate_image
         env {
@@ -555,10 +435,6 @@ resource "google_cloud_run_v2_job" "migrate" {
               version = "latest"
             }
           }
-        }
-        volume_mounts {
-          name       = "cloudsql"
-          mount_path = "/cloudsql"
         }
       }
     }
@@ -614,28 +490,6 @@ resource "google_monitoring_alert_policy" "run_5xx" {
   }
   documentation {
     content = "Cloud Run API is returning 5xx responses."
-  }
-}
-
-resource "google_monitoring_alert_policy" "sql_connections" {
-  project      = var.gcp_project_id
-  display_name = "${var.name_prefix} Cloud SQL connections"
-  combiner     = "OR"
-  conditions {
-    display_name = "Cloud SQL connections above starter threshold"
-    condition_threshold {
-      filter          = "resource.type=\"cloudsql_database\" AND metric.type=\"cloudsql.googleapis.com/database/postgresql/num_backends\""
-      duration        = "300s"
-      comparison      = "COMPARISON_GT"
-      threshold_value = 80
-      aggregations {
-        alignment_period   = "300s"
-        per_series_aligner = "ALIGN_MAX"
-      }
-    }
-  }
-  documentation {
-    content = "Review Cloud SQL connection usage and capacity."
   }
 }
 

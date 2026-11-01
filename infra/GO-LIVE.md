@@ -6,6 +6,18 @@
 
 ---
 
+## Supabase を DB に使う場合の変更点（2026-11 決定。この節が下の Cloud SQL の記述より優先）
+
+オーナーの決定で、DB は Cloud SQL ではなく **Supabase（PostgreSQL）** を使う。Terraform から Cloud SQL・DB パスワードの Secret・`sqladmin` API・Cloud SQL 接続・Cloud SQL のアラートを削除した（変数 `database_password_secret_version` も削除）。下の章にある Cloud SQL / Auth Proxy / `database-password` / PITR の記述は、この節で読み替える。**以下の Supabase の仕様は記憶に基づく。実際の画面・公式文書で確認すること（未確認）。**
+
+- **`DATABASE_URL`**（Secret `<prefix>-database-url`）：Supabase の接続文字列を人が登録する。`sslmode=require` を付ける（`pg` が URL から TLS を有効にする）。パスワードは URL エンコード。
+- **接続の種類**：Cloud Run の外向き通信は IPv4。Supabase の直接接続（`db.<ref>.supabase.co`）は既定で IPv6 のみのため、**Supavisor のセッションモード（ポート 5432、ユーザー名 `postgres.<プロジェクトref>`）を使う**のが無難。トランザクションモード（6543）でも、アプリはトランザクション内の `pg_advisory_xact_lock` だけを使うため動く見込みだが、**マイグレーション（`db/src/migrator.ts`）はセッション単位の `pg_advisory_lock` を使うので、`migrate` Job にはセッションモードか直接接続を使う**。未検証。
+- **リージョン**：プロジェクトは東京（`ap-northeast-1`）で作る。
+- **RLS（重要）**：Supabase は `public` スキーマのテーブルを Data API（PostgREST、anon キー）から見せる。**本アプリは API 経由でのみ DB に接続するので、Data API は無効にするか、全テーブルで RLS を有効にして公開ポリシーを作らない。** 顧客の個人情報があるため、`anon` / `authenticated` ロールに何も許可されていないことを、本番前に確認する。確認前は匿名キーを Web に渡さない（Web は Supabase を直接使わない）。
+- **バックアップ・復元**：無料プランはプロジェクトが休止し、バックアップ保持も限定的なので本番には Pro 以上を推奨。時点復元（PITR）は有料の追加機能。復元訓練は未実施。
+- **マイグレーションと管理者の作成**：`migrate` Job は Supabase に対して実行する。`admin:bootstrap` は Auth Proxy ではなく、手元から Supabase の接続文字列で直接実行する（接続元の制限を Supabase 側で設定している場合は許可する）。
+- **設計書との差**：`docs/system-design-v1.md` は Cloud SQL 前提。設計書は編集していないので、オーナーが反映を判断する。
+
 ## 0. 先に知っておくべき要点（読んで初めて分かったこと）
 
 本番の前に直すか決める必要があるものを先頭に並べます。詳細は各章へ。

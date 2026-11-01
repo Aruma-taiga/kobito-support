@@ -1,5 +1,7 @@
 # Terraform 構成案
 
+> **DB は Supabase を使う（Cloud SQL は Terraform から削除済み）。** `DATABASE_URL` は人が Secret に登録する。詳細と注意（接続の種類、RLS、バックアップ）は `../GO-LIVE.md` 冒頭の「Supabase を DB に使う場合の変更点」。下の Cloud SQL・DB パスワードの記述は古い。
+
 GCP の本番相当環境（東京 `asia-northeast1`）と Cloudflare Pages/DNS の最小構成です。**このコードは作成段階の草案で、`plan` / `apply` や本番環境への接続は行っていません。** リソース名やドメインは変数化し、`terraform.tfvars.example` に実在値を置いていません。
 
 ## 構成
