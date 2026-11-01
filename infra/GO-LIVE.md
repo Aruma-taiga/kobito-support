@@ -507,6 +507,12 @@ gcloud run jobs execute <prefix>-retention --region=<リージョン> --project=
 
 ---
 
+### Cloud SQL のネットワーク（セキュリティ診断の結果）
+
+Terraform の診断（trivy config）で、Cloud SQL について次の指摘がありました。
+- TLS を必須にしていない → **対応済み**（`ssl_mode = "ENCRYPTED_ONLY"`。Cloud SQL コネクタと Auth Proxy は、これを満たす）。
+- 公開 IP が付いている（GCP-0017）→ **現状は受容**。承認済みネットワーク（`authorized_networks`）は設定せず、Cloud Run は Cloud SQL コネクタ（IAM 認証つき）で接続するため、公開 IP への直接の接続は受けません。非公開 IP にするには VPC（Direct VPC egress またはコネクタ）の追加が必要で、構成が大きく変わるため、本番の初期は見送り、運用が安定してから検討します。
+
 ## 10. 既知の未実装・未確認の一覧
 
 出典は `docs/implementation-status.md`、各 README、コードの確認。**「実装済み」の項目でも、実環境（本番・実サービス）での確認は多くが未了**です。

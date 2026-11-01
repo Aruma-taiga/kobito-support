@@ -124,7 +124,11 @@ resource "google_sql_database_instance" "main" {
       }
     }
     ip_configuration {
+      # Cloud Run は Cloud SQL コネクタ（IAM 認証つき）で接続し、承認済みネットワーク（authorized_networks）は設定しない。
+      # 公開 IP は付くが、直接の接続は受けない。非公開 IP（VPC）への移行は、将来の検討事項（infra/GO-LIVE.md）。
       ipv4_enabled = true
+      # すべての接続で TLS（暗号化）を必須にする。Cloud SQL コネクタ／Auth Proxy は、これを満たす。
+      ssl_mode = "ENCRYPTED_ONLY"
     }
     user_labels = local.labels
   }
