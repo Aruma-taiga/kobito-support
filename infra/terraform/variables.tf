@@ -22,6 +22,16 @@ variable "cloudflare_account_id" {
 variable "domain_name" {
   type = string
 }
+variable "web_hostname" {
+  description = "画面のホスト名（完全な名前）。空なら app.<domain_name>。例：dev-kobito-support.example.invalid"
+  type        = string
+  default     = ""
+}
+variable "api_hostname" {
+  description = "API のホスト名（完全な名前）。空なら api.<domain_name>。Cloudflare の無料の証明書は 1 段階のサブドメインのみ対象"
+  type        = string
+  default     = ""
+}
 variable "api_image" {
   type = string
 }
