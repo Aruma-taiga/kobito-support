@@ -98,7 +98,8 @@ VITE_FIREBASE_AUTH_EMULATOR_URL=http://127.0.0.1:9099
 ```
 
 - 会社名・住所・インボイス登録番号・振込先の実行時の正本は `settings` テーブル（管理画面 `/admin/settings`）です。`.env` の同名の変数（`COMPANY_NAME`、`INVOICE_REGISTRATION_NO`、`BANK_ACCOUNT_*` など）は請求書の発行には使われません。架空の値で補わないでください。
-- PostgreSQL（`.env` の `POSTGRES_PORT`。上の例は 55433。未設定の docker-compose の既定は 5432 で、`DATABASE_URL` と揃える）と Auth Emulator（`127.0.0.1:9099`）は loopback のみに公開します。
+- **申込み画面を動かすには、上の最低限の値に加えて法務設定（`LEGAL_*`。「2. 起動と顧客ログイン」）が必要です。** ない場合、申込みは「現在、お申し込みいただけません」で停止します。管理画面で審査を完了して請求書を発行するには、請求書 PDF 用の Chromium（`INVOICE_CHROMIUM_EXECUTABLE`。ローカルでは `INVOICE_CHROMIUM_SANDBOX=false` が必要な場合あり。「4. 請求書プレビューと PDF」）も必要です。ない場合、審査完了は 500 になります。
+- PostgreSQL（`.env` の `POSTGRES_PORT`。上の例は 55433。`docker compose` の既定（`POSTGRES_PORT` 未設定）は 5432 のため、既に起動済みのコンテナがあるときは `docker compose ps` で実際のポートを確認し、`DATABASE_URL` と揃える）と Auth Emulator（`127.0.0.1:9099`）は loopback のみに公開します。
 
 ```sh
 docker compose up -d
@@ -113,6 +114,7 @@ pnpm db:seed         # プランと初期設定の追加（既存の設定は上
 ### 2. 起動と顧客ログイン
 
 ```sh
+pnpm build:shared    # 初回（クリーンな環境）は先に必要。無いと dev:seed-auth が @kobito/shared/dist を見つけられず失敗する
 pnpm dev:seed-auth   # Auth Emulator に開発ユーザーを登録（契約なしのアカウント）
 pnpm dev             # API（:3000）と web（:5173）を起動
 ```

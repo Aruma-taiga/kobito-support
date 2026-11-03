@@ -440,6 +440,8 @@ describe("a03 customers", () => {
     expect(screen.getByText(/2026-11-30/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "解約予定にする" }));
     expect(await screen.findByText(/終了日: 2026-11-30/)).toBeTruthy();
+    // 見出しの状態バッジも、解約予定の設定直後に更新される
+    expect(screen.getByText("解約予定")).toBeTruthy();
     fireEvent.click(
       screen.getByLabelText("お客様に作業用権限の削除を依頼した"),
     );

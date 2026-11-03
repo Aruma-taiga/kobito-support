@@ -17,6 +17,7 @@ import {
   Button,
   buttonClass,
   Card,
+  CheckOption,
   DefinitionList,
   Field,
   FilterChips,
@@ -747,6 +748,13 @@ export function AdminCustomerPage({
         <CancellationPanel
           apiClient={apiClient}
           contractId={data.contract.id}
+          onStatusChange={(status) =>
+            setData((current) =>
+              current
+                ? { ...current, contract: { ...current.contract, status } }
+                : current,
+            )
+          }
         />
       ) : null}
     </>
@@ -756,9 +764,11 @@ export function AdminCustomerPage({
 function CancellationPanel({
   apiClient,
   contractId,
+  onStatusChange,
 }: {
   apiClient: AdminApiClient;
   contractId: string;
+  onStatusChange: (status: AdminCancellation["status"]) => void;
 }) {
   const [record, setRecord] = useState<AdminCancellation | null>(null);
   const [checklist, setChecklist] = useState({
@@ -793,6 +803,7 @@ function CancellationPanel({
       const value = await operation();
       setRecord(value);
       setChecklist(value.checklist);
+      onStatusChange(value.status);
       setConfirming(false);
       setSaved(true);
     } catch {
@@ -880,17 +891,16 @@ function CancellationPanel({
               ["complete", webMessages.adminCancellationChecklistComplete],
             ] as const
           ).map(([key, label]) => (
-            <label key={key}>
-              <input
-                type="checkbox"
-                checked={checklist[key]}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked;
-                  setChecklist((current) => ({ ...current, [key]: checked }));
-                }}
-              />{" "}
+            <CheckOption
+              key={key}
+              checked={checklist[key]}
+              onChange={(event) => {
+                const checked = event.currentTarget.checked;
+                setChecklist((current) => ({ ...current, [key]: checked }));
+              }}
+            >
               {label}
-            </label>
+            </CheckOption>
           ))}
           <Button
             size="sm"
